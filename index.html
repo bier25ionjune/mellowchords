@@ -4,210 +4,242 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b0b0d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="คลังคอร์ด">
 <title>🎸 คลังคอร์ดกลางคืน</title>
 <style>
-  :root{
-    --bg:#0b0b0d; --panel:#16161a; --panel2:#202026; --line:#2e2e36;
-    --text:#f4f4f5; --muted:#a1a1aa; --accent:#ffb300; --chord:#ffc933;
-    --danger:#ff6b6b; --ok:#4ade80;
-    --fs:1.5rem; /* ขนาดตัวอักษรเนื้อเพลง (ปรับได้ในหน้าการ์ด) */
-  }
-  *{box-sizing:border-box}
-  html{-webkit-text-size-adjust:100%}
-  body{margin:0;background:var(--bg);color:var(--text);
-    font-family:"Sarabun","Noto Sans Thai",system-ui,-apple-system,"Segoe UI",sans-serif;
-    font-size:18px;line-height:1.5;min-height:100vh}
-  header{position:sticky;top:0;z-index:10;background:rgba(11,11,13,.96);
-    border-bottom:1px solid var(--line);padding:12px 16px;backdrop-filter:blur(6px)}
-  .wrap{max-width:860px;margin:0 auto}
-  h1{margin:0 0 10px;font-size:1.35rem;color:var(--accent)}
-  h2{font-size:1.15rem;margin:0}
-  main{padding:16px 16px 80px}
-  [hidden]{display:none!important}
-
-  input,textarea,button{font:inherit;color:inherit}
-  input,textarea{width:100%;background:var(--panel);border:2px solid var(--line);
-    border-radius:12px;padding:12px 14px;outline:none}
-  input:focus,textarea:focus{border-color:var(--accent)}
-  textarea{min-height:46vh;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px;line-height:1.4}
-  button{cursor:pointer;background:var(--panel2);border:2px solid var(--line);
-    border-radius:12px;padding:10px 16px;min-height:48px;font-weight:600}
-  button:hover{border-color:var(--accent)}
-  button:active{transform:scale(.97)}
-  button:disabled{opacity:.6;cursor:wait}
-  .primary{background:var(--accent);color:#111;border-color:var(--accent)}
-  .danger{color:var(--danger)}
-  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  .row.between{justify-content:space-between}
-  .grow{flex:1;min-width:0}
-  .muted{color:var(--muted)}
-  .small{font-size:.9rem}
-  a{color:var(--accent)}
-
-  section.block{margin-top:22px}
-  .list{display:flex;flex-direction:column;gap:10px;margin-top:10px}
-  .item{display:flex;gap:8px;align-items:stretch}
-  .item .open{flex:1;text-align:left;display:block;padding:12px 16px;background:var(--panel)}
-  .item .t{font-size:1.2rem;font-weight:700}
-  .item .a{color:var(--muted);font-size:.95rem}
-  .badge{display:inline-block;border:1px solid var(--accent);color:var(--accent);
-    border-radius:999px;padding:0 10px;font-size:.85rem;font-weight:700;margin-left:6px}
-  .badge.dim{border-color:var(--line);color:var(--muted)}
-  .empty{padding:20px;text-align:center;color:var(--muted);background:var(--panel);
-    border:2px dashed var(--line);border-radius:12px}
-  .item .del{min-width:52px;padding:0}
-
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px}
-  .card h2{font-size:1.9rem;line-height:1.25;color:#fff}
-  .card .artist{color:var(--muted);font-size:1.15rem}
-  .keys{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
-  .keybox{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:6px 14px}
-  .keybox b{color:var(--accent);font-size:1.5rem}
-  .tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0}
-  .tools .tp{min-width:64px;font-size:1.4rem}
-  .shift{min-width:70px;text-align:center;font-size:1.4rem;font-weight:800;color:var(--accent)}
-  hr{border:0;border-top:1px solid var(--line);margin:16px 0}
-
-  .sheet{font-size:var(--fs);line-height:1.3;padding-top:6px}
-  .line{display:flex;flex-wrap:wrap;margin-bottom:.35em}
-  .line.blank{height:.9em}
-  .seg{display:inline-flex;flex-direction:column}
-  .ch{min-height:1.35em;color:var(--chord);font-weight:800;padding-right:.7em;
-    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;white-space:pre}
-  .ly{white-space:pre;min-height:1.3em}
-  .line.chordonly .ly{display:none}
-  .line.section .ly{color:var(--accent);font-weight:700;font-size:.9em}
-  .line.section{margin-top:.6em}
-
-  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ok);
-    color:#052e16;padding:12px 20px;border-radius:999px;font-weight:700;z-index:50;
-    box-shadow:0 6px 24px rgba(0,0,0,.6);max-width:90vw;text-align:center}
-  .spinner{display:inline-block;width:18px;height:18px;border:3px solid var(--line);
-    border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-3px;margin-right:8px}
-  @keyframes sp{to{transform:rotate(360deg)}}
-  label{display:block;margin:12px 0 4px;font-weight:600}
-  @media (max-width:520px){ .card h2{font-size:1.6rem} }
+:root{--bg:#0b0b0d;--panel:#16161a;--panel2:#202026;--line:#2e2e36;--text:#f4f4f5;--muted:#a1a1aa;--accent:#ffb300;--chord:#ffc933;--danger:#ff6b6b;--ok:#4ade80;--fs:1.7rem;--hh:96px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:18px/1.5 "Sarabun","Noto Sans Thai",system-ui,-apple-system,sans-serif;min-height:100vh;padding:0 env(safe-area-inset-right) 0 env(safe-area-inset-left)}
+[hidden]{display:none!important}
+header{position:sticky;top:0;z-index:20;background:rgba(11,11,13,.97);border-bottom:1px solid var(--line);padding:10px 16px;backdrop-filter:blur(6px)}
+h1{margin:0 0 8px;font-size:1.25rem;color:var(--accent)}
+h2{font-size:1.15rem;margin:0}
+input,textarea,button{font:inherit;color:inherit}
+input,textarea{width:100%;background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:12px 14px;outline:none;min-height:52px}
+input:focus,textarea:focus{border-color:var(--accent)}
+textarea{min-height:40vh;resize:vertical;font:17px/1.4 ui-monospace,Menlo,Consolas,monospace}
+button{cursor:pointer;background:var(--panel2);border:2px solid var(--line);border-radius:12px;padding:10px 16px;min-height:52px;font-weight:600;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+@media (hover:hover){button:hover{border-color:var(--accent)}}
+button:active{transform:scale(.97)}
+button:disabled{opacity:.6;cursor:wait}
+.primary{background:var(--accent);color:#111;border-color:var(--accent)}
+.danger{color:var(--danger)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.between{justify-content:space-between}
+.grow{flex:1;min-width:0}
+.muted{color:var(--muted)}.small{font-size:.9rem}
+label{display:block;margin:12px 0 4px;font-weight:600}
+hr{border:0;border-top:1px solid var(--line);margin:16px 0}
+/* แนวตั้ง = สลับหน้า | แนวนอน (iPad) = สองฝั่ง */
+#side,#pane{padding:16px}
+body[data-view=home] #pane{display:none}
+body:not([data-view=home]) #side{display:none}
+#pane>div{max-width:1000px;margin:0 auto}
+@media (min-width:900px){
+.app{display:grid;grid-template-columns:390px 1fr;align-items:start}
+#side{display:block!important;position:sticky;top:var(--hh);max-height:calc(100vh - var(--hh));overflow:auto;border-right:1px solid var(--line)}
+#pane{display:block!important}.topBack{display:none}}
+#placeholder{padding:60px 20px;text-align:center;color:var(--muted)}
+#placeholder b{display:block;font-size:3rem}
+section.block{margin-top:22px}section.block:first-child{margin-top:0}
+.list{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.item{display:flex;gap:8px}
+.item .open{flex:1;text-align:left;padding:12px 16px;background:var(--panel);min-height:64px}
+.item .t{font-size:1.2rem;font-weight:700}.item .a{color:var(--muted);font-size:.95rem}
+.item .del{min-width:56px;padding:0}
+.badge{display:inline-block;border:1px solid var(--accent);color:var(--accent);border-radius:999px;padding:0 10px;font-size:.85rem;font-weight:700;margin-left:6px}
+.badge.dim{border-color:var(--line);color:var(--muted)}
+.empty{padding:18px;text-align:center;color:var(--muted);background:var(--panel);border:2px dashed var(--line);border-radius:12px}
+.steps{margin:8px 0 0;padding-left:20px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.chip{display:inline-flex;border:2px solid var(--line);border-radius:999px;background:var(--panel2);overflow:hidden}
+.chip button{border:0;border-radius:0;min-height:46px;background:transparent;padding:0 14px}
+.chip .x{padding:0 12px;color:var(--muted)}
+.chip.on{border-color:var(--accent)}.chip.on .lbl{color:var(--accent)}
+details{margin-top:16px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+summary{cursor:pointer;min-height:40px;display:flex;align-items:center}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px}
+.card h2{font-size:2rem;line-height:1.25;color:#fff}
+.artist{color:var(--muted);font-size:1.15rem}
+.keys{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+.keybox{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:6px 14px}
+.keybox b{color:var(--accent);font-size:1.5rem}
+.tools{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.sheet{font-size:var(--fs);line-height:1.3;padding-top:6px}
+.line{display:flex;flex-wrap:wrap;margin-bottom:.35em}
+.line.blank{height:.9em}
+.seg{display:inline-flex;flex-direction:column}
+.ch{min-height:1.35em;color:var(--chord);font-weight:800;padding-right:.7em;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;white-space:pre}
+.ly{white-space:pre;min-height:1.3em}
+.line.chordonly .ly{display:none}
+.line.section{margin-top:.6em}.line.section .ly{color:var(--accent);font-weight:700;font-size:.9em}
+.gallery{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+.sheetImg{width:100%;border-radius:12px;background:#fff;display:block;cursor:zoom-in}
+.dock{position:sticky;bottom:0;z-index:15;margin-top:16px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;align-items:center;background:rgba(22,22,26,.97);border:1px solid var(--line);border-radius:18px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));backdrop-filter:blur(8px)}
+.dock .grp{display:flex;gap:8px;align-items:center}
+.dock .tp{font-size:1.5rem;min-width:72px}
+.shift{min-width:90px;text-align:center;line-height:1.1}
+.shift b{display:block;font-size:1.5rem;color:var(--accent)}.shift small{color:var(--muted)}
+#exitFocus{position:fixed;top:calc(8px + env(safe-area-inset-top));right:12px;z-index:30;opacity:.85}
+body.focus header,body.focus #side,body.focus .meta{display:none!important}
+body.focus .app{display:block}
+body.focus .card{border:0;background:transparent;padding:6px}
+.thumbs{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.thumb{position:relative;width:110px;height:110px;border-radius:10px;overflow:hidden;border:2px solid var(--line)}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb button{position:absolute;top:2px;right:2px;min-height:36px;min-width:36px;padding:0;border-radius:50%;background:rgba(0,0,0,.75)}
+#lightbox{position:fixed;inset:0;background:#000;z-index:60;display:flex;flex-direction:column}
+.lbBar{display:flex;gap:10px;justify-content:flex-end;padding:10px 12px}
+.lbBody{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
+.lbBody img{width:100%;display:block;max-width:none;background:#fff}
+.lbBody.zoom img{width:230%}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ok);color:#052e16;padding:12px 20px;border-radius:999px;font-weight:700;z-index:70;box-shadow:0 6px 24px rgba(0,0,0,.6);max-width:90vw;text-align:center}
+.spinner{display:inline-block;width:18px;height:18px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-3px;margin-right:8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (max-width:520px){.card h2{font-size:1.6rem}}
 </style>
 </head>
-<body>
+<body data-view="home">
 
-<header>
-  <div class="wrap">
-    <h1>🎸 คลังคอร์ดกลางคืน</h1>
-    <form id="searchForm" class="row" autocomplete="off">
-      <input id="q" class="grow" type="search" placeholder="พิมพ์ชื่อเพลง หรือ ชื่อศิลปิน…" aria-label="ค้นหาเพลง">
-      <button class="primary" type="submit">ค้นหา</button>
-    </form>
-  </div>
+<header id="hdr">
+  <h1>🎸 คลังคอร์ดกลางคืน</h1>
+  <form id="searchForm" class="row" autocomplete="off">
+    <input id="q" class="grow" type="search" enterkeyhint="search" placeholder="ชื่อเพลง / ศิลปิน — พิมพ์เพื่อกรองคลัง · กดค้นเว็บเพื่อหาคอร์ด" aria-label="ค้นหา">
+    <button class="primary" type="submit">🌐 ค้นเว็บ</button>
+  </form>
 </header>
+<button id="exitFocus" hidden>✕ ออกจากโหมดเวที</button>
 
-<main class="wrap">
+<div class="app">
+<aside id="side">
+  <section class="block">
+    <h2>🌐 ค้นหาคอร์ดจากเว็บ</h2>
+    <div class="muted small">เลือกเว็บที่ต้องการ (ไม่เลือกเลย = ค้นทั้งอินเทอร์เน็ต)</div>
+    <div id="sites" class="chips"></div>
+    <div class="row">
+      <input id="newSite" class="grow" placeholder="เพิ่มเว็บ เช่น example.com" autocapitalize="none" autocorrect="off">
+      <button id="addSite">เพิ่ม</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="eng" data-eng="google">Google</button>
+      <button class="eng" data-eng="bing">Bing</button>
+      <button class="eng" data-eng="ddg">DuckDuckGo</button>
+    </div>
+    <ol class="steps small muted">
+      <li>พิมพ์ชื่อเพลง กดเครื่องมือค้นหา (เปิดแท็บใหม่)</li>
+      <li>คัดลอกคอร์ดจากเว็บ (ถ้าเป็นภาพ ให้แคปหน้าจอ)</li>
+      <li>กลับมากด “วางคอร์ด” หรือ “เพิ่มเอง / ภาพ”</li>
+    </ol>
+    <div class="row" style="margin-top:12px">
+      <button id="pasteBtn" class="primary">📋 วางคอร์ดที่คัดลอกมา</button>
+      <button id="addBtn">＋ เพิ่มเอง / ภาพ</button>
+    </div>
+  </section>
 
-  <!-- ===== หน้าแรก ===== -->
-  <div id="homeView">
-    <section id="resultsBox" class="block" hidden>
-      <h2>ผลการค้นหา</h2>
-      <div id="results" class="list"></div>
-      <p class="muted small">
-        แหล่งข้อมูล: ฐานข้อมูลตัวอย่างในแอป (จำลองการดึงข้อมูล) ·
-        <a href="https://busk.town" target="_blank" rel="noopener">เปิด busk.town ในแท็บใหม่</a>
-        แล้วคัดลอกคอร์ดมาวางเองได้
-      </p>
-    </section>
+  <section id="resultsBox" class="block" hidden>
+    <h2>เพลงตัวอย่างในแอป</h2>
+    <div id="results" class="list"></div>
+  </section>
 
-    <section class="block">
-      <div class="row between">
-        <h2>📚 My Songbook <span id="count" class="badge dim">0</span></h2>
-        <button id="addBtn" class="primary">＋ เพิ่ม/วางเพลงเอง</button>
-      </div>
-      <div id="songbook" class="list"></div>
-      <div class="row" style="margin-top:14px">
-        <button id="exportBtn" class="small">⬇ สำรองข้อมูล (JSON)</button>
-        <button id="importBtn" class="small">⬆ นำเข้าข้อมูล</button>
-        <input id="importFile" type="file" accept="application/json,.json" hidden>
-      </div>
-    </section>
-  </div>
+  <section class="block">
+    <h2>📚 My Songbook <span id="count" class="badge dim">0</span></h2>
+    <div id="songbook" class="list"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="exportBtn" class="small">⬇ สำรองข้อมูล</button>
+      <button id="importBtn" class="small">⬆ นำเข้า</button>
+      <input id="importFile" type="file" accept="application/json,.json" hidden>
+    </div>
+  </section>
 
-  <!-- ===== หน้าเพิ่ม/แก้ไขเพลงเอง ===== -->
+  <details>
+    <summary>⚙️ ขั้นสูง: Proxy สำหรับดึงจากลิงก์</summary>
+    <p class="muted small">เว็บ static ดึงเว็บอื่นตรงๆ ไม่ได้ (ติด CORS) ถ้ามี proxy ของตัวเอง ใส่ที่อยู่โดยใช้ <code>{url}</code> แทนลิงก์ปลายทาง เช่น <code>https://xxx.workers.dev/?url={url}</code></p>
+    <input id="proxy" placeholder="https://…/?url={url}" autocapitalize="none" autocorrect="off">
+  </details>
+</aside>
+
+<section id="pane">
+  <div id="placeholder"><b>🎶</b>เลือกเพลงจากคลัง หรือค้นหาเพลงใหม่</div>
+
   <div id="editorView" hidden>
-    <div class="row between"><button class="backBtn" type="button">← กลับ</button><h2 id="editorTitle">เพิ่มเพลงเอง</h2></div>
+    <div class="row between"><button class="backBtn topBack" type="button">← กลับ</button><h2 id="editorTitle">เพิ่มเพลงเอง</h2></div>
     <form id="editorForm">
-      <label for="fTitle">ชื่อเพลง *</label>
-      <input id="fTitle" required>
-      <label for="fArtist">ศิลปิน</label>
-      <input id="fArtist">
-      <label for="fKey">คีย์เดิม (เว้นว่างเพื่อให้ระบบเดาจากคอร์ดแรก)</label>
-      <input id="fKey" placeholder="เช่น G, Am, Bb">
-      <label for="fText">เนื้อเพลง + คอร์ด *</label>
-      <textarea id="fText" required spellcheck="false"
-        placeholder="วางได้ 2 แบบ&#10;&#10;1) คอร์ดอยู่บรรทัดบน เนื้อร้องอยู่บรรทัดล่าง&#10;G        Em&#10;ค่ำคืนนี้ลมเย็น&#10;&#10;2) คอร์ดแทรกในเนื้อ&#10;[G]ค่ำคืนนี้ลม[Em]เย็น"></textarea>
-      <p class="muted small">รองรับคอร์ดเช่น C, Am, F#m7, Bb, Gsus4, Cmaj7, D/F# — ส่วนอื่นจะแสดงเป็นเนื้อเพลงปกติ</p>
+      <label for="fUrl">ลิงก์หน้าเพลง (ไม่บังคับ — ดึงอัตโนมัติได้เมื่อตั้ง Proxy)</label>
       <div class="row">
-        <button class="primary" type="submit">💾 บันทึกและเปิดดู</button>
-        <button type="button" class="backBtn">ยกเลิก</button>
+        <input id="fUrl" class="grow" type="url" placeholder="https://…" autocapitalize="none" autocorrect="off">
+        <button type="button" id="fetchUrlBtn">ดึงจากลิงก์</button>
       </div>
+      <label for="fTitle">ชื่อเพลง *</label><input id="fTitle" required>
+      <label for="fArtist">ศิลปิน</label><input id="fArtist">
+      <label for="fKey">คีย์เดิม (เว้นว่าง = เดาจากคอร์ดแรก)</label><input id="fKey" placeholder="เช่น G, Am, Bb" autocapitalize="characters">
+      <label for="fText">เนื้อเพลง + คอร์ด (ข้อความ)</label>
+      <textarea id="fText" spellcheck="false" placeholder="วางได้ 2 แบบ&#10;&#10;1) คอร์ดอยู่บรรทัดบน เนื้ออยู่บรรทัดล่าง&#10;G        Em&#10;ค่ำคืนนี้ลมเย็น&#10;&#10;2) คอร์ดแทรกในเนื้อ&#10;[G]ค่ำคืนนี้ลม[Em]เย็น"></textarea>
+      <label>ภาพคอร์ด / สกรีนช็อต (เลือกได้หลายภาพ)</label>
+      <input id="fImgs" type="file" accept="image/*" multiple>
+      <div id="thumbs" class="thumbs"></div>
+      <p class="muted small">เพลงที่เป็นภาพอย่างเดียว Transpose ไม่ได้ · ถ้าใส่ทั้งข้อความและภาพ จะแสดงข้อความก่อน ภาพอยู่ด้านล่าง</p>
+      <div class="row"><button class="primary" type="submit">💾 บันทึกและเปิดดู</button><button type="button" class="backBtn">ยกเลิก</button></div>
     </form>
   </div>
 
-  <!-- ===== หน้าการ์ดเพลง ===== -->
   <div id="songView" hidden>
-    <div class="row between" style="margin-bottom:12px">
-      <button class="backBtn" type="button">← กลับ</button>
+    <div class="row between meta" style="margin-bottom:12px">
+      <button class="backBtn topBack" type="button">← กลับ</button>
       <span id="savedTag" class="badge" hidden>บันทึกแล้ว</span>
     </div>
     <article class="card">
       <h2 id="cTitle"></h2>
       <div id="cArtist" class="artist"></div>
-      <div class="keys">
+      <div class="keys meta">
         <div class="keybox">คีย์เดิม <b id="cKeyOrig">-</b></div>
         <div class="keybox">คีย์ปัจจุบัน <b id="cKeyNow">-</b></div>
       </div>
-
-      <div class="tools">
-        <button id="downBtn" class="tp" aria-label="ลดครึ่งเสียง">−</button>
-        <span id="shiftLabel" class="shift">0</span>
-        <button id="upBtn" class="tp" aria-label="เพิ่มครึ่งเสียง">+</button>
-        <button id="resetBtn">รีเซ็ต</button>
-        <span class="muted small">Semitones</span>
-      </div>
-      <div class="tools">
-        <button id="fontDown" aria-label="ลดขนาดตัวอักษร">A−</button>
-        <button id="fontUp" aria-label="เพิ่มขนาดตัวอักษร">A+</button>
-        <button id="wakeBtn" hidden>🔆 กันจอดับ: ปิด</button>
-      </div>
-
-      <div class="tools">
+      <div class="tools meta">
         <button id="saveBtn" class="primary">💾 บันทึกเข้าคลังเพลงของฉัน</button>
+        <button id="focusBtn">🎭 โหมดเวที</button>
         <button id="editBtn">✏️ แก้ไข</button>
         <button id="deleteBtn" class="danger" hidden>🗑 ลบ</button>
+        <button id="wakeBtn" hidden>🔆 กันจอดับ: ปิด</button>
       </div>
-      <hr>
+      <hr class="meta">
       <div id="sheet" class="sheet"></div>
+      <div id="gallery" class="gallery" hidden></div>
     </article>
+    <div class="dock">
+      <div class="grp" id="tpGrp">
+        <button id="downBtn" class="tp" aria-label="ลดครึ่งเสียง">−</button>
+        <div class="shift"><small>คีย์</small><b id="dockKey">-</b><small id="shiftLabel">0</small></div>
+        <button id="upBtn" class="tp" aria-label="เพิ่มครึ่งเสียง">+</button>
+        <button id="resetBtn">รีเซ็ต</button>
+      </div>
+      <div class="grp"><button id="fontDown" aria-label="ลดตัวอักษร">A−</button><button id="fontUp" aria-label="เพิ่มตัวอักษร">A+</button></div>
+      <div class="grp"><button id="scrollBtn">⏬ เลื่อนอัตโนมัติ</button><button id="speedBtn">กลาง</button></div>
+    </div>
   </div>
-</main>
+</section>
+</div>
 
+<div id="lightbox" hidden>
+  <div class="lbBar"><button id="lbZoom">🔍 ขยาย</button><button id="lbClose">✕ ปิด</button></div>
+  <div id="lbBody" class="lbBody"><img id="lbImg" alt=""></div>
+</div>
 <div id="toast" class="toast" hidden></div>
 
 <script>
 'use strict';
-
-/* =====================================================================
-   1) ฐานข้อมูลเพลงตัวอย่าง (จำลองผลการค้นหา/ดึงข้อมูล)
-   เป็นเพลงสาธารณสมบัติ หรือเนื้อที่เขียนใหม่เพื่อทดสอบระบบ
-   ===================================================================== */
-const MOCK_DB = [
-  { id:'mock-amazing', title:'Amazing Grace', artist:'Traditional', key:'G',
-    text:
+/* ===== 1) เพลงตัวอย่าง (จำลองผลค้นหา) — สาธารณสมบัติ / เขียนใหม่เพื่อทดสอบ ===== */
+const MOCK_DB=[
+{id:'mock-amazing',title:'Amazing Grace',artist:'Traditional',key:'G',text:
 `[Verse 1]
 [G]Amazing [G7]grace, how [C]sweet the [G]sound
 That [G]saved a [Em]wretch like [D]me
 I [G]once was [G7]lost, but [C]now am [G]found
-Was [Em]blind but [D]now I [G]see` },
-
-  { id:'mock-rising', title:'The House of the Rising Sun', artist:'Traditional', key:'Am',
-    text:
+Was [Em]blind but [D]now I [G]see`},
+{id:'mock-rising',title:'The House of the Rising Sun',artist:'Traditional',key:'Am',text:
 `[Verse 1]
 Am    C    D        F
 There is a house in New Orleans
@@ -216,471 +248,472 @@ They call the Rising Sun
 Am  C         D        F
 And it's been the ruin of many a poor boy
 Am         E7       Am
-And God, I know I'm one` },
-
-  { id:'mock-silent', title:'Silent Night', artist:'Traditional', key:'C',
-    text:
-`[C]Silent night, holy night
-All is calm, all is [G7]bright
-Round yon [F]virgin, [C]mother and child
-Holy [F]infant so tender and [C]mild
-[G7]Sleep in heavenly [C]peace
-Sleep in [G7]heavenly [C]peace` },
-
-  { id:'mock-night-road', title:'ค่ำคืนริมทาง (เพลงตัวอย่าง)', artist:'Night Busker Demo', key:'G',
-    text:
+And God, I know I'm one`},
+{id:'mock-night',title:'ค่ำคืนริมทาง (เพลงตัวอย่าง)',artist:'Night Busker Demo',key:'G',text:
 `Intro: [G] [Em] [C] [D]
 
 [Verse]
 [G]ค่ำคืนนี้ลมเย็น[Em]พัดผ่านมา
 [C]กีตาร์ตัวเก่าๆ ยัง[D]เล่นเพลงเดิม
-[G]ร้องให้คนแปลกหน้า[Em]ฟังเบาๆ
-[C]ใครจะอยู่หรือจะ[D]ไป ก็ไม่เป็นไร
 
 [Chorus]
 [C]ร้องไปด้วยกัน [G]ใต้แสงไฟสลัว
-[Am]คืนนี้ยังยาวนัก [D]อีกเพลงก็ยังไหว` },
-
-  { id:'mock-monday-blues', title:'บลูส์เช้าวันจันทร์ (เพลงตัวอย่าง)', artist:'Night Busker Demo', key:'E',
-    text:
-`[Verse] 12-bar blues
-[E7]ตื่นเช้ามาวันจันทร์ [E7]กาแฟยังไม่ทันอุ่น
-[A7]งานก็รออยู่ตรงหน้า [E7]แต่เพลงยังอยู่ในใจ
-[B7]เล่นอีกรอบนะที่รัก [A7]เล่นอีกรอบ [E7]ให้ฟ้าสว่าง [B7]` },
-
-  { id:'mock-greensleeves', title:'Greensleeves', artist:'Traditional', key:'Am',
-    text:
-`[Am]Alas, my love, you [G]do me wrong
-To [Am]cast me off dis[E]courteously
-And [Am]I have loved you [G]oh so long
-De[Am]lighting [E]in your [Am]company` }
+[Am]คืนนี้ยังยาวนัก [D]อีกเพลงก็ยังไหว`}
 ];
-
-/* จุดต่อระบบจริง: ถ้ามี API/พร็อกซีของตัวเอง ให้แก้สองฟังก์ชันนี้
-   (เว็บ static บน GitHub Pages ดึง busk.town ตรงๆ ไม่ได้ เพราะติด CORS) */
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-async function searchSongs(query) {
-  await sleep(500); // จำลองหน่วงเวลาเครือข่าย
-  const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
-  return MOCK_DB
-    .filter(s => {
-      const hay = (s.title + ' ' + s.artist).toLowerCase();
-      return tokens.every(t => hay.includes(t));
-    })
-    .map(({ id, title, artist, key }) => ({ id, title, artist, key })); // ผลค้นหาไม่มีเนื้อเพลง
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function searchSongs(q){ // จุดต่อ API จริง (ถ้ามี)
+  await sleep(250);
+  const t=q.toLowerCase().split(/\s+/).filter(Boolean);
+  return MOCK_DB.filter(s=>{const h=(s.title+' '+s.artist).toLowerCase();return t.every(x=>h.includes(x))}).map(({id,title,artist,key})=>({id,title,artist,key}));
 }
+async function fetchSongDetail(it){await sleep(250);const f=MOCK_DB.find(s=>s.id===it.id);if(!f)throw new Error('ไม่พบข้อมูลเพลง');return{...f}}
 
-async function fetchSongDetail(item) {
-  await sleep(450); // จำลองการ scrape หน้าเพลง
-  const full = MOCK_DB.find(s => s.id === item.id);
-  if (!full) throw new Error('ไม่พบข้อมูลเพลง');
-  return { ...full };
+/* ===== 2) คอร์ด + Transpose ===== */
+const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const FLATS=['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+const BASE={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+const FLAT_KEYS=[5,10,3,8,1];
+const CHORD_RE=/^[A-G][#b]?(?:maj|min|dim|aug|sus|add|m|M|\d+|[#b+\-°()])*(?:\/[A-G][#b]?)?$/;
+const isChord=t=>CHORD_RE.test(t);
+const noteIndex=n=>(BASE[n[0]]+(n[1]==='#'?1:n[1]==='b'?-1:0)+12)%12;
+function transposeChord(ch,shift,flat){
+  if(!shift)return ch;
+  const m=ch.match(/^([A-G][#b]?)([^\/]*)(?:\/([A-G][#b]?))?$/);
+  if(!m)return ch;
+  const N=flat?FLATS:SHARPS,tr=n=>N[(noteIndex(n)+shift+12)%12];
+  return tr(m[1])+m[2]+(m[3]?'/'+tr(m[3]):'');
 }
-
-/* =====================================================================
-   2) ตรรกะคอร์ด + Transpose
-   ===================================================================== */
-const SHARPS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-const FLATS  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
-const BASE   = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
-const FLAT_KEYS = [5, 10, 3, 8, 1]; // F, Bb, Eb, Ab, Db
-
-const CHORD_RE = /^[A-G][#b]?(?:maj|min|dim|aug|sus|add|m|M|\d+|[#b+\-°()])*(?:\/[A-G][#b]?)?$/;
-const isChord = t => CHORD_RE.test(t);
-const noteIndex = n => (BASE[n[0]] + (n[1] === '#' ? 1 : n[1] === 'b' ? -1 : 0) + 12) % 12;
-
-function transposeChord(chord, shift, useFlat) {
-  if (!shift) return chord;
-  const m = chord.match(/^([A-G][#b]?)([^\/]*)(?:\/([A-G][#b]?))?$/);
-  if (!m) return chord; // เช่น "|" ไม่แปลง
-  const names = useFlat ? FLATS : SHARPS;
-  const tr = n => names[(noteIndex(n) + shift + 12) % 12];
-  return tr(m[1]) + m[2] + (m[3] ? '/' + tr(m[3]) : '');
+function preferFlat(key,shift){
+  const m=(key||'').match(/^([A-G][#b]?)(.*)$/);if(!m)return false;
+  const minor=/^m(?!aj)/.test(m[2]),t=(noteIndex(m[1])+shift+12)%12;
+  return FLAT_KEYS.includes(minor?(t+3)%12:t);
 }
+const normShift=s=>{s=((s%12)+12)%12;return s>6?s-12:s};
+const fmtShift=s=>(s>0?'+':'')+s;
 
-// เลือกใช้ b หรือ # ตามคีย์ปลายทาง
-function preferFlat(keyStr, shift) {
-  const m = (keyStr || '').match(/^([A-G][#b]?)(.*)$/);
-  if (!m) return false;
-  const minor = /^m(?!aj)/.test(m[2]);
-  const t = (noteIndex(m[1]) + shift + 12) % 12;
-  return FLAT_KEYS.includes(minor ? (t + 3) % 12 : t);
+/* ===== 3) แปลงข้อความ -> บรรทัด (คอร์ดเหนือเนื้อ หรือ [C] ในเนื้อ) ===== */
+const THAI_MARK=/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/;
+const safeCut=(i,s)=>{while(i<s.length&&THAI_MARK.test(s[i]))i++;return i};
+function isChordLine(l){
+  if(!l.trim())return false;
+  const t=l.trim().split(/\s+/);
+  return t.every(x=>isChord(x)||x==='|')&&t.some(isChord);
 }
-
-const normShift = s => { s = ((s % 12) + 12) % 12; return s > 6 ? s - 12 : s; };
-const fmtShift = s => (s > 0 ? '+' : '') + s;
-
-/* =====================================================================
-   3) แปลงข้อความเพลง -> บรรทัด (รองรับคอร์ดเหนือเนื้อ และ [C] แทรกในเนื้อ)
-   ===================================================================== */
-const THAI_MARK = /[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/; // สระบน/ล่าง วรรณยุกต์ ห้ามแยกจากพยัญชนะ
-
-function isChordLine(line) {
-  if (!line.trim()) return false;
-  const toks = line.trim().split(/\s+/);
-  return toks.every(t => isChord(t) || t === '|') && toks.some(isChord);
-}
-function safeCut(i, str) { while (i < str.length && THAI_MARK.test(str[i])) i++; return i; }
-
-function parseSong(text) {
-  const lines = String(text).replace(/\r/g, '').replace(/\t/g, '    ').split('\n');
-  const out = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim()) { out.push({ type:'blank' }); continue; }
-
-    // รูปแบบ A: บรรทัดคอร์ดอยู่เหนือเนื้อร้อง
-    if (isChordLine(line)) {
-      const toks = [...line.matchAll(/\S+/g)].map(m => ({ t:m[0], i:m.index }));
-      const next = lines[i + 1];
-      if (next !== undefined && next.trim() && !isChordLine(next)) {
-        const nx = next.replace(/\t/g, '    ');
-        let prev = 0;
-        const cuts = toks.map(k => (prev = Math.max(prev, safeCut(k.i, nx))));
-        const segs = [];
-        if (cuts[0] > 0) segs.push({ chord:'', text:nx.slice(0, cuts[0]) });
-        toks.forEach((k, n) => segs.push({ chord:k.t, text:nx.slice(cuts[n], cuts[n + 1]) }));
-        out.push({ type:'line', segs });
-        i++;
-      } else {
-        out.push({ type:'line', chordOnly:true, segs: toks.map(k => ({ chord:k.t, text:'' })) });
-      }
+function parseSong(text){
+  const L=String(text||'').replace(/\r/g,'').replace(/\t/g,'    ').split('\n'),out=[];
+  for(let i=0;i<L.length;i++){
+    const line=L[i];
+    if(!line.trim()){out.push({type:'blank'});continue}
+    if(isChordLine(line)){
+      const toks=[...line.matchAll(/\S+/g)].map(m=>({t:m[0],i:m.index})),next=L[i+1];
+      if(next!==undefined&&next.trim()&&!isChordLine(next)){
+        let p=0;const cuts=toks.map(k=>(p=Math.max(p,safeCut(k.i,next)))),segs=[];
+        if(cuts[0]>0)segs.push({chord:'',text:next.slice(0,cuts[0])});
+        toks.forEach((k,n)=>segs.push({chord:k.t,text:next.slice(cuts[n],cuts[n+1])}));
+        out.push({type:'line',segs});i++;
+      }else out.push({type:'line',chordOnly:true,segs:toks.map(k=>({chord:k.t,text:''}))});
       continue;
     }
-
-    // รูปแบบ B: คอร์ดแทรกในเนื้อ [C]
-    const re = /\[([^\]]+)\]/g;
-    if ([...line.matchAll(re)].some(m => isChord(m[1]))) {
-      const segs = [];
-      let cur = { chord:'', text:'' }, last = 0;
-      for (const m of line.matchAll(re)) {
-        cur.text += line.slice(last, m.index);
-        last = m.index + m[0].length;
-        if (isChord(m[1])) { segs.push(cur); cur = { chord:m[1], text:'' }; }
-        else cur.text += m[0];
+    const re=/\[([^\]]+)\]/g;
+    if([...line.matchAll(re)].some(m=>isChord(m[1]))){
+      const segs=[];let cur={chord:'',text:''},last=0;
+      for(const m of line.matchAll(re)){
+        cur.text+=line.slice(last,m.index);last=m.index+m[0].length;
+        if(isChord(m[1])){segs.push(cur);cur={chord:m[1],text:''}}else cur.text+=m[0];
       }
-      cur.text += line.slice(last);
-      segs.push(cur);
-      out.push({ type:'line', segs: segs.filter(s => s.chord || s.text) });
-      continue;
+      cur.text+=line.slice(last);segs.push(cur);
+      out.push({type:'line',segs:segs.filter(s=>s.chord||s.text)});continue;
     }
-
-    // ข้อความธรรมดา / หัวข้อท่อน
-    const section = line.length < 40 && (/^\s*\[[^\]]+\]\s*$/.test(line) ||
-      /^\s*(intro|verse|chorus|bridge|solo|outro|interlude|pre-?chorus|ท่อน|อินโทร|อินเตอร์|เอาท์โทร)/i.test(line));
-    out.push({ type:'line', section, segs:[{ chord:'', text:line }] });
+    const section=line.length<40&&(/^\s*\[[^\]]+\]\s*$/.test(line)||/^\s*(intro|verse|chorus|bridge|solo|outro|interlude|pre-?chorus|ท่อน|อินโทร|อินเตอร์|เอาท์โทร)/i.test(line));
+    out.push({type:'line',section,segs:[{chord:'',text:line}]});
   }
   return out;
 }
-
-function detectKey(text) {
-  for (const l of parseSong(text))
-    if (l.segs) for (const s of l.segs) if (isChord(s.chord)) return s.chord.replace(/\/.*$/, '');
+function detectKey(text){
+  for(const l of parseSong(text))if(l.segs)for(const s of l.segs)if(isChord(s.chord))return s.chord.replace(/\/.*$/,'');
   return '';
 }
-
-function renderSheet(container, text, shift, flat) {
-  container.replaceChildren();
-  for (const line of parseSong(text)) {
-    if (line.type === 'blank') { container.appendChild(mk('div', 'line blank')); continue; }
-    const row = mk('div', 'line' + (line.section ? ' section' : '') + (line.chordOnly ? ' chordonly' : ''));
-    const hasChord = line.segs.some(s => s.chord);
-    for (const s of line.segs) {
-      const seg = mk('span', 'seg');
-      if (hasChord) seg.appendChild(mk('span', 'ch', s.chord ? transposeChord(s.chord, shift, flat) : ''));
-      seg.appendChild(mk('span', 'ly', s.text));
-      row.appendChild(seg);
+function renderSheet(box,text,shift,flat){
+  box.replaceChildren();
+  for(const line of parseSong(text)){
+    if(line.type==='blank'){box.appendChild(mk('div','line blank'));continue}
+    const row=mk('div','line'+(line.section?' section':'')+(line.chordOnly?' chordonly':''));
+    const has=line.segs.some(s=>s.chord);
+    for(const s of line.segs){
+      const seg=mk('span','seg');
+      if(has)seg.appendChild(mk('span','ch',s.chord?transposeChord(s.chord,shift,flat):''));
+      seg.appendChild(mk('span','ly',s.text));row.appendChild(seg);
     }
-    container.appendChild(row);
+    box.appendChild(row);
   }
 }
 
-/* =====================================================================
-   4) Utilities + LocalStorage
-   ===================================================================== */
-const $ = (s, r = document) => r.querySelector(s);
-function mk(tag, cls, text) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text != null) e.textContent = text; // ใช้ textContent เสมอ กัน XSS
-  return e;
+/* ===== 4) Utilities + Storage (LocalStorage = เพลง, IndexedDB = ภาพ) ===== */
+const $=(s,r=document)=>r.querySelector(s);
+function mk(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+const LS={
+  get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch{return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch{return false}}
+};
+const BOOK='nightChordbook.v1',SITES='nightChordbook.sites',ENG='nightChordbook.engine',FSK='nightChordbook.fs',PROXY='nightChordbook.proxy';
+const loadBook=()=>{const b=LS.get(BOOK,[]);return Array.isArray(b)?b:[]};
+const saveBook=b=>LS.set(BOOK,b)||(toast('บันทึกไม่สำเร็จ (พื้นที่เต็มหรือถูกปิดใช้งาน)'),false);
+let toastT;
+function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2600)}
+
+let _db;
+const idb=()=>_db||(_db=new Promise((res,rej)=>{const r=indexedDB.open('nightChordbook',1);r.onupgradeneeded=()=>r.result.createObjectStore('imgs');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}));
+const idbTx=async(mode,fn)=>{const db=await idb();return new Promise((res,rej)=>{const tx=db.transaction('imgs',mode);const req=fn(tx.objectStore('imgs'));tx.oncomplete=()=>res(req&&req.result);tx.onerror=()=>rej(tx.error)})};
+const idbPut=(id,b)=>idbTx('readwrite',s=>s.put(b,id));
+const idbGet=id=>idbTx('readonly',s=>s.get(id));
+const idbDel=id=>idbTx('readwrite',s=>s.delete(id));
+function shrinkImage(file,max=4096){
+  return new Promise((res,rej)=>{
+    const u=URL.createObjectURL(file),im=new Image();
+    im.onload=()=>{
+      const k=Math.min(1,max/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');
+      c.width=Math.round(im.naturalWidth*k);c.height=Math.round(im.naturalHeight*k);
+      c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+      c.toBlob(b=>{URL.revokeObjectURL(u);b?res(b):rej()},'image/jpeg',.88);
+    };
+    im.onerror=()=>{URL.revokeObjectURL(u);rej()};im.src=u;
+  });
 }
+const blobToDataURL=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(b)});
 
-const BOOK_KEY = 'nightChordbook.v1';
-const FS_KEY = 'nightChordbook.fs';
-const loadBook = () => { try { const b = JSON.parse(localStorage.getItem(BOOK_KEY)); return Array.isArray(b) ? b : []; } catch { return []; } };
-const saveBook = b => { try { localStorage.setItem(BOOK_KEY, JSON.stringify(b)); return true; } catch { toast('บันทึกไม่สำเร็จ (พื้นที่เต็มหรือถูกปิดการใช้งาน)'); return false; } };
-
-let toastTimer;
-function toast(msg) {
-  const t = $('#toast');
-  t.textContent = msg; t.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (t.hidden = true), 2200);
+/* ===== 5) สลับหน้า ===== */
+let current=null;
+function show(name,push=true){
+  document.body.dataset.view=name;
+  $('#placeholder').hidden=name!=='home';$('#editorView').hidden=name!=='editor';$('#songView').hidden=name!=='song';
+  if(name!=='song'){setFocus(false);setScroll(false)}
+  scrollTo(0,0);
+  if(push&&name!=='home')history.pushState({v:name},'');
 }
+addEventListener('popstate',e=>{const v=e.state&&e.state.v;show(v==='song'&&!current?'home':(v||'home'),false)});
+document.querySelectorAll('.backBtn').forEach(b=>b.onclick=()=>{history.state&&history.state.v?history.back():show('home',false)});
 
-/* =====================================================================
-   5) การสลับหน้า (รองรับปุ่ม Back ของมือถือ)
-   ===================================================================== */
-const VIEWS = { home:'#homeView', editor:'#editorView', song:'#songView' };
-function show(name, push = true) {
-  for (const [k, sel] of Object.entries(VIEWS)) $(sel).hidden = k !== name;
-  window.scrollTo(0, 0);
-  if (push && name !== 'home') history.pushState({ v:name }, '');
+/* ===== 6) ค้นหา: เว็บ + เพลงตัวอย่าง + กรองคลัง ===== */
+let sites=LS.get(SITES,[{d:'busk.town',on:false}]);
+function renderSites(){
+  const box=$('#sites');box.replaceChildren();
+  sites.forEach((s,i)=>{
+    const c=mk('span','chip'+(s.on?' on':''));
+    const b=mk('button','lbl',(s.on?'✓ ':'')+s.d);b.type='button';
+    b.onclick=()=>{s.on=!s.on;LS.set(SITES,sites);renderSites()};
+    const x=mk('button','x','✕');x.type='button';x.setAttribute('aria-label','ลบ '+s.d);
+    x.onclick=()=>{sites.splice(i,1);LS.set(SITES,sites);renderSites()};
+    c.append(b,x);box.appendChild(c);
+  });
 }
-window.addEventListener('popstate', e => {
-  const v = e.state && e.state.v;
-  show(v === 'song' && !current ? 'home' : (v || 'home'), false);
-});
-document.querySelectorAll('.backBtn').forEach(b => b.addEventListener('click', () => {
-  if (history.state && history.state.v) history.back(); else show('home', false);
-}));
-
-/* =====================================================================
-   6) หน้าแรก: ค้นหา + Songbook
-   ===================================================================== */
-let searchToken = 0, debounce;
-
-async function doSearch() {
-  const q = $('#q').value.trim();
-  const token = ++searchToken;
-  const box = $('#resultsBox'), list = $('#results');
-  if (!q) { box.hidden = true; return; }
-  if (!$('#homeView').hidden === false) show('home', false);
-  box.hidden = false;
-  list.replaceChildren();
-  const loading = mk('div', 'empty');
-  loading.append(mk('span', 'spinner'), document.createTextNode('กำลังค้นหา…'));
-  list.appendChild(loading);
-  try {
-    const items = await searchSongs(q);
-    if (token !== searchToken) return; // ผลเก่า ทิ้งไป
-    renderResults(items, q);
-  } catch (err) {
-    list.replaceChildren(mk('div', 'empty', 'ค้นหาไม่สำเร็จ: ' + err.message));
-  }
+$('#addSite').onclick=()=>{
+  const v=$('#newSite').value.trim().replace(/^https?:\/\//,'').replace(/^www\./,'').split('/')[0].toLowerCase();
+  if(!v||!v.includes('.')){toast('ใส่ชื่อเว็บให้ถูกต้อง เช่น example.com');return}
+  if(!sites.some(s=>s.d===v))sites.push({d:v,on:true});
+  LS.set(SITES,sites);$('#newSite').value='';renderSites();
+};
+const ENGINES={google:'https://www.google.com/search?q=',bing:'https://www.bing.com/search?q=',ddg:'https://duckduckgo.com/?q='};
+function webSearch(eng){
+  const q=$('#q').value.trim();
+  if(!q){toast('พิมพ์ชื่อเพลงหรือศิลปินก่อน');$('#q').focus();return}
+  LS.set(ENG,eng);
+  const on=sites.filter(s=>s.on).map(s=>'site:'+s.d);
+  const query=q+' คอร์ด'+(on.length?' ('+on.join(' OR ')+')':'');
+  window.open(ENGINES[eng]+encodeURIComponent(query),'_blank','noopener');
 }
+document.querySelectorAll('.eng').forEach(b=>b.onclick=()=>webSearch(b.dataset.eng));
+$('#searchForm').onsubmit=e=>{e.preventDefault();webSearch(LS.get(ENG,'google'))};
 
-function renderResults(items, q) {
-  const list = $('#results');
-  list.replaceChildren();
-  if (!items.length) {
-    const e = mk('div', 'empty', `ไม่พบเพลง “${q}” `);
-    e.appendChild(mk('br'));
-    const b = mk('button', 'primary', '✏️ วางเนื้อเพลงเอง');
-    b.style.marginTop = '10px';
-    b.addEventListener('click', () => openEditor(null, q));
-    e.appendChild(b);
-    list.appendChild(e);
-    return;
-  }
-  for (const it of items) {
-    const row = mk('div', 'item');
-    const btn = mk('button', 'open');
-    const t = mk('div', 't', it.title);
-    t.appendChild(mk('span', 'badge', it.key));
-    btn.append(t, mk('div', 'a', it.artist));
-    btn.addEventListener('click', () => pickResult(it, btn));
-    row.appendChild(btn);
-    list.appendChild(row);
-  }
-}
-
-async function pickResult(item, btn) {
-  const saved = loadBook().find(s => s.id === item.id);
-  if (saved) { openSong(saved, saved.shift || 0); return; } // มีในเครื่องแล้ว ไม่ต้องดึงใหม่
-  btn.disabled = true;
-  const old = btn.innerHTML;
-  btn.replaceChildren(mk('span', 'spinner'), document.createTextNode('กำลังดึงเนื้อเพลงและคอร์ด…'));
-  try {
-    openSong(await fetchSongDetail(item), 0);
-  } catch (err) {
-    toast('ดึงข้อมูลไม่สำเร็จ: ' + err.message);
-  } finally {
-    btn.disabled = false; btn.innerHTML = old;
-  }
-}
-
-function renderSongbook() {
-  const book = loadBook().sort((a, b) => a.title.localeCompare(b.title, 'th'));
-  $('#count').textContent = book.length;
-  const list = $('#songbook');
-  list.replaceChildren();
-  if (!book.length) {
-    list.appendChild(mk('div', 'empty', 'ยังไม่มีเพลงที่บันทึกไว้ — ค้นหาเพลงด้านบน หรือกด “เพิ่ม/วางเพลงเอง”'));
-    return;
-  }
-  for (const s of book) {
-    const row = mk('div', 'item');
-    const open = mk('button', 'open');
-    const t = mk('div', 't', s.title);
-    if (s.key) t.appendChild(mk('span', 'badge', s.key));
-    if (s.shift) t.appendChild(mk('span', 'badge dim', fmtShift(s.shift)));
-    open.append(t, mk('div', 'a', s.artist || '—'));
-    open.addEventListener('click', () => openSong(s, s.shift || 0));
-    const del = mk('button', 'del danger', '🗑');
-    del.setAttribute('aria-label', 'ลบ ' + s.title);
-    del.addEventListener('click', () => removeSong(s.id, s.title));
-    row.append(open, del);
-    list.appendChild(row);
-  }
-}
-
-function removeSong(id, title) {
-  if (!confirm(`ลบ “${title}” ออกจากคลังเพลง?`)) return;
-  saveBook(loadBook().filter(s => s.id !== id));
+let sTok=0,deb;
+async function doSearch(){
+  const q=$('#q').value.trim(),tok=++sTok,box=$('#resultsBox'),list=$('#results');
   renderSongbook();
-  if (current && current.song.id === id) renderSong();
+  if(!q){box.hidden=true;return}
+  if(matchMedia('(max-width:899px)').matches&&document.body.dataset.view!=='home')show('home',false);
+  const items=await searchSongs(q);
+  if(tok!==sTok)return;
+  box.hidden=!items.length;list.replaceChildren();
+  for(const it of items){
+    const row=mk('div','item'),btn=mk('button','open'),t=mk('div','t',it.title);
+    t.appendChild(mk('span','badge',it.key));btn.append(t,mk('div','a',it.artist));
+    btn.onclick=()=>pickResult(it,btn);row.appendChild(btn);list.appendChild(row);
+  }
+}
+async function pickResult(it,btn){
+  const saved=loadBook().find(s=>s.id===it.id);
+  if(saved){openSong(saved,saved.shift||0);return}
+  btn.disabled=true;const old=[...btn.childNodes];
+  btn.replaceChildren(mk('span','spinner'),document.createTextNode('กำลังดึงเนื้อเพลงและคอร์ด…'));
+  try{openSong(await fetchSongDetail(it),0)}catch(e){toast('ดึงข้อมูลไม่สำเร็จ: '+e.message)}
+  finally{btn.disabled=false;btn.replaceChildren(...old)}
+}
+$('#q').oninput=()=>{clearTimeout(deb);deb=setTimeout(doSearch,300)};
+
+/* ===== 7) My Songbook ===== */
+function renderSongbook(){
+  const f=$('#q').value.trim().toLowerCase();
+  const all=loadBook().sort((a,b)=>a.title.localeCompare(b.title,'th'));
+  const book=f?all.filter(s=>(s.title+' '+(s.artist||'')).toLowerCase().includes(f)):all;
+  $('#count').textContent=all.length;
+  const list=$('#songbook');list.replaceChildren();
+  if(!book.length){list.appendChild(mk('div','empty',all.length?'ไม่พบในคลัง — กด “ค้นเว็บ” เพื่อหาเพิ่ม':'ยังไม่มีเพลงที่บันทึกไว้'));return}
+  for(const s of book){
+    const row=mk('div','item'),open=mk('button','open'),t=mk('div','t',s.title);
+    if(s.key)t.appendChild(mk('span','badge',s.key));
+    if(s.shift)t.appendChild(mk('span','badge dim',fmtShift(s.shift)));
+    if(s.images&&s.images.length)t.appendChild(mk('span','badge dim','🖼 '+s.images.length));
+    open.append(t,mk('div','a',s.artist||'—'));open.onclick=()=>openSong(s,s.shift||0);
+    const del=mk('button','del danger','🗑');del.setAttribute('aria-label','ลบ '+s.title);
+    del.onclick=()=>removeSong(s.id,s.title);row.append(open,del);list.appendChild(row);
+  }
+}
+async function removeSong(id,title){
+  if(!confirm(`ลบ “${title}” ออกจากคลังเพลง?`))return;
+  const s=loadBook().find(x=>x.id===id);
+  if(s&&s.images)for(const i of s.images)await idbDel(i).catch(()=>{});
+  saveBook(loadBook().filter(x=>x.id!==id));renderSongbook();
+  if(current&&current.song.id===id)renderSong(false);
   toast('ลบแล้ว');
 }
+$('#exportBtn').onclick=async()=>{
+  try{
+    const out=[];
+    for(const s of loadBook()){
+      const o={...s};
+      if(s.images&&s.images.length){o.imagesData=[];for(const id of s.images){const b=await idbGet(id);if(b)o.imagesData.push({id,data:await blobToDataURL(b)})}}
+      out.push(o);
+    }
+    const a=mk('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(out)],{type:'application/json'}));
+    a.download='my-songbook-'+new Date().toISOString().slice(0,10)+'.json';a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  }catch{toast('สำรองข้อมูลไม่สำเร็จ')}
+};
+$('#importBtn').onclick=()=>$('#importFile').click();
+$('#importFile').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  try{
+    const data=JSON.parse(await f.text());if(!Array.isArray(data))throw 0;
+    const map=new Map(loadBook().map(s=>[s.id,s]));let n=0;
+    for(const s of data){
+      if(!s||!s.id||!s.title||(!s.text&&!(s.images&&s.images.length)))continue;
+      const {imagesData,...clean}=s;
+      for(const im of imagesData||[])await idbPut(im.id,await (await fetch(im.data)).blob());
+      map.set(String(s.id),{...clean,id:String(s.id)});n++;
+    }
+    saveBook([...map.values()]);renderSongbook();toast(`นำเข้า ${n} เพลงแล้ว`);
+  }catch{toast('ไฟล์ไม่ถูกต้อง')}
+};
 
-$('#searchForm').addEventListener('submit', e => { e.preventDefault(); clearTimeout(debounce); doSearch(); });
-$('#q').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(doSearch, 400); });
-$('#addBtn').addEventListener('click', () => openEditor(null, $('#q').value.trim()));
-
-/* สำรอง / นำเข้า */
-$('#exportBtn').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify(loadBook(), null, 2)], { type:'application/json' });
-  const a = mk('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'my-songbook-' + new Date().toISOString().slice(0, 10) + '.json';
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-});
-$('#importBtn').addEventListener('click', () => $('#importFile').click());
-$('#importFile').addEventListener('change', async e => {
-  const f = e.target.files[0]; e.target.value = '';
-  if (!f) return;
-  try {
-    const data = JSON.parse(await f.text());
-    if (!Array.isArray(data)) throw new Error();
-    const valid = data.filter(s => s && s.id && s.title && s.text);
-    const map = new Map(loadBook().map(s => [s.id, s]));
-    valid.forEach(s => map.set(String(s.id), { ...s, id:String(s.id) }));
-    saveBook([...map.values()]);
-    renderSongbook();
-    toast(`นำเข้า ${valid.length} เพลงแล้ว`);
-  } catch { toast('ไฟล์ไม่ถูกต้อง'); }
-});
-
-/* =====================================================================
-   7) การ์ดเพลง + Transpose
-   ===================================================================== */
-let current = null; // { song, shift }
-
-function openSong(song, shift = 0) {
-  current = { song:{ ...song }, shift:normShift(shift) };
-  renderSong();
-  show('song');
+/* ===== 8) การ์ดเพลง ===== */
+function openSong(song,shift=0){current={song:{...song},shift:normShift(shift)};renderSong(true);show('song')}
+let galTok=0,galUrls=[];
+function renderSong(reload=true){
+  if(!current)return;
+  const {song,shift}=current,hasText=!!(song.text&&song.text.trim());
+  const key=song.key||detectKey(song.text),flat=preferFlat(key,shift),now=key?transposeChord(key,shift,flat):'-';
+  $('#cTitle').textContent=song.title;$('#cArtist').textContent=song.artist||'ไม่ระบุศิลปิน';
+  $('#cKeyOrig').textContent=key||'-';$('#cKeyNow').textContent=now;
+  $('#dockKey').textContent=now;$('#shiftLabel').textContent=fmtShift(shift);
+  $('#sheet').hidden=!hasText;$('#tpGrp').hidden=!hasText;
+  if(hasText)renderSheet($('#sheet'),song.text,shift,flat);
+  if(reload)loadGallery(song);
+  const saved=loadBook().some(s=>s.id===song.id);
+  $('#savedTag').hidden=!saved;$('#deleteBtn').hidden=!saved;
+  $('#saveBtn').textContent=saved?'💾 อัปเดตเพลงที่บันทึกไว้':'💾 บันทึกเข้าคลังเพลงของฉัน';
 }
-
-function renderSong() {
-  if (!current) return;
-  const { song, shift } = current;
-  const key = song.key || detectKey(song.text);
-  const flat = preferFlat(key, shift);
-  $('#cTitle').textContent = song.title;
-  $('#cArtist').textContent = song.artist || 'ไม่ระบุศิลปิน';
-  $('#cKeyOrig').textContent = key || '-';
-  $('#cKeyNow').textContent = key ? transposeChord(key, shift, flat) : '-';
-  $('#shiftLabel').textContent = fmtShift(shift);
-  renderSheet($('#sheet'), song.text, shift, flat);
-
-  const saved = loadBook().some(s => s.id === song.id);
-  $('#savedTag').hidden = !saved;
-  $('#deleteBtn').hidden = !saved;
-  $('#saveBtn').textContent = saved ? '💾 อัปเดตเพลงที่บันทึกไว้' : '💾 บันทึกเข้าคลังเพลงของฉัน';
+async function loadGallery(song){
+  const tok=++galTok,g=$('#gallery');
+  galUrls.forEach(u=>URL.revokeObjectURL(u));galUrls=[];g.replaceChildren();
+  if(!song.images||!song.images.length){g.hidden=true;return}
+  g.hidden=false;
+  for(const id of song.images){
+    const b=await idbGet(id).catch(()=>null);
+    if(tok!==galTok)return;
+    if(!b){g.appendChild(mk('div','empty','ไม่พบภาพในเครื่องนี้ (อาจถูกล้างข้อมูลเบราว์เซอร์)'));continue}
+    const url=URL.createObjectURL(b);galUrls.push(url);
+    const im=mk('img','sheetImg');im.src=url;im.alt='ภาพคอร์ด';im.onclick=()=>openLightbox(url);g.appendChild(im);
+  }
 }
+const setShift=n=>{current.shift=normShift(n);renderSong(false)};
+$('#upBtn').onclick=()=>setShift(current.shift+1);
+$('#downBtn').onclick=()=>setShift(current.shift-1);
+$('#resetBtn').onclick=()=>setShift(0);
+$('#saveBtn').onclick=()=>{
+  const {song,shift}=current;
+  const e={id:song.id,title:song.title,artist:song.artist||'',key:song.key||detectKey(song.text),text:song.text||'',images:song.images||[],src:song.src||'',shift,savedAt:Date.now()};
+  const book=loadBook(),i=book.findIndex(s=>s.id===e.id),existed=i>=0;
+  if(existed)book[i]=e;else book.push(e);
+  if(!saveBook(book))return;
+  renderSongbook();renderSong(false);toast(existed?'อัปเดตแล้ว ✔':'บันทึกเข้าคลังเพลงแล้ว ✔');
+};
+$('#deleteBtn').onclick=()=>removeSong(current.song.id,current.song.title);
+$('#editBtn').onclick=()=>openEditor(current.song);
 
-const setShift = n => { current.shift = normShift(n); renderSong(); };
-$('#upBtn').addEventListener('click', () => setShift(current.shift + 1));
-$('#downBtn').addEventListener('click', () => setShift(current.shift - 1));
-$('#resetBtn').addEventListener('click', () => setShift(0));
-
-$('#saveBtn').addEventListener('click', () => {
-  const { song, shift } = current;
-  const entry = { id:song.id, title:song.title, artist:song.artist || '', key:song.key || detectKey(song.text),
-                  text:song.text, shift, savedAt:Date.now() };
-  const book = loadBook();
-  const i = book.findIndex(s => s.id === entry.id);
-  const existed = i >= 0;
-  if (existed) book[i] = entry; else book.push(entry);
-  if (!saveBook(book)) return;
-  renderSongbook(); renderSong();
-  toast(existed ? 'อัปเดตแล้ว ✔' : 'บันทึกเข้าคลังเพลงแล้ว ✔');
-});
-$('#deleteBtn').addEventListener('click', () => removeSong(current.song.id, current.song.title));
-$('#editBtn').addEventListener('click', () => openEditor(current.song));
+function openLightbox(url){$('#lbImg').src=url;$('#lbBody').classList.remove('zoom');$('#lightbox').hidden=false}
+$('#lbClose').onclick=()=>$('#lightbox').hidden=true;
+$('#lbZoom').onclick=()=>$('#lbBody').classList.toggle('zoom');
 
 /* ขนาดตัวอักษร */
-let fs = parseFloat(localStorage.getItem(FS_KEY)) || 1.5;
-const applyFs = () => document.documentElement.style.setProperty('--fs', fs + 'rem');
-const bumpFs = d => { fs = Math.min(3.4, Math.max(1, +(fs + d).toFixed(2))); applyFs(); try { localStorage.setItem(FS_KEY, fs); } catch {} };
-$('#fontUp').addEventListener('click', () => bumpFs(0.15));
-$('#fontDown').addEventListener('click', () => bumpFs(-0.15));
+let fs=LS.get(FSK,1.7);
+const applyFs=()=>document.documentElement.style.setProperty('--fs',fs+'rem');
+const bumpFs=d=>{fs=Math.min(3.6,Math.max(1,+(fs+d).toFixed(2)));applyFs();LS.set(FSK,fs)};
+$('#fontUp').onclick=()=>bumpFs(.15);
+$('#fontDown').onclick=()=>bumpFs(-.15);
 applyFs();
 
-/* กันจอดับบนเวที (ถ้าเบราว์เซอร์รองรับ) */
-let wakeLock = null, wantWake = false;
-async function requestWake() {
-  try {
-    wakeLock = await navigator.wakeLock.request('screen');
-    wakeLock.addEventListener('release', () => { wakeLock = null; });
-  } catch { wantWake = false; toast('เปิดโหมดกันจอดับไม่ได้'); }
-}
-function updateWakeBtn() { $('#wakeBtn').textContent = '🔆 กันจอดับ: ' + (wantWake ? 'เปิด' : 'ปิด'); }
-if ('wakeLock' in navigator) {
-  $('#wakeBtn').hidden = false;
-  $('#wakeBtn').addEventListener('click', async () => {
-    wantWake = !wantWake;
-    if (wantWake) await requestWake(); else if (wakeLock) await wakeLock.release();
-    updateWakeBtn();
-  });
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && wantWake && !wakeLock) requestWake();
-  });
-}
+/* โหมดเวที */
+function setFocus(on){document.body.classList.toggle('focus',on);$('#exitFocus').hidden=!on;if(on)scrollTo(0,0)}
+$('#focusBtn').onclick=()=>setFocus(true);
+$('#exitFocus').onclick=()=>setFocus(false);
 
-/* =====================================================================
-   8) หน้าเพิ่ม/แก้ไขเพลงเอง
-   ===================================================================== */
-let editingId = null;
-
-function openEditor(song, prefillTitle = '') {
-  // เพลงตัวอย่างที่ยังไม่บันทึก -> แก้แล้วจะเป็นสำเนาใหม่ (id ใหม่)
-  const keepId = song && (song.id.startsWith('u-') || loadBook().some(s => s.id === song.id));
-  editingId = keepId ? song.id : null;
-  $('#editorTitle').textContent = song ? 'แก้ไขเพลง' : 'เพิ่มเพลงเอง';
-  $('#fTitle').value = song ? song.title : prefillTitle;
-  $('#fArtist').value = song ? song.artist || '' : '';
-  $('#fKey').value = song ? song.key || '' : '';
-  $('#fText').value = song ? song.text : '';
-  show('editor');
+/* กันจอดับ */
+let wakeLock=null,wantWake=false;
+async function requestWake(){
+  try{wakeLock=await navigator.wakeLock.request('screen');wakeLock.addEventListener('release',()=>{wakeLock=null})}
+  catch{wantWake=false;toast('เปิดโหมดกันจอดับไม่ได้')}
 }
-
-$('#editorForm').addEventListener('submit', e => {
-  e.preventDefault();
-  const text = $('#fText').value.replace(/\s+$/, '');
-  const keyRaw = $('#fKey').value.trim();
-  const song = {
-    id: editingId || 'u-' + Date.now(),
-    title: $('#fTitle').value.trim(),
-    artist: $('#fArtist').value.trim(),
-    key: isChord(keyRaw) ? keyRaw : detectKey(text),
-    text, shift: 0, savedAt: Date.now()
+const updateWake=()=>$('#wakeBtn').textContent='🔆 กันจอดับ: '+(wantWake?'เปิด':'ปิด');
+if('wakeLock' in navigator){
+  $('#wakeBtn').hidden=false;
+  $('#wakeBtn').onclick=async()=>{
+    wantWake=!wantWake;
+    if(wantWake)await requestWake();else if(wakeLock)await wakeLock.release();
+    updateWake();
   };
-  if (keyRaw && !isChord(keyRaw)) toast('คีย์ไม่ถูกต้อง ใช้คีย์จากคอร์ดแรกแทน');
-  const book = loadBook();
-  const i = book.findIndex(s => s.id === song.id);
-  if (i >= 0) book[i] = song; else book.push(song);
-  if (!saveBook(book)) return;
-  renderSongbook();
-  openSong(song, 0);
-  if (!(keyRaw && !isChord(keyRaw))) toast('บันทึกแล้ว ✔');
-});
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible'&&wantWake&&!wakeLock)requestWake();
+  });
+}
 
-/* เริ่มต้น */
+/* เลื่อนอัตโนมัติ (แตะหน้าจอหรือเลื่อนเองเพื่อหยุด) */
+const SPEEDS=[['ช้า',18],['กลาง',32],['เร็ว',55],['เร็วมาก',90]];
+let spIdx=1,scrolling=false,lastT=0,acc=0;
+function tick(t){
+  if(!scrolling)return;
+  acc+=SPEEDS[spIdx][1]*(t-lastT)/1000;lastT=t;
+  const px=Math.floor(acc);
+  if(px>=1){scrollBy(0,px);acc-=px}
+  if(innerHeight+scrollY>=document.documentElement.scrollHeight-2){setScroll(false);return}
+  requestAnimationFrame(tick);
+}
+function setScroll(on){
+  scrolling=on;
+  $('#scrollBtn').textContent=on?'⏸ หยุดเลื่อน':'⏬ เลื่อนอัตโนมัติ';
+  if(on){lastT=performance.now();acc=0;requestAnimationFrame(tick)}
+}
+$('#scrollBtn').onclick=()=>setScroll(!scrolling);
+$('#speedBtn').onclick=()=>{spIdx=(spIdx+1)%SPEEDS.length;$('#speedBtn').textContent=SPEEDS[spIdx][0]};
+['touchstart','wheel'].forEach(ev=>addEventListener(ev,e=>{
+  if(scrolling&&!(e.target.closest&&e.target.closest('.dock')))setScroll(false);
+},{passive:true}));
+
+/* ===== 9) เพิ่ม / แก้ไขเพลง (ข้อความ + ภาพ + ลิงก์) ===== */
+let editingId=null,edImgs=[],edRemoved=[];
+async function openEditor(song,prefill=''){
+  const keep=song&&(song.id.startsWith('u-')||loadBook().some(s=>s.id===song.id)); // เพลงตัวอย่างที่ยังไม่บันทึก -> สำเนาใหม่
+  editingId=keep?song.id:null;edImgs=[];edRemoved=[];
+  $('#editorTitle').textContent=song?'แก้ไขเพลง':'เพิ่มเพลงเอง';
+  $('#fTitle').value=song?song.title:prefill;
+  $('#fArtist').value=song?song.artist||'':'';
+  $('#fKey').value=song?song.key||'':'';
+  $('#fText').value=song?song.text||'':'';
+  $('#fUrl').value=song?song.src||'':'';
+  show('editor');renderThumbs();
+  if(keep&&song.images&&song.images.length){
+    for(const id of song.images){
+      const b=await idbGet(id).catch(()=>null);
+      if(b)edImgs.push({id,blob:b,url:URL.createObjectURL(b),isNew:false});
+    }
+    renderThumbs();
+  }
+}
+function renderThumbs(){
+  const box=$('#thumbs');box.replaceChildren();
+  edImgs.forEach((im,i)=>{
+    const d=mk('div','thumb'),img=mk('img');img.src=im.url;img.alt='';
+    const x=mk('button',null,'✕');x.type='button';x.setAttribute('aria-label','เอาภาพออก');
+    x.onclick=()=>{if(!im.isNew)edRemoved.push(im.id);edImgs.splice(i,1);renderThumbs()};
+    d.append(img,x);box.appendChild(d);
+  });
+}
+$('#fImgs').onchange=async e=>{
+  for(const f of e.target.files){
+    try{
+      const blob=await shrinkImage(f);
+      edImgs.push({id:'img-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),blob,url:URL.createObjectURL(blob),isNew:true});
+    }catch{toast('อ่านภาพนี้ไม่ได้ (ลองแคปหน้าจอเป็น PNG/JPG)')}
+  }
+  e.target.value='';renderThumbs();
+};
+$('#editorForm').onsubmit=async e=>{
+  e.preventDefault();
+  const text=$('#fText').value.replace(/\s+$/,'');
+  if(!text.trim()&&!edImgs.length){toast('ใส่ข้อความคอร์ด หรือแนบภาพอย่างน้อยหนึ่งอย่าง');return}
+  const keyRaw=$('#fKey').value.trim(),badKey=keyRaw&&!isChord(keyRaw);
+  const song={
+    id:editingId||'u-'+Date.now(),title:$('#fTitle').value.trim(),artist:$('#fArtist').value.trim(),
+    key:isChord(keyRaw)?keyRaw:detectKey(text),text,images:edImgs.map(i=>i.id),src:$('#fUrl').value.trim(),shift:0,savedAt:Date.now()
+  };
+  try{
+    for(const i of edImgs)if(i.isNew)await idbPut(i.id,i.blob);
+    for(const id of edRemoved)await idbDel(id);
+  }catch{toast('บันทึกภาพไม่สำเร็จ (พื้นที่เก็บข้อมูลอาจเต็ม)');return}
+  const book=loadBook(),i=book.findIndex(s=>s.id===song.id);
+  if(i>=0)book[i]=song;else book.push(song);
+  if(!saveBook(book))return;
+  renderSongbook();openSong(song,0);
+  toast(badKey?'บันทึกแล้ว (คีย์ไม่ถูกต้อง ใช้คีย์จากคอร์ดแรกแทน)':'บันทึกแล้ว ✔');
+};
+
+/* ===== 10) วางจากคลิปบอร์ด / ดึงจากลิงก์ ===== */
+$('#addBtn').onclick=()=>openEditor(null,$('#q').value.trim());
+$('#pasteBtn').onclick=async()=>{
+  const clip=navigator.clipboard&&navigator.clipboard.readText?navigator.clipboard.readText():Promise.reject(); // ต้องเรียกทันทีหลังการกด (เงื่อนไข Safari)
+  openEditor(null,$('#q').value.trim());
+  try{
+    const t=(await clip).trim();
+    if(!t){toast('คลิปบอร์ดว่างเปล่า');return}
+    if(/^https?:\/\/\S+$/.test(t)){$('#fUrl').value=t;importFromUrl()}
+    else{$('#fText').value=t;toast('วางแล้ว — ตรวจชื่อเพลงและคอร์ดก่อนบันทึก')}
+  }catch{toast('อ่านคลิปบอร์ดไม่ได้ — กดค้างที่ช่องข้อความแล้วเลือก “วาง”');$('#fText').focus()}
+};
+function htmlToText(html){
+  const d=new DOMParser().parseFromString(html,'text/html');
+  const meta=d.querySelector('meta[property="og:title"]');
+  const title=((meta&&meta.content)||d.title||'').trim();
+  d.querySelectorAll('script,style,nav,header,footer,noscript,svg,iframe,form').forEach(n=>n.remove());
+  const root=d.querySelector('pre')||d.querySelector('article')||d.querySelector('main')||d.body;
+  root.querySelectorAll('br').forEach(b=>b.replaceWith('\n'));
+  root.querySelectorAll('p,div,li,h1,h2,h3,h4,tr').forEach(n=>n.append('\n'));
+  return {title,text:(root.textContent||'').replace(/\n{3,}/g,'\n\n').trim()};
+}
+async function fetchPage(url){
+  const proxy=(LS.get(PROXY,'')||'').trim();
+  const r=await fetch(proxy?proxy.replace('{url}',encodeURIComponent(url)):url);
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  return r.text();
+}
+async function importFromUrl(){
+  const url=$('#fUrl').value.trim(),btn=$('#fetchUrlBtn');
+  if(!/^https?:\/\//.test(url)){toast('ลิงก์ไม่ถูกต้อง');return}
+  btn.disabled=true;const old=btn.textContent;btn.textContent='กำลังดึง…';
+  try{
+    const {title,text}=htmlToText(await fetchPage(url));
+    if(title&&!$('#fTitle').value)$('#fTitle').value=title;
+    $('#fText').value=text;
+    toast(text.length<80?'ได้ข้อความน้อยมาก — หน้านี้อาจเป็นภาพ ให้แคปหน้าจอแล้วแนบภาพ':'ดึงแล้ว — ตรวจ/ลบส่วนที่ไม่ใช่เพลงก่อนบันทึก');
+  }catch{toast('ดึงไม่ได้ (เว็บบล็อกหรือยังไม่ได้ตั้ง Proxy) — คัดลอกมาวางแทนได้')}
+  finally{btn.disabled=false;btn.textContent=old}
+}
+$('#fetchUrlBtn').onclick=importFromUrl;
+
+/* ===== 11) เริ่มต้น ===== */
+$('#proxy').value=LS.get(PROXY,'')||'';
+$('#proxy').onchange=e=>{LS.set(PROXY,e.target.value.trim());toast('บันทึกการตั้งค่า Proxy แล้ว')};
+const setHH=()=>document.documentElement.style.setProperty('--hh',$('#hdr').offsetHeight+'px');
+addEventListener('resize',setHH);setHH();
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
+renderSites();
 renderSongbook();
 </script>
 </body>
