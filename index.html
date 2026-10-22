@@ -179,7 +179,11 @@ body.focus .card{border:0;background:transparent;padding:6px}
       <label for="fText">เนื้อเพลง + คอร์ด (ข้อความ)</label>
       <textarea id="fText" spellcheck="false" placeholder="วางได้ 2 แบบ&#10;&#10;1) คอร์ดอยู่บรรทัดบน เนื้ออยู่บรรทัดล่าง&#10;G        Em&#10;ค่ำคืนนี้ลมเย็น&#10;&#10;2) คอร์ดแทรกในเนื้อ&#10;[G]ค่ำคืนนี้ลม[Em]เย็น"></textarea>
       <label>ภาพคอร์ด / สกรีนช็อต (เลือกได้หลายภาพ)</label>
-      <input id="fImgs" type="file" accept="image/*" multiple>
+      <div class="row">
+  <input id="fImgs" class="grow" type="file" accept="image/*" multiple>
+  <button type="button" id="pasteImgBtn">📋 วางรูปจากคลิปบอร์ด</button>
+</div>
+<p class="muted small">วางรูปได้ 3 วิธี: ปุ่มด้านบน · กดค้างที่ช่องข้อความแล้วเลือก “วาง” / Ctrl+V · ลากรูปมาปล่อยในหน้านี้</p>
       <div id="thumbs" class="thumbs"></div>
       <p class="muted small">เพลงที่เป็นภาพอย่างเดียว Transpose ไม่ได้ · ถ้าใส่ทั้งข้อความและภาพ จะแสดงข้อความก่อน ภาพอยู่ด้านล่าง</p>
       <div class="row"><button class="primary" type="submit">💾 บันทึกและเปิดดู</button><button type="button" class="backBtn">ยกเลิก</button></div>
@@ -636,15 +640,60 @@ function renderThumbs(){
     d.append(img,x);box.appendChild(d);
   });
 }
-$('#fImgs').onchange=async e=>{
-  for(const f of e.target.files){
+/* เพิ่มภาพ: ใช้ร่วมกันทั้ง เลือกไฟล์ / วาง / ลากมาปล่อย */
+async function addImageFiles(files){
+  let n=0;
+  for(const f of files){
+    if(!f.type||!f.type.startsWith('image/'))continue;
     try{
       const blob=await shrinkImage(f);
       edImgs.push({id:'img-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),blob,url:URL.createObjectURL(blob),isNew:true});
+      n++;
     }catch{toast('อ่านภาพนี้ไม่ได้ (ลองแคปหน้าจอเป็น PNG/JPG)')}
   }
-  e.target.value='';renderThumbs();
+  renderThumbs();
+  if(n)toast(`เพิ่ม ${n} ภาพแล้ว`);
+  return n;
+}
+$('#fImgs').onchange=async e=>{
+  const files=[...e.target.files];e.target.value='';
+  await addImageFiles(files);
 };
+
+/* วิธี 1: ปุ่ม "วางรูปจากคลิปบอร์ด" (Clipboard API — ต้องกดปุ่มเอง, Safari จะถามให้กด Paste) */
+$('#pasteImgBtn').onclick=async()=>{
+  if(!navigator.clipboard||!navigator.clipboard.read){
+    toast('เบราว์เซอร์นี้ไม่รองรับปุ่มนี้ — กดค้างที่ช่องข้อความแล้วเลือก “วาง” แทน');return;
+  }
+  try{
+    const files=[];
+    for(const it of await navigator.clipboard.read()){
+      const type=it.types.find(t=>t.startsWith('image/'));
+      if(type)files.push(new File([await it.getType(type)],'paste.'+type.split('/')[1],{type}));
+    }
+    if(!files.length){toast('ในคลิปบอร์ดไม่มีรูปภาพ');return}
+    addImageFiles(files);
+  }catch{toast('อ่านคลิปบอร์ดไม่ได้ — ลองกดค้างที่ช่องข้อความแล้วเลือก “วาง”')}
+};
+
+/* วิธี 2: วางด้วย Ctrl+V / เมนู “วาง” ขณะอยู่หน้าเพิ่ม-แก้ไข */
+document.addEventListener('paste',e=>{
+  if($('#editorView').hidden||!e.clipboardData)return;
+  let files=[...e.clipboardData.items||[]].filter(i=>i.kind==='file'&&i.type.startsWith('image/')).map(i=>i.getAsFile()).filter(Boolean);
+  if(!files.length)files=[...e.clipboardData.files||[]].filter(f=>f.type.startsWith('image/'));
+  if(!files.length)return;                              // ไม่มีรูป = วางข้อความตามปกติ
+  if(!e.clipboardData.getData('text/plain'))e.preventDefault(); // มีแต่รูป: กันไม่ให้เกิดข้อความแปลกๆ
+  addImageFiles(files);
+});
+
+/* วิธี 3: ลากรูปมาปล่อยในหน้าเพิ่ม-แก้ไข (เช่น iPad Split View ลากจาก Photos/Safari) */
+const edView=$('#editorView');
+edView.addEventListener('dragover',e=>e.preventDefault());
+edView.addEventListener('drop',e=>{
+  const files=[...(e.dataTransfer?e.dataTransfer.files:[])].filter(f=>f.type.startsWith('image/'));
+  if(!files.length)return;
+  e.preventDefault();addImageFiles(files);
+});
 $('#editorForm').onsubmit=async e=>{
   e.preventDefault();
   const text=$('#fText').value.replace(/\s+$/,'');
@@ -672,7 +721,7 @@ $('#pasteBtn').onclick=async()=>{
   openEditor(null,$('#q').value.trim());
   try{
     const t=(await clip).trim();
-    if(!t){toast('คลิปบอร์ดว่างเปล่า');return}
+    if(!t){toast('ไม่มีข้อความในคลิปบอร์ด — ถ้าเป็นรูป กดปุ่ม “วางรูปจากคลิปบอร์ด” ในหน้านี้');return}
     if(/^https?:\/\/\S+$/.test(t)){$('#fUrl').value=t;importFromUrl()}
     else{$('#fText').value=t;toast('วางแล้ว — ตรวจชื่อเพลงและคอร์ดก่อนบันทึก')}
   }catch{toast('อ่านคลิปบอร์ดไม่ได้ — กดค้างที่ช่องข้อความแล้วเลือก “วาง”');$('#fText').focus()}
