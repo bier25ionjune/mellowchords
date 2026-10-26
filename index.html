@@ -16,7 +16,7 @@ html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--text);font:18px/1.5 "Sarabun","Noto Sans Thai",system-ui,-apple-system,sans-serif;min-height:100vh;padding:0 env(safe-area-inset-right) 0 env(safe-area-inset-left)}
 [hidden]{display:none!important}
 header{position:sticky;top:0;z-index:20;background:rgba(11,11,13,.97);border-bottom:1px solid var(--line);padding:10px 16px;backdrop-filter:blur(6px)}
-h1{margin:0 0 8px;font-size:1.25rem;color:var(--accent)}
+h1{margin:0;font-size:1.25rem;color:var(--accent)}
 h2{font-size:1.15rem;margin:0}
 input,textarea,button{font:inherit;color:inherit}
 input,textarea{width:100%;background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:12px 14px;outline:none;min-height:52px}
@@ -34,7 +34,6 @@ button:disabled{opacity:.6;cursor:wait}
 .muted{color:var(--muted)}.small{font-size:.9rem}
 label{display:block;margin:12px 0 4px;font-weight:600}
 hr{border:0;border-top:1px solid var(--line);margin:16px 0}
-/* แนวตั้ง = สลับหน้า | แนวนอน (iPad) = สองฝั่ง */
 #side,#pane{padding:16px}
 body[data-view=home] #pane{display:none}
 body:not([data-view=home]) #side{display:none}
@@ -97,7 +96,11 @@ body.focus .card{border:0;background:transparent;padding:6px}
 .lbBody{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
 .lbBody img{width:100%;display:block;max-width:none;background:#fff}
 .lbBody.zoom img{width:230%}
-.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ok);color:#052e16;padding:12px 20px;border-radius:999px;font-weight:700;z-index:70;box-shadow:0 6px 24px rgba(0,0,0,.6);max-width:90vw;text-align:center}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:80;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal .box{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px;width:100%;max-width:520px;max-height:90vh;overflow:auto}
+.modal input{margin:6px 0}
+.plLink{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ok);color:#052e16;padding:12px 20px;border-radius:999px;font-weight:700;z-index:90;box-shadow:0 6px 24px rgba(0,0,0,.6);max-width:90vw;text-align:center}
 .spinner{display:inline-block;width:18px;height:18px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-3px;margin-right:8px}
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (max-width:520px){.card h2{font-size:1.6rem}}
@@ -106,7 +109,7 @@ body.focus .card{border:0;background:transparent;padding:6px}
 <body data-view="home">
 
 <header id="hdr">
-  <h1>🎸 คลังคอร์ดกลางคืน</h1>
+  <div class="row between" style="margin-bottom:8px"><h1>🎸 คลังคอร์ดกลางคืน</h1><button id="acct">☁️ ตั้งค่า</button></div>
   <form id="searchForm" class="row" autocomplete="off">
     <input id="q" class="grow" type="search" enterkeyhint="search" placeholder="ชื่อเพลง / ศิลปิน — พิมพ์เพื่อกรองคลัง · กดค้นเว็บเพื่อหาคอร์ด" aria-label="ค้นหา">
     <button class="primary" type="submit">🌐 ค้นเว็บ</button>
@@ -147,6 +150,7 @@ body.focus .card{border:0;background:transparent;padding:6px}
 
   <section class="block">
     <h2>📚 My Songbook <span id="count" class="badge dim">0</span></h2>
+    <button id="favFilter" class="small" style="margin-top:8px">⭐ เฉพาะรายการโปรด: ปิด</button>
     <div id="songbook" class="list"></div>
     <div class="row" style="margin-top:14px">
       <button id="exportBtn" class="small">⬇ สำรองข้อมูล</button>
@@ -155,9 +159,14 @@ body.focus .card{border:0;background:transparent;padding:6px}
     </div>
   </section>
 
+  <section class="block">
+    <div class="row between"><h2>🎼 Playlist <span id="plCount" class="badge dim">0</span></h2><button id="plNew">＋ สร้าง</button></div>
+    <div id="plList" class="list"></div>
+  </section>
+
   <details>
     <summary>⚙️ ขั้นสูง: Proxy สำหรับดึงจากลิงก์</summary>
-    <p class="muted small">เว็บ static ดึงเว็บอื่นตรงๆ ไม่ได้ (ติด CORS) ถ้ามี proxy ของตัวเอง ใส่ที่อยู่โดยใช้ <code>{url}</code> แทนลิงก์ปลายทาง เช่น <code>https://xxx.workers.dev/?url={url}</code></p>
+    <p class="muted small">ถ้าล็อกอิน Supabase และ deploy ฟังก์ชัน fetch-page แล้ว จะใช้ฟังก์ชันนั้นอัตโนมัติ มิฉะนั้นใส่ proxy ของคุณโดยใช้ <code>{url}</code> เช่น <code>https://xxx.workers.dev/?url={url}</code></p>
     <input id="proxy" placeholder="https://…/?url={url}" autocapitalize="none" autocorrect="off">
   </details>
 </aside>
@@ -168,7 +177,7 @@ body.focus .card{border:0;background:transparent;padding:6px}
   <div id="editorView" hidden>
     <div class="row between"><button class="backBtn topBack" type="button">← กลับ</button><h2 id="editorTitle">เพิ่มเพลงเอง</h2></div>
     <form id="editorForm">
-      <label for="fUrl">ลิงก์หน้าเพลง (ไม่บังคับ — ดึงอัตโนมัติได้เมื่อตั้ง Proxy)</label>
+      <label for="fUrl">ลิงก์หน้าเพลง (ไม่บังคับ)</label>
       <div class="row">
         <input id="fUrl" class="grow" type="url" placeholder="https://…" autocapitalize="none" autocorrect="off">
         <button type="button" id="fetchUrlBtn">ดึงจากลิงก์</button>
@@ -178,15 +187,14 @@ body.focus .card{border:0;background:transparent;padding:6px}
       <label for="fKey">คีย์เดิม (เว้นว่าง = เดาจากคอร์ดแรก)</label><input id="fKey" placeholder="เช่น G, Am, Bb" autocapitalize="characters">
       <label for="fText">เนื้อเพลง + คอร์ด (ข้อความ)</label>
       <textarea id="fText" spellcheck="false" placeholder="วางได้ 2 แบบ&#10;&#10;1) คอร์ดอยู่บรรทัดบน เนื้ออยู่บรรทัดล่าง&#10;G        Em&#10;ค่ำคืนนี้ลมเย็น&#10;&#10;2) คอร์ดแทรกในเนื้อ&#10;[G]ค่ำคืนนี้ลม[Em]เย็น"></textarea>
-      <label>ภาพคอร์ด / สกรีนช็อต (เลือกได้หลายภาพ)</label>
+      <label>ภาพคอร์ด / สกรีนช็อต</label>
       <div class="row">
-  <input id="fImgs" class="grow" type="file" accept="image/*" multiple>
-  <button type="button" id="pasteImgBtn">📋 วางรูปจากคลิปบอร์ด</button>
-</div>
-<p class="muted small">วางรูปได้ 3 วิธี: ปุ่มด้านบน · กดค้างที่ช่องข้อความแล้วเลือก “วาง” / Ctrl+V · ลากรูปมาปล่อยในหน้านี้</p>
+        <input id="fImgs" class="grow" type="file" accept="image/*" multiple>
+        <button type="button" id="pasteImgBtn">📋 วางรูปจากคลิปบอร์ด</button>
+      </div>
+      <p class="muted small">วางรูปได้: ปุ่มด้านบน · เมนู “วาง”/Ctrl+V · ลากรูปมาปล่อยในหน้านี้ (ภาพเก็บในเครื่อง ไม่ซิงก์)</p>
       <div id="thumbs" class="thumbs"></div>
-      <p class="muted small">เพลงที่เป็นภาพอย่างเดียว Transpose ไม่ได้ · ถ้าใส่ทั้งข้อความและภาพ จะแสดงข้อความก่อน ภาพอยู่ด้านล่าง</p>
-      <div class="row"><button class="primary" type="submit">💾 บันทึกและเปิดดู</button><button type="button" class="backBtn">ยกเลิก</button></div>
+      <div class="row" style="margin-top:14px"><button class="primary" type="submit">💾 บันทึกและเปิดดู</button><button type="button" class="backBtn">ยกเลิก</button></div>
     </form>
   </div>
 
@@ -204,10 +212,11 @@ body.focus .card{border:0;background:transparent;padding:6px}
       </div>
       <div class="tools meta">
         <button id="saveBtn" class="primary">💾 บันทึกเข้าคลังเพลงของฉัน</button>
+        <button id="favBtn">☆ รายการโปรด</button>
+        <button id="plBtn">➕ Playlist</button>
         <button id="focusBtn">🎭 โหมดเวที</button>
         <button id="editBtn">✏️ แก้ไข</button>
         <button id="deleteBtn" class="danger" hidden>🗑 ลบ</button>
-        <button id="wakeBtn" hidden>🔆 กันจอดับ: ปิด</button>
       </div>
       <hr class="meta">
       <div id="sheet" class="sheet"></div>
@@ -224,6 +233,13 @@ body.focus .card{border:0;background:transparent;padding:6px}
       <div class="grp"><button id="scrollBtn">⏬ เลื่อนอัตโนมัติ</button><button id="speedBtn">กลาง</button></div>
     </div>
   </div>
+
+  <div id="plView" hidden>
+    <div class="row between"><button type="button" class="topBack" id="plBack">← กลับ</button><h2 id="plTitle"></h2></div>
+    <div class="tools" id="plBar"></div>
+    <div id="plLink"></div>
+    <div class="list" id="plSongs"></div>
+  </div>
 </section>
 </div>
 
@@ -233,9 +249,13 @@ body.focus .card{border:0;background:transparent;padding:6px}
 </div>
 <div id="toast" class="toast" hidden></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 'use strict';
-/* ===== 1) เพลงตัวอย่าง (จำลองผลค้นหา) — สาธารณสมบัติ / เขียนใหม่เพื่อทดสอบ ===== */
+/* ===== ตั้งค่า Supabase (ใส่ก่อน deploy เพื่อให้เพื่อนเปิดลิงก์แชร์ได้) ===== */
+const CFG={url:'https://otbfzxypqyzobglbdrxp.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im90YmZ6eHlwcXl6b2JnbGJkcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI5NzA2MTksImV4cCI6MjEwODU0NjYxOX0.GouGscQsPmLRrHZwSz9W71IY-sgDo_nmOZs55Eciqf4'};
+
+/* ===== 1) เพลงตัวอย่าง (สาธารณสมบัติ / เขียนใหม่เพื่อทดสอบ) ===== */
 const MOCK_DB=[
 {id:'mock-amazing',title:'Amazing Grace',artist:'Traditional',key:'G',text:
 `[Verse 1]
@@ -248,29 +268,20 @@ Was [Em]blind but [D]now I [G]see`},
 Am    C    D        F
 There is a house in New Orleans
 Am   C        E7
-They call the Rising Sun
-Am  C         D        F
-And it's been the ruin of many a poor boy
-Am         E7       Am
-And God, I know I'm one`},
+They call the Rising Sun`},
 {id:'mock-night',title:'ค่ำคืนริมทาง (เพลงตัวอย่าง)',artist:'Night Busker Demo',key:'G',text:
 `Intro: [G] [Em] [C] [D]
 
 [Verse]
 [G]ค่ำคืนนี้ลมเย็น[Em]พัดผ่านมา
-[C]กีตาร์ตัวเก่าๆ ยัง[D]เล่นเพลงเดิม
-
-[Chorus]
-[C]ร้องไปด้วยกัน [G]ใต้แสงไฟสลัว
-[Am]คืนนี้ยังยาวนัก [D]อีกเพลงก็ยังไหว`}
+[C]กีตาร์ตัวเก่าๆ ยัง[D]เล่นเพลงเดิม`}
 ];
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-async function searchSongs(q){ // จุดต่อ API จริง (ถ้ามี)
-  await sleep(250);
+async function searchSongs(q){
+  await sleep(200);
   const t=q.toLowerCase().split(/\s+/).filter(Boolean);
-  return MOCK_DB.filter(s=>{const h=(s.title+' '+s.artist).toLowerCase();return t.every(x=>h.includes(x))}).map(({id,title,artist,key})=>({id,title,artist,key}));
+  return MOCK_DB.filter(s=>{const h=(s.title+' '+s.artist).toLowerCase();return t.every(x=>h.includes(x))});
 }
-async function fetchSongDetail(it){await sleep(250);const f=MOCK_DB.find(s=>s.id===it.id);if(!f)throw new Error('ไม่พบข้อมูลเพลง');return{...f}}
 
 /* ===== 2) คอร์ด + Transpose ===== */
 const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
@@ -295,7 +306,7 @@ function preferFlat(key,shift){
 const normShift=s=>{s=((s%12)+12)%12;return s>6?s-12:s};
 const fmtShift=s=>(s>0?'+':'')+s;
 
-/* ===== 3) แปลงข้อความ -> บรรทัด (คอร์ดเหนือเนื้อ หรือ [C] ในเนื้อ) ===== */
+/* ===== 3) แปลงข้อความ -> บรรทัด ===== */
 const THAI_MARK=/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/;
 const safeCut=(i,s)=>{while(i<s.length&&THAI_MARK.test(s[i]))i++;return i};
 function isChordLine(l){
@@ -352,14 +363,16 @@ function renderSheet(box,text,shift,flat){
   }
 }
 
-/* ===== 4) Utilities + Storage (LocalStorage = เพลง, IndexedDB = ภาพ) ===== */
+/* ===== 4) Utilities + Storage ===== */
 const $=(s,r=document)=>r.querySelector(s);
 function mk(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+const btn=(t,fn,cls)=>{const b=mk('button',cls||null,t);b.type='button';b.onclick=fn;return b};
 const LS={
   get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch{return d}},
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch{return false}}
 };
 const BOOK='nightChordbook.v1',SITES='nightChordbook.sites',ENG='nightChordbook.engine',FSK='nightChordbook.fs',PROXY='nightChordbook.proxy';
+const K={cfg:'nightChordbook.sbcfg',favs:'nightChordbook.favs',pls:'nightChordbook.playlists',meta:'nightChordbook.syncmeta'};
 const loadBook=()=>{const b=LS.get(BOOK,[]);return Array.isArray(b)?b:[]};
 const saveBook=b=>LS.set(BOOK,b)||(toast('บันทึกไม่สำเร็จ (พื้นที่เต็มหรือถูกปิดใช้งาน)'),false);
 let toastT;
@@ -386,28 +399,29 @@ function shrinkImage(file,max=4096){
 const blobToDataURL=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(b)});
 
 /* ===== 5) สลับหน้า ===== */
-let current=null;
+let current=null,curPl=null,favOnly=false;
 function show(name,push=true){
   document.body.dataset.view=name;
-  $('#placeholder').hidden=name!=='home';$('#editorView').hidden=name!=='editor';$('#songView').hidden=name!=='song';
+  $('#placeholder').hidden=name!=='home';$('#editorView').hidden=name!=='editor';
+  $('#songView').hidden=name!=='song';$('#plView').hidden=name!=='playlist';
   if(name!=='song'){setFocus(false);setScroll(false)}
   scrollTo(0,0);
   if(push&&name!=='home')history.pushState({v:name},'');
 }
-addEventListener('popstate',e=>{const v=e.state&&e.state.v;show(v==='song'&&!current?'home':(v||'home'),false)});
-document.querySelectorAll('.backBtn').forEach(b=>b.onclick=()=>{history.state&&history.state.v?history.back():show('home',false)});
+const goBack=()=>{history.state&&history.state.v?history.back():show('home',false)};
+addEventListener('popstate',e=>{const v=e.state&&e.state.v;show((v==='song'&&!current)||(v==='playlist'&&!curPl)?'home':(v||'home'),false)});
+document.querySelectorAll('.backBtn').forEach(b=>b.onclick=goBack);
+$('#plBack').onclick=()=>{if(location.hash.startsWith('#/p/'))history.replaceState(null,'',location.pathname);goBack()};
 
-/* ===== 6) ค้นหา: เว็บ + เพลงตัวอย่าง + กรองคลัง ===== */
+/* ===== 6) ค้นหา ===== */
 let sites=LS.get(SITES,[{d:'busk.town',on:false}]);
 function renderSites(){
   const box=$('#sites');box.replaceChildren();
   sites.forEach((s,i)=>{
     const c=mk('span','chip'+(s.on?' on':''));
-    const b=mk('button','lbl',(s.on?'✓ ':'')+s.d);b.type='button';
-    b.onclick=()=>{s.on=!s.on;LS.set(SITES,sites);renderSites()};
-    const x=mk('button','x','✕');x.type='button';x.setAttribute('aria-label','ลบ '+s.d);
-    x.onclick=()=>{sites.splice(i,1);LS.set(SITES,sites);renderSites()};
-    c.append(b,x);box.appendChild(c);
+    c.append(btn((s.on?'✓ ':'')+s.d,()=>{s.on=!s.on;LS.set(SITES,sites);renderSites()},'lbl'),
+      btn('✕',()=>{sites.splice(i,1);LS.set(SITES,sites);renderSites()},'x'));
+    box.appendChild(c);
   });
 }
 $('#addSite').onclick=()=>{
@@ -422,8 +436,7 @@ function webSearch(eng){
   if(!q){toast('พิมพ์ชื่อเพลงหรือศิลปินก่อน');$('#q').focus();return}
   LS.set(ENG,eng);
   const on=sites.filter(s=>s.on).map(s=>'site:'+s.d);
-  const query=q+' คอร์ด'+(on.length?' ('+on.join(' OR ')+')':'');
-  window.open(ENGINES[eng]+encodeURIComponent(query),'_blank','noopener');
+  window.open(ENGINES[eng]+encodeURIComponent(q+' คอร์ด'+(on.length?' ('+on.join(' OR ')+')':'')),'_blank','noopener');
 }
 document.querySelectorAll('.eng').forEach(b=>b.onclick=()=>webSearch(b.dataset.eng));
 $('#searchForm').onsubmit=e=>{e.preventDefault();webSearch(LS.get(ENG,'google'))};
@@ -438,38 +451,39 @@ async function doSearch(){
   if(tok!==sTok)return;
   box.hidden=!items.length;list.replaceChildren();
   for(const it of items){
-    const row=mk('div','item'),btn=mk('button','open'),t=mk('div','t',it.title);
-    t.appendChild(mk('span','badge',it.key));btn.append(t,mk('div','a',it.artist));
-    btn.onclick=()=>pickResult(it,btn);row.appendChild(btn);list.appendChild(row);
+    const row=mk('div','item'),b=mk('button','open'),t=mk('div','t',it.title);
+    t.appendChild(mk('span','badge',it.key));b.append(t,mk('div','a',it.artist));
+    b.onclick=()=>{const sv=loadBook().find(s=>s.id===it.id);sv?openSong(sv,sv.shift||0):openSong({...it},0)};
+    row.appendChild(b);list.appendChild(row);
   }
-}
-async function pickResult(it,btn){
-  const saved=loadBook().find(s=>s.id===it.id);
-  if(saved){openSong(saved,saved.shift||0);return}
-  btn.disabled=true;const old=[...btn.childNodes];
-  btn.replaceChildren(mk('span','spinner'),document.createTextNode('กำลังดึงเนื้อเพลงและคอร์ด…'));
-  try{openSong(await fetchSongDetail(it),0)}catch(e){toast('ดึงข้อมูลไม่สำเร็จ: '+e.message)}
-  finally{btn.disabled=false;btn.replaceChildren(...old)}
 }
 $('#q').oninput=()=>{clearTimeout(deb);deb=setTimeout(doSearch,300)};
 
-/* ===== 7) My Songbook ===== */
+/* ===== 7) Songbook + รายการโปรด ===== */
+const favs=()=>new Set(LS.get(K.favs,[])),setFavs=s=>LS.set(K.favs,[...s]);
+function toggleFav(id){const F=favs();F.has(id)?F.delete(id):F.add(id);setFavs(F);renderSongbook();paintFav()}
+function paintFav(){if(current)$('#favBtn').textContent=favs().has(current.song.id)?'★ รายการโปรด':'☆ รายการโปรด'}
+$('#favFilter').onclick=()=>{favOnly=!favOnly;$('#favFilter').textContent='⭐ เฉพาะรายการโปรด: '+(favOnly?'เปิด':'ปิด');renderSongbook()};
+$('#favBtn').onclick=()=>{const id=current.song.id;if(!loadBook().some(s=>s.id===id))$('#saveBtn').click();toggleFav(id)};
+
 function renderSongbook(){
-  const f=$('#q').value.trim().toLowerCase();
+  const q=$('#q').value.trim().toLowerCase(),F=favs();
   const all=loadBook().sort((a,b)=>a.title.localeCompare(b.title,'th'));
-  const book=f?all.filter(s=>(s.title+' '+(s.artist||'')).toLowerCase().includes(f)):all;
+  let book=q?all.filter(s=>(s.title+' '+(s.artist||'')).toLowerCase().includes(q)):all;
+  if(favOnly)book=book.filter(s=>F.has(s.id));
   $('#count').textContent=all.length;
   const list=$('#songbook');list.replaceChildren();
-  if(!book.length){list.appendChild(mk('div','empty',all.length?'ไม่พบในคลัง — กด “ค้นเว็บ” เพื่อหาเพิ่ม':'ยังไม่มีเพลงที่บันทึกไว้'));return}
+  if(!book.length)list.appendChild(mk('div','empty',all.length?'ไม่พบเพลง':'ยังไม่มีเพลงที่บันทึกไว้'));
   for(const s of book){
-    const row=mk('div','item'),open=mk('button','open'),t=mk('div','t',s.title);
+    const row=mk('div','item'),open=mk('button','open'),t=mk('div','t',(F.has(s.id)?'⭐ ':'')+s.title);
     if(s.key)t.appendChild(mk('span','badge',s.key));
     if(s.shift)t.appendChild(mk('span','badge dim',fmtShift(s.shift)));
     if(s.images&&s.images.length)t.appendChild(mk('span','badge dim','🖼 '+s.images.length));
     open.append(t,mk('div','a',s.artist||'—'));open.onclick=()=>openSong(s,s.shift||0);
-    const del=mk('button','del danger','🗑');del.setAttribute('aria-label','ลบ '+s.title);
-    del.onclick=()=>removeSong(s.id,s.title);row.append(open,del);list.appendChild(row);
+    row.append(open,btn(F.has(s.id)?'★':'☆',()=>toggleFav(s.id),'del'),btn('🗑',()=>removeSong(s.id,s.title),'del danger'));
+    list.appendChild(row);
   }
+  schedSync();
 }
 async function removeSong(id,title){
   if(!confirm(`ลบ “${title}” ออกจากคลังเพลง?`))return;
@@ -524,6 +538,7 @@ function renderSong(reload=true){
   const saved=loadBook().some(s=>s.id===song.id);
   $('#savedTag').hidden=!saved;$('#deleteBtn').hidden=!saved;
   $('#saveBtn').textContent=saved?'💾 อัปเดตเพลงที่บันทึกไว้':'💾 บันทึกเข้าคลังเพลงของฉัน';
+  paintFav();
 }
 async function loadGallery(song){
   const tok=++galTok,g=$('#gallery');
@@ -533,7 +548,7 @@ async function loadGallery(song){
   for(const id of song.images){
     const b=await idbGet(id).catch(()=>null);
     if(tok!==galTok)return;
-    if(!b){g.appendChild(mk('div','empty','ไม่พบภาพในเครื่องนี้ (อาจถูกล้างข้อมูลเบราว์เซอร์)'));continue}
+    if(!b){g.appendChild(mk('div','empty','ไม่พบภาพในเครื่องนี้ (ภาพไม่ถูกซิงก์ข้ามเครื่อง)'));continue}
     const url=URL.createObjectURL(b);galUrls.push(url);
     const im=mk('img','sheetImg');im.src=url;im.alt='ภาพคอร์ด';im.onclick=()=>openLightbox(url);g.appendChild(im);
   }
@@ -557,7 +572,6 @@ function openLightbox(url){$('#lbImg').src=url;$('#lbBody').classList.remove('zo
 $('#lbClose').onclick=()=>$('#lightbox').hidden=true;
 $('#lbZoom').onclick=()=>$('#lbBody').classList.toggle('zoom');
 
-/* ขนาดตัวอักษร */
 let fs=LS.get(FSK,1.7);
 const applyFs=()=>document.documentElement.style.setProperty('--fs',fs+'rem');
 const bumpFs=d=>{fs=Math.min(3.6,Math.max(1,+(fs+d).toFixed(2)));applyFs();LS.set(FSK,fs)};
@@ -565,31 +579,10 @@ $('#fontUp').onclick=()=>bumpFs(.15);
 $('#fontDown').onclick=()=>bumpFs(-.15);
 applyFs();
 
-/* โหมดเวที */
 function setFocus(on){document.body.classList.toggle('focus',on);$('#exitFocus').hidden=!on;if(on)scrollTo(0,0)}
 $('#focusBtn').onclick=()=>setFocus(true);
 $('#exitFocus').onclick=()=>setFocus(false);
 
-/* กันจอดับ */
-let wakeLock=null,wantWake=false;
-async function requestWake(){
-  try{wakeLock=await navigator.wakeLock.request('screen');wakeLock.addEventListener('release',()=>{wakeLock=null})}
-  catch{wantWake=false;toast('เปิดโหมดกันจอดับไม่ได้')}
-}
-const updateWake=()=>$('#wakeBtn').textContent='🔆 กันจอดับ: '+(wantWake?'เปิด':'ปิด');
-if('wakeLock' in navigator){
-  $('#wakeBtn').hidden=false;
-  $('#wakeBtn').onclick=async()=>{
-    wantWake=!wantWake;
-    if(wantWake)await requestWake();else if(wakeLock)await wakeLock.release();
-    updateWake();
-  };
-  document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible'&&wantWake&&!wakeLock)requestWake();
-  });
-}
-
-/* เลื่อนอัตโนมัติ (แตะหน้าจอหรือเลื่อนเองเพื่อหยุด) */
 const SPEEDS=[['ช้า',18],['กลาง',32],['เร็ว',55],['เร็วมาก',90]];
 let spIdx=1,scrolling=false,lastT=0,acc=0;
 function tick(t){
@@ -611,10 +604,10 @@ $('#speedBtn').onclick=()=>{spIdx=(spIdx+1)%SPEEDS.length;$('#speedBtn').textCon
   if(scrolling&&!(e.target.closest&&e.target.closest('.dock')))setScroll(false);
 },{passive:true}));
 
-/* ===== 9) เพิ่ม / แก้ไขเพลง (ข้อความ + ภาพ + ลิงก์) ===== */
+/* ===== 9) เพิ่ม / แก้ไขเพลง ===== */
 let editingId=null,edImgs=[],edRemoved=[];
 async function openEditor(song,prefill=''){
-  const keep=song&&(song.id.startsWith('u-')||loadBook().some(s=>s.id===song.id)); // เพลงตัวอย่างที่ยังไม่บันทึก -> สำเนาใหม่
+  const keep=song&&(song.id.startsWith('u-')||song.id.startsWith('sh-')||loadBook().some(s=>s.id===song.id));
   editingId=keep?song.id:null;edImgs=[];edRemoved=[];
   $('#editorTitle').textContent=song?'แก้ไขเพลง':'เพิ่มเพลงเอง';
   $('#fTitle').value=song?song.title:prefill;
@@ -635,36 +628,24 @@ function renderThumbs(){
   const box=$('#thumbs');box.replaceChildren();
   edImgs.forEach((im,i)=>{
     const d=mk('div','thumb'),img=mk('img');img.src=im.url;img.alt='';
-    const x=mk('button',null,'✕');x.type='button';x.setAttribute('aria-label','เอาภาพออก');
-    x.onclick=()=>{if(!im.isNew)edRemoved.push(im.id);edImgs.splice(i,1);renderThumbs()};
-    d.append(img,x);box.appendChild(d);
+    d.append(img,btn('✕',()=>{if(!im.isNew)edRemoved.push(im.id);edImgs.splice(i,1);renderThumbs()}));
+    box.appendChild(d);
   });
 }
-/* เพิ่มภาพ: ใช้ร่วมกันทั้ง เลือกไฟล์ / วาง / ลากมาปล่อย */
 async function addImageFiles(files){
   let n=0;
   for(const f of files){
     if(!f.type||!f.type.startsWith('image/'))continue;
     try{
       const blob=await shrinkImage(f);
-      edImgs.push({id:'img-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),blob,url:URL.createObjectURL(blob),isNew:true});
-      n++;
+      edImgs.push({id:'img-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),blob,url:URL.createObjectURL(blob),isNew:true});n++;
     }catch{toast('อ่านภาพนี้ไม่ได้ (ลองแคปหน้าจอเป็น PNG/JPG)')}
   }
-  renderThumbs();
-  if(n)toast(`เพิ่ม ${n} ภาพแล้ว`);
-  return n;
+  renderThumbs();if(n)toast(`เพิ่ม ${n} ภาพแล้ว`);
 }
-$('#fImgs').onchange=async e=>{
-  const files=[...e.target.files];e.target.value='';
-  await addImageFiles(files);
-};
-
-/* วิธี 1: ปุ่ม "วางรูปจากคลิปบอร์ด" (Clipboard API — ต้องกดปุ่มเอง, Safari จะถามให้กด Paste) */
+$('#fImgs').onchange=async e=>{const f=[...e.target.files];e.target.value='';await addImageFiles(f)};
 $('#pasteImgBtn').onclick=async()=>{
-  if(!navigator.clipboard||!navigator.clipboard.read){
-    toast('เบราว์เซอร์นี้ไม่รองรับปุ่มนี้ — กดค้างที่ช่องข้อความแล้วเลือก “วาง” แทน');return;
-  }
+  if(!navigator.clipboard||!navigator.clipboard.read){toast('ไม่รองรับปุ่มนี้ — กดค้างที่ช่องข้อความแล้วเลือก “วาง”');return}
   try{
     const files=[];
     for(const it of await navigator.clipboard.read()){
@@ -675,24 +656,19 @@ $('#pasteImgBtn').onclick=async()=>{
     addImageFiles(files);
   }catch{toast('อ่านคลิปบอร์ดไม่ได้ — ลองกดค้างที่ช่องข้อความแล้วเลือก “วาง”')}
 };
-
-/* วิธี 2: วางด้วย Ctrl+V / เมนู “วาง” ขณะอยู่หน้าเพิ่ม-แก้ไข */
 document.addEventListener('paste',e=>{
   if($('#editorView').hidden||!e.clipboardData)return;
   let files=[...e.clipboardData.items||[]].filter(i=>i.kind==='file'&&i.type.startsWith('image/')).map(i=>i.getAsFile()).filter(Boolean);
   if(!files.length)files=[...e.clipboardData.files||[]].filter(f=>f.type.startsWith('image/'));
-  if(!files.length)return;                              // ไม่มีรูป = วางข้อความตามปกติ
-  if(!e.clipboardData.getData('text/plain'))e.preventDefault(); // มีแต่รูป: กันไม่ให้เกิดข้อความแปลกๆ
+  if(!files.length)return;
+  if(!e.clipboardData.getData('text/plain'))e.preventDefault();
   addImageFiles(files);
 });
-
-/* วิธี 3: ลากรูปมาปล่อยในหน้าเพิ่ม-แก้ไข (เช่น iPad Split View ลากจาก Photos/Safari) */
 const edView=$('#editorView');
 edView.addEventListener('dragover',e=>e.preventDefault());
 edView.addEventListener('drop',e=>{
   const files=[...(e.dataTransfer?e.dataTransfer.files:[])].filter(f=>f.type.startsWith('image/'));
-  if(!files.length)return;
-  e.preventDefault();addImageFiles(files);
+  if(!files.length)return;e.preventDefault();addImageFiles(files);
 });
 $('#editorForm').onsubmit=async e=>{
   e.preventDefault();
@@ -717,11 +693,11 @@ $('#editorForm').onsubmit=async e=>{
 /* ===== 10) วางจากคลิปบอร์ด / ดึงจากลิงก์ ===== */
 $('#addBtn').onclick=()=>openEditor(null,$('#q').value.trim());
 $('#pasteBtn').onclick=async()=>{
-  const clip=navigator.clipboard&&navigator.clipboard.readText?navigator.clipboard.readText():Promise.reject(); // ต้องเรียกทันทีหลังการกด (เงื่อนไข Safari)
+  const clip=navigator.clipboard&&navigator.clipboard.readText?navigator.clipboard.readText():Promise.reject();
   openEditor(null,$('#q').value.trim());
   try{
     const t=(await clip).trim();
-    if(!t){toast('ไม่มีข้อความในคลิปบอร์ด — ถ้าเป็นรูป กดปุ่ม “วางรูปจากคลิปบอร์ด” ในหน้านี้');return}
+    if(!t){toast('ไม่มีข้อความในคลิปบอร์ด — ถ้าเป็นรูป กดปุ่ม “วางรูปจากคลิปบอร์ด”');return}
     if(/^https?:\/\/\S+$/.test(t)){$('#fUrl').value=t;importFromUrl()}
     else{$('#fText').value=t;toast('วางแล้ว — ตรวจชื่อเพลงและคอร์ดก่อนบันทึก')}
   }catch{toast('อ่านคลิปบอร์ดไม่ได้ — กดค้างที่ช่องข้อความแล้วเลือก “วาง”');$('#fText').focus()}
@@ -737,33 +713,288 @@ function htmlToText(html){
   return {title,text:(root.textContent||'').replace(/\n{3,}/g,'\n\n').trim()};
 }
 async function fetchPage(url){
+  if(sb&&user){
+    const {data,error}=await sb.functions.invoke('fetch-page',{body:{url}});
+    if(error||!data||data.error)throw new Error((data&&data.error)||(error&&error.message)||'fetch-page ผิดพลาด');
+    return data.html;
+  }
   const proxy=(LS.get(PROXY,'')||'').trim();
   const r=await fetch(proxy?proxy.replace('{url}',encodeURIComponent(url)):url);
   if(!r.ok)throw new Error('HTTP '+r.status);
   return r.text();
 }
+const slugTitle=u=>{try{return decodeURIComponent(new URL(u).pathname.split('/').filter(Boolean).pop()||'').replace(/\.\w+$/,'').replace(/[-_+]+/g,' ').trim()}catch{return''}};
+const cleanTitle=t=>(t||'').replace(/\s*[|｜]\s.*$/,'').replace(/^คอร์ด(เพลง)?\s*/,'').trim();
 async function importFromUrl(){
-  const url=$('#fUrl').value.trim(),btn=$('#fetchUrlBtn');
+  const url=$('#fUrl').value.trim(),b=$('#fetchUrlBtn');
   if(!/^https?:\/\//.test(url)){toast('ลิงก์ไม่ถูกต้อง');return}
-  btn.disabled=true;const old=btn.textContent;btn.textContent='กำลังดึง…';
+  b.disabled=true;const old=b.textContent;b.textContent='กำลังดึง…';
   try{
     const {title,text}=htmlToText(await fetchPage(url));
     if(title&&!$('#fTitle').value)$('#fTitle').value=title;
     $('#fText').value=text;
     toast(text.length<80?'ได้ข้อความน้อยมาก — หน้านี้อาจเป็นภาพ ให้แคปหน้าจอแล้วแนบภาพ':'ดึงแล้ว — ตรวจ/ลบส่วนที่ไม่ใช่เพลงก่อนบันทึก');
-  }catch{toast('ดึงไม่ได้ (เว็บบล็อกหรือยังไม่ได้ตั้ง Proxy) — คัดลอกมาวางแทนได้')}
-  finally{btn.disabled=false;btn.textContent=old}
+  }catch{toast('ดึงไม่ได้ (เว็บบล็อก/ยังไม่ได้ตั้ง Proxy หรือ Edge Function) — คัดลอกมาวางแทนได้')}
+  finally{
+    b.disabled=false;b.textContent=old;
+    const f=$('#fTitle');f.value=cleanTitle(f.value)||slugTitle(url);
+  }
 }
 $('#fetchUrlBtn').onclick=importFromUrl;
-
-/* ===== 11) เริ่มต้น ===== */
+$('#fUrl').addEventListener('paste',()=>setTimeout(()=>{if(user&&/^https?:\/\//.test($('#fUrl').value.trim()))importFromUrl()},60));
 $('#proxy').value=LS.get(PROXY,'')||'';
 $('#proxy').onchange=e=>{LS.set(PROXY,e.target.value.trim());toast('บันทึกการตั้งค่า Proxy แล้ว')};
+
+/* ===== 11) Supabase: ล็อกอิน + ซิงก์ ===== */
+let sb=null,user=null,syncing=false,status='';
+const conf=()=>{const s=LS.get(K.cfg,{});return{url:CFG.url||s.url||'',key:CFG.key||s.key||''}};
+const getPls=()=>LS.get(K.pls,[]),setPls=p=>LS.set(K.pls,p);
+const getMeta=()=>LS.get(K.meta,{songs:{},pls:{}});
+const hash=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return''+h};
+const songH=(s,f)=>hash(JSON.stringify([s.title,s.artist,s.key,s.text,s.shift||0,!!f]));
+const plH=p=>hash(JSON.stringify([p.name,p.songIds,!!p.shared,p.token||'']));
+const toRow=(s,f)=>({user_id:user.id,id:s.id,title:s.title,artist:s.artist||'',song_key:s.key||'',content:s.text||'',src:s.src||'',shift:s.shift||0,favorite:!!f});
+const fromRow=(r,old)=>({...(old||{}),id:r.id,title:r.title,artist:r.artist,key:r.song_key,text:r.content,src:r.src,shift:r.shift,images:(old&&old.images)||[],savedAt:Date.parse(r.updated_at)});
+const fromP=r=>({id:r.id,name:r.name,shared:r.is_shared,token:r.share_token,updatedAt:Date.parse(r.updated_at),
+  songIds:(r.playlist_items||[]).slice().sort((a,b)=>a.position-b.position).map(x=>x.song_id)});
+
+function modal(title,build){
+  const ov=mk('div','modal'),box=mk('div','box'),bar=mk('div','row between');
+  bar.append(mk('h2',null,title),btn('✕',()=>ov.remove()));box.appendChild(bar);
+  ov.onclick=e=>{if(e.target===ov)ov.remove()};ov.appendChild(box);document.body.appendChild(ov);build(box,()=>ov.remove());
+}
+function initClient(){
+  const c=conf();sb=null;
+  if(!c.url||!c.key||!window.supabase)return;
+  sb=window.supabase.createClient(c.url,c.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
+  sb.auth.onAuthStateChange((_e,s)=>{user=s?s.user:null;paintAcct();if(user)setTimeout(syncAll,0)});
+}
+const setStatus=s=>{status=s;paintAcct()};
+function paintAcct(){
+  let t='☁️ ตั้งค่า';
+  if(sb)t=user?'☁️ '+(user.email||'').split('@')[0]+' '+({ok:'✓',sync:'⟳',err:'⚠',off:'⚠'}[status]||''):'👤 เข้าสู่ระบบ';
+  $('#acct').textContent=t;
+}
+$('#acct').onclick=()=>openAcct();
+function openAcct(){
+  modal('บัญชี & ซิงก์',box=>{
+    const body=mk('div');box.appendChild(body);
+    const draw=()=>{
+      body.replaceChildren();
+      if(!window.supabase)body.appendChild(mk('p','muted','โหลดไลบรารี Supabase ไม่ได้ (ออฟไลน์?) — ใช้งานในเครื่องได้ตามปกติ'));
+      if(sb&&user){
+        body.append(mk('p',null,'เข้าสู่ระบบเป็น '+user.email),
+          btn('🔄 ซิงก์ตอนนี้',async()=>{await syncAll();toast('ซิงก์แล้ว')},'primary'),' ',
+          btn('ออกจากระบบ',async()=>{await sb.auth.signOut();LS.set(K.meta,{songs:{},pls:{}});user=null;paintAcct();draw()},'danger'));
+      }else if(sb){
+        const em=mk('input');em.type='email';em.placeholder='อีเมล';em.autocapitalize='none';
+        const pw=mk('input');pw.type='password';pw.placeholder='รหัสผ่าน (อย่างน้อย 6 ตัว)';
+        const go=async up=>{
+          const c={email:em.value.trim(),password:pw.value};
+          const {data,error}=up?await sb.auth.signUp(c):await sb.auth.signInWithPassword(c);
+          if(error)toast(error.message);
+          else if(!data.session)toast('สมัครแล้ว — ยืนยันอีเมลก่อน แล้วค่อยเข้าสู่ระบบ');
+          else{user=data.session.user;paintAcct();toast('สำเร็จ ✔');draw()}
+        };
+        body.append(em,pw,btn('เข้าสู่ระบบ',()=>go(false),'primary'),' ',btn('สมัครสมาชิก',()=>go(true)));
+      }
+      const d=mk('details'),u=mk('input'),k=mk('input');
+      u.placeholder='Project URL (https://xxxx.supabase.co)';u.value=conf().url;
+      k.placeholder='anon public key';k.value=conf().key;
+      d.append(mk('summary',null,'⚙️ ตั้งค่า Supabase (ทดลองบนเครื่องนี้)'),u,k,
+        btn('บันทึกการตั้งค่า',()=>{LS.set(K.cfg,{url:u.value.trim(),key:k.value.trim()});initClient();paintAcct();draw()}));
+      body.appendChild(d);
+    };
+    draw();
+  });
+}
+
+function needsSync(){
+  if(!sb||!user)return false;
+  const m=getMeta(),f=favs(),book=loadBook(),ids=new Set(book.map(s=>s.id)),P=getPls(),pids=new Set(P.map(p=>p.id));
+  return book.some(s=>!m.songs[s.id]||m.songs[s.id].h!==songH(s,f.has(s.id)))||Object.keys(m.songs).some(i=>!ids.has(i))
+      ||P.some(p=>!m.pls[p.id]||m.pls[p.id].h!==plH(p))||Object.keys(m.pls).some(i=>!pids.has(i));
+}
+let st;const schedSync=()=>{clearTimeout(st);st=setTimeout(()=>{if(needsSync())syncAll()},2500)};
+
+async function syncAll(){
+  if(!sb||!user||syncing)return;
+  if(!navigator.onLine){setStatus('off');return}
+  syncing=true;setStatus('sync');
+  const m=getMeta(),f=favs();
+  try{
+    const {data:cs,error:e1}=await sb.from('songs').select('*');if(e1)throw e1;
+    const cmap=new Map(cs.map(r=>[r.id,r])),book=loadBook(),ids=new Set(book.map(s=>s.id));
+    const gone=Object.keys(m.songs).filter(i=>!ids.has(i)),del=gone.filter(i=>cmap.has(i));
+    if(del.length){const {error}=await sb.from('songs').delete().in('id',del);if(error)throw error}
+    gone.forEach(i=>delete m.songs[i]);
+    const up=[],rep=new Map(),rem=new Set(),add=[];
+    for(const s of book){
+      const c=cmap.get(s.id),mm=m.songs[s.id],dirty=!mm||mm.h!==songH(s,f.has(s.id));
+      if(!c){if(mm){delete m.songs[s.id];f.delete(s.id);rem.add(s.id)}else up.push(s);continue}
+      const newer=mm?c.updated_at!==mm.cu:Date.parse(c.updated_at)>(s.savedAt||0);
+      if(dirty&&!(newer&&!mm))up.push(s);
+      else if(newer){const n=fromRow(c,s);rep.set(s.id,n);c.favorite?f.add(n.id):f.delete(n.id);m.songs[n.id]={h:songH(n,c.favorite),cu:c.updated_at}}
+    }
+    for(const c of cs)if(!ids.has(c.id)&&!gone.includes(c.id)){
+      const n=fromRow(c);add.push(n);if(c.favorite)f.add(n.id);m.songs[n.id]={h:songH(n,c.favorite),cu:c.updated_at};
+    }
+    if(up.length){
+      const {data,error}=await sb.from('songs').upsert(up.map(s=>toRow(s,f.has(s.id))),{onConflict:'user_id,id'}).select('id,updated_at');
+      if(error)throw error;
+      for(const r of data){const s=up.find(x=>x.id===r.id);m.songs[r.id]={h:songH(s,f.has(r.id)),cu:r.updated_at}}
+    }
+    if(rep.size||rem.size||add.length){
+      const cur=loadBook().filter(s=>!rem.has(s.id)).map(s=>rep.get(s.id)||s),have=new Set(cur.map(s=>s.id));
+      add.forEach(n=>have.has(n.id)||cur.push(n));saveBook(cur);
+    }
+    setFavs(f);
+
+    const {data:cp,error:e2}=await sb.from('playlists').select('*,playlist_items(song_id,position)');if(e2)throw e2;
+    const pm=new Map(cp.map(r=>[r.id,r])),P=getPls(),pids=new Set(P.map(p=>p.id));
+    const pgone=Object.keys(m.pls).filter(i=>!pids.has(i)),pdel=pgone.filter(i=>pm.has(i));
+    if(pdel.length){const {error}=await sb.from('playlists').delete().in('id',pdel);if(error)throw error}
+    pgone.forEach(i=>delete m.pls[i]);
+    const pup=[],prep=new Map(),prem=new Set(),padd=[];
+    for(const p of P){
+      const c=pm.get(p.id),mm=m.pls[p.id],dirty=!mm||mm.h!==plH(p);
+      if(!c){if(mm){delete m.pls[p.id];prem.add(p.id)}else pup.push(p);continue}
+      const newer=mm?c.updated_at!==mm.cu:Date.parse(c.updated_at)>(p.updatedAt||0);
+      if(dirty&&!(newer&&!mm))pup.push(p);
+      else if(newer){const n=fromP(c);prep.set(p.id,n);m.pls[n.id]={h:plH(n),cu:c.updated_at}}
+    }
+    for(const c of cp)if(!pids.has(c.id)&&!pgone.includes(c.id)){const n=fromP(c);padd.push(n);m.pls[n.id]={h:plH(n),cu:c.updated_at}}
+    for(const p of pup){
+      const {data,error}=await sb.from('playlists').upsert({id:p.id,user_id:user.id,name:p.name,is_shared:!!p.shared,share_token:p.token||null},{onConflict:'id'}).select('id,updated_at');
+      if(error)throw error;
+      const {error:e3}=await sb.from('playlist_items').delete().eq('playlist_id',p.id);if(e3)throw e3;
+      if(p.songIds.length){const {error:e4}=await sb.from('playlist_items').insert(p.songIds.map((sid,i)=>({playlist_id:p.id,song_id:sid,position:i})));if(e4)throw e4}
+      m.pls[p.id]={h:plH(p),cu:data[0].updated_at};
+    }
+    if(prep.size||prem.size||padd.length){
+      const cur=getPls().filter(p=>!prem.has(p.id)).map(p=>prep.get(p.id)||p),have=new Set(cur.map(p=>p.id));
+      padd.forEach(n=>have.has(n.id)||cur.push(n));setPls(cur);
+    }
+    setStatus('ok');
+  }catch(e){console.error(e);setStatus('err');toast('ซิงก์ไม่สำเร็จ: '+(e.message||e))}
+  finally{
+    LS.set(K.meta,m);syncing=false;
+    renderPlaylists();renderSongbook();if(!$('#plView').hidden)renderPlView();if(current)paintFav();
+  }
+}
+
+/* ===== 12) Playlist + แชร์ ===== */
+function createPlaylist(name,songIds=[]){
+  const p={id:crypto.randomUUID(),name,songIds,shared:false,token:null,updatedAt:Date.now()};
+  setPls([...getPls(),p]);renderPlaylists();schedSync();return p;
+}
+function mutPl(id,fn){
+  const P=getPls(),p=P.find(x=>x.id===id);if(!p)return;
+  fn(p);p.updatedAt=Date.now();setPls(P);renderPlaylists();schedSync();return p;
+}
+$('#plNew').onclick=()=>{const n=(prompt('ชื่อ Playlist (เช่น เซ็ตคืนวันศุกร์)')||'').trim();if(n)createPlaylist(n)};
+function renderPlaylists(){
+  const P=getPls(),box=$('#plList');$('#plCount').textContent=P.length;box.replaceChildren();
+  if(!P.length)box.appendChild(mk('div','empty','ยังไม่มี Playlist'));
+  for(const p of P){
+    const row=mk('div','item'),b=mk('button','open'),t=mk('div','t',p.name);
+    t.appendChild(mk('span','badge dim',p.songIds.length+' เพลง'));if(p.shared)t.appendChild(mk('span','badge','แชร์'));
+    b.appendChild(t);b.onclick=()=>openPlaylist(p.id);row.appendChild(b);box.appendChild(row);
+  }
+}
+function openPlaylist(id){curPl={id};show('playlist');renderPlView()}
+function renderPlView(){
+  const box=$('#plSongs'),bar=$('#plBar'),lk=$('#plLink');
+  [box,bar,lk].forEach(e=>e.replaceChildren());lk.className='';
+  if(!curPl)return;
+  let songs,p=null;
+  if(curPl.shared){
+    $('#plTitle').textContent='🎼 '+curPl.data.name+' (แชร์มา)';
+    songs=curPl.data.songs.map(s=>({id:'sh-'+curPl.token.slice(0,6)+'-'+s.id,title:s.title,artist:s.artist,key:s.key,text:s.text,shift:s.shift||0}));
+    bar.append(btn('💾 บันทึกทั้ง Playlist เข้าคลังของฉัน',importShared,'primary'));
+  }else{
+    p=getPls().find(x=>x.id===curPl.id);if(!p){show('home',false);return}
+    $('#plTitle').textContent='🎼 '+p.name;
+    const book=loadBook();songs=p.songIds.map(id=>book.find(s=>s.id===id)).filter(Boolean);
+    bar.append(
+      btn('✏️ เปลี่ยนชื่อ',()=>{const n=(prompt('ชื่อใหม่',p.name)||'').trim();if(n){mutPl(p.id,x=>{x.name=n});renderPlView()}}),
+      btn(p.shared?'🔗 แชร์อยู่':'🔗 เปิดแชร์',()=>sharePlaylist(p.id),p.shared?'':'primary'),
+      btn('🗑 ลบ',()=>delPlaylist(p.id),'danger'));
+    if(p.shared&&p.token){
+      const link=location.origin+location.pathname+'#/p/'+p.token,inp=mk('input');
+      inp.readOnly=true;inp.value=link;inp.style.flex='1';lk.className='plLink';
+      lk.append(inp,btn('📤 ส่งลิงก์',()=>shareLink(p,link),'primary'),btn('🚫 เลิกแชร์',()=>{mutPl(p.id,x=>{x.shared=false});renderPlView();syncAll()}));
+    }
+  }
+  if(!songs.length)box.appendChild(mk('div','empty','ยังไม่มีเพลง — เปิดเพลงแล้วกด “➕ Playlist”'));
+  songs.forEach(s=>{
+    const row=mk('div','item'),o=mk('button','open'),t=mk('div','t',s.title);
+    if(s.key)t.appendChild(mk('span','badge',s.key));
+    o.append(t,mk('div','a',s.artist||'—'));o.onclick=()=>openSong(s,s.shift||0);row.appendChild(o);
+    if(p){
+      const mv=d=>{mutPl(p.id,x=>{const i=x.songIds.indexOf(s.id),j=i+d;if(j>=0&&j<x.songIds.length)[x.songIds[i],x.songIds[j]]=[x.songIds[j],x.songIds[i]]});renderPlView()};
+      row.append(btn('↑',()=>mv(-1),'del'),btn('↓',()=>mv(1),'del'),
+        btn('✕',()=>{mutPl(p.id,x=>{x.songIds=x.songIds.filter(i=>i!==s.id)});renderPlView()},'del danger'));
+    }
+    box.appendChild(row);
+  });
+}
+function delPlaylist(id){
+  if(!confirm('ลบ Playlist นี้? (เพลงในคลังไม่ถูกลบ)'))return;
+  setPls(getPls().filter(p=>p.id!==id));renderPlaylists();schedSync();goBack();
+}
+$('#plBtn').onclick=()=>{
+  const song=current.song;
+  if(!loadBook().some(s=>s.id===song.id))$('#saveBtn').click();
+  modal('เพิ่มเข้า Playlist',box=>{
+    const body=mk('div');box.appendChild(body);
+    const draw=()=>{
+      body.replaceChildren();
+      for(const p of getPls()){
+        const inn=p.songIds.includes(song.id);
+        const b=btn((inn?'✅ ':'⬜ ')+p.name,()=>{mutPl(p.id,x=>{x.songIds=inn?x.songIds.filter(i=>i!==song.id):[...x.songIds,song.id]});draw()});
+        b.style.cssText='display:block;width:100%;text-align:left;margin:6px 0';body.appendChild(b);
+      }
+      body.appendChild(btn('＋ สร้าง Playlist ใหม่',()=>{const n=(prompt('ชื่อ Playlist')||'').trim();if(n){createPlaylist(n,[song.id]);draw()}},'primary'));
+    };
+    draw();
+  });
+};
+async function sharePlaylist(id){
+  if(!sb||!user){toast(sb?'ต้องเข้าสู่ระบบก่อนจึงจะแชร์ได้':'ยังไม่ได้ตั้งค่า Supabase');openAcct();return}
+  mutPl(id,p=>{p.shared=true;p.token=p.token||(crypto.randomUUID()+crypto.randomUUID()).replace(/-/g,'')});
+  renderPlView();toast('กำลังซิงก์…');await syncAll();toast('พร้อมแชร์ ✔ กด “ส่งลิงก์”');renderPlView();
+}
+async function shareLink(p,link){
+  if(navigator.share){try{await navigator.share({title:p.name,url:link});return}catch(e){if(e&&e.name==='AbortError')return}}
+  try{await navigator.clipboard.writeText(link);toast('คัดลอกลิงก์แล้ว')}catch{prompt('คัดลอกลิงก์นี้',link)}
+}
+async function openShared(token){
+  if(!sb){toast('ลิงก์นี้ต้องใช้แอปที่ตั้งค่า Supabase ไว้ในไฟล์ (CFG)');return}
+  const {data,error}=await sb.rpc('get_shared_playlist',{p_token:token});
+  if(error||!data){toast('ไม่พบ Playlist นี้ หรือเจ้าของปิดการแชร์แล้ว');return}
+  curPl={shared:true,data,token};show('playlist');renderPlView();
+}
+function importShared(){
+  const {data,token}=curPl,book=loadBook(),have=new Set(book.map(s=>s.id)),ids=[];
+  for(const s of data.songs){
+    const id='sh-'+token.slice(0,6)+'-'+s.id;ids.push(id);
+    if(!have.has(id))book.push({id,title:s.title,artist:s.artist,key:s.key,text:s.text,images:[],src:'',shift:s.shift||0,savedAt:Date.now()});
+  }
+  saveBook(book);const p=createPlaylist(data.name,ids);renderSongbook();toast('บันทึกแล้ว ✔');
+  if(location.hash.startsWith('#/p/'))history.replaceState(history.state,'',location.pathname);
+  curPl={id:p.id};renderPlView();
+}
+function route(){const m=location.hash.match(/^#\/p\/([\w-]+)/);if(m)openShared(m[1])}
+
+/* ===== 13) เริ่มต้น ===== */
 const setHH=()=>document.documentElement.style.setProperty('--hh',$('#hdr').offsetHeight+'px');
 addEventListener('resize',setHH);setHH();
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
-renderSites();
-renderSongbook();
+initClient();paintAcct();renderSites();renderPlaylists();renderSongbook();route();
+addEventListener('hashchange',route);addEventListener('online',syncAll);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')syncAll()});
+setInterval(()=>{if(document.visibilityState==='visible')syncAll()},90000);
 </script>
 </body>
 </html>
