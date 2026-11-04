@@ -488,7 +488,7 @@ function renderSongbook(){
 async function removeSong(id,title){
   if(!confirm(`ลบ “${title}” ออกจากคลังเพลง?`))return;
   const s=loadBook().find(x=>x.id===id);
-  if(s&&s.images)for(const i of s.images)await idbDel(i).catch(()=>{});
+  if(s&&s.images){for(const i of s.images)await idbDel(i).catch(()=>{});cloudDelImgs(s.images)}
   saveBook(loadBook().filter(x=>x.id!==id));renderSongbook();
   if(current&&current.song.id===id)renderSong(false);
   toast('ลบแล้ว');
@@ -546,7 +546,7 @@ async function loadGallery(song){
   if(!song.images||!song.images.length){g.hidden=true;return}
   g.hidden=false;
   for(const id of song.images){
-    const b=await idbGet(id).catch(()=>null);
+  const b=await getImg(id);
     if(tok!==galTok)return;
     if(!b){g.appendChild(mk('div','empty','ไม่พบภาพในเครื่องนี้ (ภาพไม่ถูกซิงก์ข้ามเครื่อง)'));continue}
     const url=URL.createObjectURL(b);galUrls.push(url);
@@ -618,7 +618,7 @@ async function openEditor(song,prefill=''){
   show('editor');renderThumbs();
   if(keep&&song.images&&song.images.length){
     for(const id of song.images){
-      const b=await idbGet(id).catch(()=>null);
+        const b=await getImg(id);
       if(b)edImgs.push({id,blob:b,url:URL.createObjectURL(b),isNew:false});
     }
     renderThumbs();
@@ -681,7 +681,7 @@ $('#editorForm').onsubmit=async e=>{
   };
   try{
     for(const i of edImgs)if(i.isNew)await idbPut(i.id,i.blob);
-    for(const id of edRemoved)await idbDel(id);
+    for(const id of edRemoved)await idbDel(id);cloudDelImgs(edRemoved);
   }catch{toast('บันทึกภาพไม่สำเร็จ (พื้นที่เก็บข้อมูลอาจเต็ม)');return}
   const book=loadBook(),i=book.findIndex(s=>s.id===song.id);
   if(i>=0)book[i]=song;else book.push(song);
@@ -751,10 +751,10 @@ const conf=()=>{const s=LS.get(K.cfg,{});return{url:CFG.url||s.url||'',key:CFG.k
 const getPls=()=>LS.get(K.pls,[]),setPls=p=>LS.set(K.pls,p);
 const getMeta=()=>LS.get(K.meta,{songs:{},pls:{}});
 const hash=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return''+h};
-const songH=(s,f)=>hash(JSON.stringify([s.title,s.artist,s.key,s.text,s.shift||0,!!f]));
+const songH=(s,f)=>hash(JSON.stringify([s.title,s.artist,s.key,s.text,s.shift||0,!!f,s.images||[]]));
 const plH=p=>hash(JSON.stringify([p.name,p.songIds,!!p.shared,p.token||'']));
-const toRow=(s,f)=>({user_id:user.id,id:s.id,title:s.title,artist:s.artist||'',song_key:s.key||'',content:s.text||'',src:s.src||'',shift:s.shift||0,favorite:!!f});
-const fromRow=(r,old)=>({...(old||{}),id:r.id,title:r.title,artist:r.artist,key:r.song_key,text:r.content,src:r.src,shift:r.shift,images:(old&&old.images)||[],savedAt:Date.parse(r.updated_at)});
+const toRow=(s,f)=>({user_id:user.id,id:s.id,title:s.title,artist:s.artist||'',song_key:s.key||'',content:s.text||'',src:s.src||'',shift:s.shift||0,favorite:!!f,images:s.images||[]});
+const fromRow=(r,old)=>({...(old||{}),id:r.id,title:r.title,artist:r.artist,key:r.song_key,text:r.content,src:r.src,shift:r.shift,images:r.images||[],savedAt:Date.parse(r.updated_at)});
 const fromP=r=>({id:r.id,name:r.name,shared:r.is_shared,token:r.share_token,updatedAt:Date.parse(r.updated_at),
   songIds:(r.playlist_items||[]).slice().sort((a,b)=>a.position-b.position).map(x=>x.song_id)});
 
@@ -808,7 +808,31 @@ function openAcct(){
     draw();
   });
 }
-
+const BUCKET='chord-images';
+async function getImg(id){ // อ่านจากเครื่องก่อน ถ้าไม่มีให้โหลดจาก Supabase แล้วเก็บแคช
+  let b=await idbGet(id).catch(()=>null);
+  if(!b&&sb&&user){
+    try{
+      const {data,error}=await sb.storage.from(BUCKET).download(user.id+'/'+id+'.jpg');
+      if(!error&&data){b=data;idbPut(id,b).catch(()=>{})}
+    }catch{}
+  }
+  return b;
+}
+async function pushImages(m,list){ // อัปโหลดภาพที่ยังไม่เคยขึ้น (ข้ามถ้าไม่มีไฟล์ในเครื่อง)
+  m.imgs=m.imgs||{};
+  for(const s of list)for(const id of s.images||[]){
+    if(m.imgs[id])continue;
+    const b=await idbGet(id).catch(()=>null);if(!b)continue;
+    const {error}=await sb.storage.from(BUCKET).upload(user.id+'/'+id+'.jpg',b,{contentType:'image/jpeg',upsert:true});
+    if(error)throw error;
+    m.imgs[id]=1;
+  }
+}
+function cloudDelImgs(ids){
+  if(!sb||!user||!ids||!ids.length)return;
+  sb.storage.from(BUCKET).remove(ids.map(i=>user.id+'/'+i+'.jpg')).catch(()=>{});
+}
 function needsSync(){
   if(!sb||!user)return false;
   const m=getMeta(),f=favs(),book=loadBook(),ids=new Set(book.map(s=>s.id)),P=getPls(),pids=new Set(P.map(p=>p.id));
@@ -844,11 +868,31 @@ async function syncAll(){
       if(error)throw error;
       for(const r of data){const s=up.find(x=>x.id===r.id);m.songs[r.id]={h:songH(s,f.has(r.id)),cu:r.updated_at}}
     }
+    await pushImages(m,loadBook());
     if(rep.size||rem.size||add.length){
       const cur=loadBook().filter(s=>!rem.has(s.id)).map(s=>rep.get(s.id)||s),have=new Set(cur.map(s=>s.id));
       add.forEach(n=>have.has(n.id)||cur.push(n));saveBook(cur);
     }
     setFavs(f);
+
+      $('#exportBtn').onclick=async()=>{
+        try{
+          const out=[];
+          for(const s of loadBook()){
+            const o={...s};
+            if(s.images&&s.images.length){o.imagesData=[];for(const id of s.images){const b=await getImg(id);if(b)o.imagesData.push({id,data:await blobToDataURL(b)})}}
+            out.push(o);
+          }
+          const name='my-songbook-'+new Date().toISOString().slice(0,10)+'.json';
+          const blob=new Blob([JSON.stringify(out)],{type:'application/json'}),file=new File([blob],name,{type:'application/json'});
+          if(navigator.canShare&&navigator.canShare({files:[file]})){
+            try{await navigator.share({files:[file],title:name});return}catch(e){if(e&&e.name==='AbortError')return}
+          }
+          const a=mk('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
+          setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+        }catch{toast('สำรองข้อมูลไม่สำเร็จ')}
+      };
+    
 
     const {data:cp,error:e2}=await sb.from('playlists').select('*,playlist_items(song_id,position)');if(e2)throw e2;
     const pm=new Map(cp.map(r=>[r.id,r])),P=getPls(),pids=new Set(P.map(p=>p.id));
