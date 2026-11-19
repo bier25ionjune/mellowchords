@@ -1,0 +1,40 @@
+{
+  "name": "mellowchords - คลังคอร์ดกลางคืน",
+  "short_name": "คลังคอร์ด",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0b0d",
+  "theme_color": "#0b0b0d",
+  "description": "สมุดคอร์ดเพลงสำหรับนักดนตรีกลางคืน ค้นหา เล่นสด จัด Playlist เปลี่ยนคีย์ ใช้งานออฟไลน์ได้ 100%",
+  "orientation": "any",
+  "lang": "th",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "categories": [
+    "music",
+    "entertainment",
+    "utilities"
+  ]
+}
