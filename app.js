@@ -3,7 +3,7 @@
 /**
  * ==============================================================================
  * mellowchords - คลังคอร์ดกลางคืน (Night Busker Chordbook)
- * Real Web Chord Search, True Original Key Detector & Hybrid Cloud/Local Account
+ * Real Web Chord Extraction, Key-Consistent Alignment, Guitar Audio & Metronome
  * ==============================================================================
  */
 
@@ -54,40 +54,61 @@ G                        Em           C                    D
     artist: 'Bodyslam (บอดี้สแลม)',
     key: 'G',
     text: `[Intro]
-[G] [D/F#] [Em] [D] [C] [D]
+G   D/F#   Em   D   C   D
 
 [Verse 1]
-[G]รอนแรมมาเนิ่นนาน [Em]เพียงหนึ่งใจกับทางที่โรยด้วยขวาก[C]หนาม แหลม[D]คม
-[G]เหน็บหนาวสักเท่าไร [Em]ในค่ำคืนที่มองไม่เห็นแม้จุด[C]หมาย ข้าง[D]หน้า
-
-[Pre-Chorus]
-[Em]เจ็บจนเข้าใจ [Bm]ว่าในชีวิตหนึ่ง
-[C]ถึงเวลาต้องเรียนรู้ [D]เพื่อก้าวไป
+Em                                      Bm
+รอนแรมมาเนิ่นนานเพียงหนึ่งใจ กับทางที่โรยเอาไว้ด้วยขวากหนาม
+     C                    D
+ดูแหลมคม ทิ่มแทง จนมันแทบจะทนไม่ไหว
+Em                                Bm
+ชีวิตถ้าไม่ยากเย็นขนาดนั้น สองมือจะมีเรี่ยวแรงขนาดไหน
+  C                 D
+แต่หัวใจ ของคน ยังยืนยันจะไม่ถอดใจ
 
 [Chorus]
-ในเมื่อความ[G]ฝัน มันยังไกล[D/F#]
-ในเมื่อใจ[Em]มันยังบอกให้ก้าว[D]ไป
-แม้ต้องล้ม[C]สักเท่าไร [Bm]ก็จะไปให้ถึง[Am]แสงสุดท้าย[D]`
+              C             D                      Bm         Em
+ในค่ำคืนที่ ฟ้านั้นไม่มีดาวอยู่ตรงนี้ ฉันยังคงก้าวไป
+          C                D            Bm   Em
+ยังคงมีรักแท้ เป็นแสงนำไปในคืนที่หลงทาง
+
+[Chorus 2]
+                   C                     D    Bm         Em
+กับที่ๆความฝัน นั้นพร้อมเป็นเพื่อนตาย เส้นทางนี้ ฉันยังมีจุดหมาย
+                     C            D            Bm    Em
+ตราบใดที่ปลายท้องฟ้ามีแสงรำไร จะไปจนถึงแสงสุดท้าย`
   },
   {
     id: 'cat-khuenkham',
     title: 'คืนข้ามปี',
     artist: 'Da Endorphine (ดา เอ็นโดรฟิน)',
-    key: 'C',
+    key: 'G',
     text: `[Intro]
-[C] [Am] [F] [G]
+G   Em   C   Am   D
 
 [Verse 1]
-[C]เสียงผู้คนมากมาย[Am]นับถอยหลัง
-[F]เพื่อรอฟังเสียง[G]พลุและดอกไม้ไฟ
-[C]ฉันยืนอยู่ตรงนี้[Am]ท่ามกลางผู้คนมากมาย
-[F]แต่ในใจกลับเหงา[G]จับขั้วหัวใจ
+G            D/F#    Em   D
+มองเวลาก็เกือบเที่ยงคืน
+     C    Bm  Am           D
+สิ้นคืนนี้    ก็เป็น เวลาของปีใหม่
+G            D/F#   Em   D
+มองทางใดมีแต่แสงไฟ
+       C         Bm   Am        D
+สวยเพียงไหน   หัวใจก็จำได้เลือนราง
+
+[Pre-Chorus]
+Em                 A                 C            D
+มีเพลงเปิดดัง มีผู้คนรอบกาย หัวใจก็ยังเงียบงัน
 
 [Chorus]
-ผ่านคืนนี้[C]ไป ก็คงเป็นปี[Am]ใหม่
-แต่ทำไม[F]ใจ ฉันยังอยู่ที่[G]เก่า
-ผ่านคืนนี้[C]ไป โดยไม่มี[Am]เรื่องของเรา
-ในคืนข้าม[F]ปี ที่ว่าง[G]เปล่า เหงาเหลือ[C]เกิน`
+              C                 Bm
+อยากมีคนพิเศษ อยู่ในคืนพิเศษ
+Em          Am        D/F#    G
+คืนสำคัญอีกคืน ที่ต้องอยู่อย่างเหงาใจ
+              C                 Bm
+อยากมีคนพิเศษ จับมือกันข้ามผ่าน
+Em          Am                 D            G
+คืนสำคัญอีกคืน ที่ความเหงาคืบคลาน หัวใจ`
   },
   {
     id: 'cat-kidtueng',
@@ -154,7 +175,7 @@ They call the Rising Sun`
 ];
 
 /* ==============================================================================
- * 2) ทฤษฎีดนตรี, การวิเคราะห์คีย์จริงจากชุดคอร์ด, Capo & แผนภาพการจับคอร์ดกีตาร์
+ * 2) ทฤษฎีดนตรี, การวิเคราะห์คีย์จริงจากคอร์ดในเนื้อเพลง, เสียงดีดคอร์ดกีตาร์ & Capo
  * ============================================================================== */
 const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const FLATS  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -187,9 +208,8 @@ const normShift = s => {
 
 const fmtShift = s => (s === 0 ? 'คีย์เดิม' : (s > 0 ? '+' : '') + s + ' คีย์');
 
-// วิเคราะห์คีย์เพลงจริงตามหลักทฤษฎีดนตรี (Harmonic Scale Matching + Tonic First/Last Chord Weighting)
+// วิเคราะห์คีย์เพลงจริงจากชุดคอร์ดที่ปรากฏในเนื้อเพลงนั้นโดยตรง (เพื่อให้คีย์และคอร์ดบนเนื้อเพลงตรงกัน 100%)
 function detectTrueKeyFromChords(chordList, explicitText = '') {
-  // 1. Check if page explicitly writes "Key G", "คีย์ C", "Key : Am"
   const explicitMatch = String(explicitText || '').match(/(?:key|คีย์)\s*[:=]?\s*([A-G][#b]?m?)\b/i);
   if (explicitMatch && isChord(explicitMatch[1])) {
     return explicitMatch[1];
@@ -200,7 +220,6 @@ function detectTrueKeyFromChords(chordList, explicitText = '') {
     .filter(isChord);
   if (!valid.length) return '';
 
-  // Extract root index and major/minor quality
   const parsed = valid.map(c => {
     const m = c.match(/^([A-G][#b]?)(m(?!aj))?/);
     return m ? { raw: m[1] + (m[2] || ''), root: noteIndex(m[1]), isMinor: !!m[2] } : null;
@@ -227,7 +246,6 @@ function detectTrueKeyFromChords(chordList, explicitText = '') {
       const match = DIATONIC.find(d => (tonic + d.offset) % 12 === ch.root && d.minor === ch.isMinor);
       if (match) score += match.weight;
     }
-    // Bonus if the very first chord is I (Major tonic) or vi (Relative Minor tonic)
     const first = parsed[0];
     const last = parsed[parsed.length - 1];
     if (first.root === tonic && !first.isMinor) score += 4.5;
@@ -235,13 +253,13 @@ function detectTrueKeyFromChords(chordList, explicitText = '') {
 
     const relMinor = (tonic + 9) % 12;
     let minorScore = score;
-    if (first.root === relMinor && first.isMinor) minorScore += 5.0;
-    if (last.root === relMinor && last.isMinor) minorScore += 2.5;
+    if (first.root === relMinor && first.isMinor) minorScore += 4.0;
+    if (last.root === relMinor && last.isMinor) minorScore += 2.0;
 
     const useFlats = FLAT_KEYS.includes(tonic);
     const scaleNames = useFlats ? FLATS : SHARPS;
 
-    if (score > bestScore) {
+    if (score >= bestScore) {
       bestScore = score;
       bestKey = scaleNames[tonic];
     }
@@ -289,6 +307,83 @@ const GUITAR_VOICINGS = {
   'B': [-1, 2, 4, 4, 4, 2], 'Bm': [-1, 2, 4, 4, 3, 2], 'B7': [-1, 2, 1, 2, 0, 2], 'Bm7': [-1, 2, 4, 2, 3, 2]
 };
 
+// Web Audio API Acoustic Guitar Chord Strum Synthesizer
+let audioCtx = null;
+const OPEN_STRING_MIDI = [40, 45, 50, 55, 59, 64]; // E2, A2, D3, G3, B3, E4
+
+function getAudioContext() {
+  if (!audioCtx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) audioCtx = new AudioContextClass();
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+  return audioCtx;
+}
+
+function strumGuitarChord(chordName) {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const baseName = chordName.replace(/\/.*$/, '');
+  let frets = GUITAR_VOICINGS[baseName] || GUITAR_VOICINGS[baseName.replace(/add9|9|11|13/g, '')];
+
+  // Fallback synthetic triad if uncommon chord
+  if (!frets) {
+    const m = baseName.match(/^([A-G][#b]?)(m(?!aj))?/);
+    if (!m) return;
+    const rootMidi = 48 + noteIndex(m[1]);
+    const third = m[2] ? 3 : 4;
+    playMidiNotes(ctx, [rootMidi - 12, rootMidi, rootMidi + third, rootMidi + 7]);
+    return;
+  }
+
+  const midiNotes = [];
+  for (let s = 0; s < 6; s++) {
+    if (frets[s] >= 0) {
+      midiNotes.push(OPEN_STRING_MIDI[s] + frets[s]);
+    }
+  }
+  playMidiNotes(ctx, midiNotes);
+}
+
+function playMidiNotes(ctx, midiNotes) {
+  const now = ctx.currentTime;
+  midiNotes.forEach((midi, idx) => {
+    const freq = 440 * Math.pow(2, (midi - 69) / 12);
+    const start = now + idx * 0.035; // Guitar strum stagger across strings
+
+    const osc = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+
+    osc.type = 'triangle';
+    osc2.type = 'sawtooth';
+    osc.frequency.setValueAtTime(freq, start);
+    osc2.frequency.setValueAtTime(freq * 1.002, start);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(freq * 4, start);
+    filter.frequency.exponentialRampToValueAtTime(freq * 1.2, start + 1.4);
+
+    gain.gain.setValueAtTime(0.001, start);
+    gain.gain.linearRampToValueAtTime(0.16, start + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0008, start + 1.8);
+
+    osc.connect(filter);
+    osc2.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(start);
+    osc2.start(start);
+    osc.stop(start + 1.85);
+    osc2.stop(start + 1.85);
+  });
+}
+
 function buildChordDiagramSVG(chordName) {
   const baseName = chordName.replace(/\/.*$/, '');
   const frets = GUITAR_VOICINGS[baseName] || GUITAR_VOICINGS[baseName.replace(/add9|9|11|13/g, '')];
@@ -331,17 +426,20 @@ function buildChordDiagramSVG(chordName) {
 }
 
 function showChordPopup(chordName) {
+  strumGuitarChord(chordName);
   modal(`🎸 คอร์ด ${chordName}`, (box) => {
     const wrap = mk('div', 'chordDiagWrap');
     const svg = buildChordDiagramSVG(chordName);
     if (svg) {
       wrap.innerHTML = svg;
-      const hint = mk('p', 'muted small', 'สาย 6 (ซ้าย) → สาย 1 (ขวา) · แตะคอร์ดใดก็ได้ในเพลงเพื่อดูวิธีจับ');
-      hint.style.textAlign = 'center';
-      wrap.appendChild(hint);
     } else {
       wrap.appendChild(mk('p', 'muted', `คอร์ด ${chordName} (คอร์ดประยุกต์ / Slash Chord)`));
     }
+    const playBtn = btn(`🔊 ฟังเสียงดีดคอร์ด ${chordName}`, () => strumGuitarChord(chordName), 'primary small');
+    playBtn.style.marginTop = '8px';
+    const hint = mk('p', 'muted small', 'สาย 6 (ซ้าย) → สาย 1 (ขวา)');
+    hint.style.textAlign = 'center';
+    wrap.append(playBtn, hint);
     box.appendChild(wrap);
   });
 }
@@ -357,8 +455,7 @@ const safeCut = (i, s) => {
 
 function isChordLine(l) {
   if (!l.trim()) return false;
-  // Support chord lines like "G / Em / C / D" or "Intro : G/Em/C/D (2 ครั้ง)"
-  const cleaned = l.replace(/^\s*(intro|instru|interlude|solo|outro|ending)\s*[:\-]?\s*/i, '')
+  const cleaned = l.replace(/^\s*(intro|instru|instrument|interlude|solo|outro|outtro|ending)\s*[:\-]?\s*/i, '')
                    .replace(/\(.*?\)/g, '')
                    .replace(/[|/\\\-]+/g, ' ')
                    .trim();
@@ -373,8 +470,8 @@ function getSectionType(line) {
   if (/^(chorus|hook|ฮุก|ท่อนฮุก)/i.test(clean)) return 'chorus';
   if (/^(verse|ท่อน|เวิร์ส|\d+)/i.test(clean)) return 'verse';
   if (/^(bridge|ท่อนแยก|ส่ง)/i.test(clean)) return 'bridge';
-  if (/^(solo|instru|interlude|โซโล่)/i.test(clean)) return 'solo';
-  if (/^(outro|out-tro|ending|จบ|ท่อนจบ)/i.test(clean)) return 'outro';
+  if (/^(solo|instru|instrument|interlude|โซโล่)/i.test(clean)) return 'solo';
+  if (/^(outro|outtro|out-tro|ending|จบ|ท่อนจบ)/i.test(clean)) return 'outro';
   return 'general';
 }
 
@@ -389,8 +486,7 @@ function parseSong(text) {
       continue;
     }
 
-    // Check if line is "Intro : G/Em/C/D"
-    const introInline = line.match(/^\s*(intro|instru|interlude|solo|outro|ending)\s*[:\-]\s*(.+)$/i);
+    const introInline = line.match(/^\s*(intro|instru|instrument|interlude|solo|outro|outtro|ending)\s*[:\-]\s*(.+)$/i);
     if (introInline && isChordLine(introInline[2])) {
       const secName = introInline[1].charAt(0).toUpperCase() + introInline[1].slice(1).toLowerCase();
       out.push({ type: 'section', secType: getSectionType(secName), text: `[${secName}]` });
@@ -403,7 +499,6 @@ function parseSong(text) {
     if (isChordLine(line)) {
       const toks = [...line.matchAll(/\S+/g)].map(m => ({ t: m[0], i: m.index }));
       const next = L[i + 1];
-      // Do not merge with guitar tab lines (e.g., 1|---5---)
       const isTabLine = next && /^\s*[1-6eBGDAE]\s*[|\-]/.test(next);
       if (next !== undefined && next.trim() && !isChordLine(next) && !isTabLine) {
         let p = 0;
@@ -441,7 +536,7 @@ function parseSong(text) {
 
     const isSection = line.length < 50 && (
       /^\s*\[[^\]]+\]\s*$/.test(line) ||
-      /^\s*(intro|verse|chorus|hook|bridge|solo|instru|outro|ending|interlude|pre-?chorus|ท่อน|อินโทร|ฮุก|ท่อนฮุก|โซโล่|ท่อนจบ)\s*[:\-]?\s*$/i.test(line)
+      /^\s*(intro|verse|chorus|hook|bridge|solo|instru|instrument|outro|outtro|ending|interlude|pre-?chorus|ท่อน|อินโทร|ฮุก|ท่อนฮุก|โซโล่|ท่อนจบ)\s*[:\-]?\s*$/i.test(line)
     );
 
     if (isSection) {
@@ -454,7 +549,21 @@ function parseSong(text) {
   return out;
 }
 
-// วิเคราะห์คีย์เพลงจริงจากคอร์ดทั้งหมดในเพลง
+// ดึงรายชื่อคอร์ดทั้งหมดที่ปรากฏในเนื้อเพลงจริงๆ
+function extractUniqueChordsFromSheet(text) {
+  const list = [];
+  for (const l of parseSong(text)) {
+    if (l.segs) {
+      for (const s of l.segs) {
+        if (isChord(s.chord) && !list.includes(s.chord)) {
+          list.push(s.chord);
+        }
+      }
+    }
+  }
+  return list;
+}
+
 function detectKey(text, titleHint = '') {
   const allChords = [];
   for (const l of parseSong(text)) {
@@ -464,7 +573,7 @@ function detectKey(text, titleHint = '') {
       }
     }
   }
-  return detectTrueKeyFromChords(allChords, titleHint + ' ' + text);
+  return detectTrueKeyFromChords(allChords, titleHint);
 }
 
 function renderSheet(box, text, shift, flat) {
@@ -489,7 +598,7 @@ function renderSheet(box, text, shift, flat) {
         const trChord = s.chord ? transposeChord(s.chord, shift, flat) : '';
         const chSpan = mk('span', 'ch', trChord);
         if (trChord && isChord(trChord)) {
-          chSpan.title = `แตะเพื่อดูตารางคอร์ด ${trChord}`;
+          chSpan.title = `แตะเพื่อฟังเสียงและดูตารางคอร์ด ${trChord}`;
           chSpan.onclick = (e) => {
             e.stopPropagation();
             showChordPopup(trChord);
@@ -515,15 +624,15 @@ function smartFormatChordSheet(rawText, convertToBracket = false) {
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i].trimEnd();
 
-    const secMatch = line.match(/^\s*[\[(]?\s*(intro|verse\s*\d*|chorus|hook|bridge|solo|instru|outro|ending|pre-?chorus|อินโทร|ฮุก|ท่อนฮุก|โซโล่|ท่อนแยก|ท่อนจบ)\s*[:\])]?\s*$/i);
+    const secMatch = line.match(/^\s*[\[(]?\s*(intro|verse\s*\d*|chorus|hook|bridge|solo|instru|instrument|outro|outtro|ending|pre-?chorus|อินโทร|ฮุก|ท่อนฮุก|โซโล่|ท่อนแยก|ท่อนจบ)\s*[:\])]?\s*$/i);
     if (secMatch) {
       let name = secMatch[1].trim();
       const lower = name.toLowerCase();
       if (/intro|อินโทร/i.test(lower)) name = 'Intro';
       else if (/chorus|hook|ฮุก|ท่อนฮุก/i.test(lower)) name = 'Chorus';
-      else if (/solo|instru|โซโล่/i.test(lower)) name = 'Solo';
+      else if (/solo|instru|instrument|โซโล่/i.test(lower)) name = 'Solo';
       else if (/bridge|ท่อนแยก/i.test(lower)) name = 'Bridge';
-      else if (/outro|ending|ท่อนจบ/i.test(lower)) name = 'Outro';
+      else if (/outro|outtro|ending|ท่อนจบ/i.test(lower)) name = 'Outro';
       else if (/verse/i.test(lower)) name = name.charAt(0).toUpperCase() + name.slice(1);
 
       formatted.push(`\n[${name}]`);
@@ -552,7 +661,8 @@ function smartFormatChordSheet(rawText, convertToBracket = false) {
 }
 
 /* ==============================================================================
- * 5) Real Web Chord Search & Extractor (ดึงคอร์ดจริงและคีย์เพลงจริงๆ จากเว็บ)
+ * 5) Real Web Chord Search & Key-Consistent Extractor
+ *    (ดึงเฉพาะตารางคอร์ดจริงจากเว็บ และซิงก์คีย์กับคอร์ดในเนื้อเพลงให้ตรงกัน 100%)
  * ============================================================================== */
 function cleanTitle(t) {
   return (t || '')
@@ -592,7 +702,6 @@ function parseTitleAndArtist(rawTitle, url = '') {
   return { title, artist };
 }
 
-// สกัดเฉพาะท่อนคอร์ดและเนื้อเพลงจากเนื้อหาเว็บที่ดึงผ่าน Jina Reader หรือ HTML
 function cleanExtractedWebChordPage(rawContent) {
   const lines = String(rawContent || '').replace(/\r/g, '').split('\n');
   let rawTitle = '';
@@ -608,10 +717,9 @@ function cleanExtractedWebChordPage(rawContent) {
       continue;
     }
 
-    // Skip navigation, login, header junk before the song starts
     if (!startedChordSection) {
       if (
-        /^(Intro|Instru|Verse|Chorus|Solo)\s*[:\-]/i.test(trimmed) ||
+        /^(Intro|Instru|Instrument|Verse|Chorus|Solo)\s*[:\-]/i.test(trimmed) ||
         /^เพลง\s+.+/i.test(trimmed) ||
         isChordLine(line) ||
         (/\[([A-G][#b]?[^\]]*)\]/.test(line))
@@ -622,7 +730,6 @@ function cleanExtractedWebChordPage(rawContent) {
       }
     }
 
-    // Stop if we hit footer / comments / related songs at bottom of page
     if (
       /^(ความคิดเห็น|คอมเมนต์|เพลงอื่นๆ|คอร์ดเพลงอื่นๆ|แชร์ไปยัง|Tags:|Copyright|All Rights Reserved)/i.test(trimmed) ||
       trimmed.startsWith('*   [')
@@ -630,12 +737,10 @@ function cleanExtractedWebChordPage(rawContent) {
       break;
     }
 
-    // Skip markdown images or links
     if (/^!\[.*?\]\(.*?\)$/.test(trimmed) || /^\[.*?\]\(https?:\/\/.*?\)$/.test(trimmed)) {
       continue;
     }
 
-    // Skip guitar ASCII tab lines (e.g. 1|---5--- or 6|-4--4h6) so chord sheet stays clean for singing/strumming
     if (/^\s*[1-6eBGDAE]\s*[|\-][0-9hHpPsb/\-^]+/.test(trimmed) || /^-{15,}$/.test(trimmed)) {
       continue;
     }
@@ -648,7 +753,6 @@ function cleanExtractedWebChordPage(rawContent) {
 }
 
 function extractChordTextFromHtml(html) {
-  // If response is from r.jina.ai (Markdown/Text format)
   if (html.startsWith('Title:') && html.includes('Markdown Content:')) {
     return cleanExtractedWebChordPage(html);
   }
@@ -689,14 +793,12 @@ function extractChordTextFromHtml(html) {
 }
 
 async function fetchPageWithFallbacks(url) {
-  // 1. Custom User Proxy (if specified)
   const userProxy = (LS.get(PROXY, '') || '').trim();
   if (userProxy) {
     const r = await fetch(userProxy.replace('{url}', encodeURIComponent(url)));
     if (r.ok) return r.text();
   }
 
-  // 2. Jina Reader API (Fast, CORS-enabled, extracts clean text/chords from MusicATM, blogs, etc.)
   const endpoints = [
     `https://r.jina.ai/${url}`,
     `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
@@ -706,7 +808,7 @@ async function fetchPageWithFallbacks(url) {
   for (const endpoint of endpoints) {
     try {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 8000);
+      const timer = setTimeout(() => ctrl.abort(), 8500);
       const res = await fetch(endpoint, { signal: ctrl.signal });
       clearTimeout(timer);
       if (res.ok) {
@@ -721,18 +823,15 @@ async function fetchPageWithFallbacks(url) {
   throw new Error('ไม่สามารถดึงข้อมูลจากลิงก์นี้ได้');
 }
 
-// สกัดรายชื่อคอร์ดจริงและคีย์จริงจากข้อความตัวอย่าง (Search Snippet) ของเว็บคอร์ด
 function extractRealChordsFromSnippet(title, snippet) {
   const combined = `${title} ${snippet}`.replace(/\*\*/g, '');
   const chords = [];
 
-  // Look for patterns like "ประกอบด้วย คอร์ด G, คอร์ด Em, คอร์ด C, คอร์ด D" or "( Key G )"
   const chordMentions = [...combined.matchAll(/(?:คอร์ด|chord)\s+([A-G][#b]?(?:maj|min|dim|aug|sus|add|m|M|\d+)*(?:\/[A-G][#b]?)?)\b/gi)];
   for (const m of chordMentions) {
     if (isChord(m[1]) && !chords.includes(m[1])) chords.push(m[1]);
   }
 
-  // Also check comma-separated chord lists
   const listMatch = combined.match(/ประกอบด้วย[^.]*/i);
   if (listMatch) {
     for (const tok of listMatch[0].split(/[\s,]+/)) {
@@ -745,15 +844,55 @@ function extractRealChordsFromSnippet(title, snippet) {
   return { chords, trueKey };
 }
 
-// ค้นหาหน้าคอร์ดจริงและคีย์เพลงจริงจากเว็บคอร์ดโดยตรงผ่าน DuckDuckGo Lite + Jina Reader
+function parseDdgLiteMarkdown(md, q) {
+  const items = [];
+  const entryRegex = /\d+\.\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)\s*\n([\s\S]*?)(?=\n\d+\.\[|$)/g;
+  for (const m of md.matchAll(entryRegex)) {
+    const rawLinkTitle = m[1].trim();
+    let targetUrl = m[2].trim();
+    const snippetBlock = m[3].trim();
+
+    const uddgMatch = targetUrl.match(/[?&]uddg=([^&]+)/);
+    if (uddgMatch) {
+      targetUrl = decodeURIComponent(uddgMatch[1]);
+    }
+
+    let domain = '';
+    try {
+      domain = new URL(targetUrl).hostname.replace(/^www\./, '');
+    } catch {
+      continue;
+    }
+
+    if (/\/(artist|category|tag|search)\//i.test(targetUrl)) continue;
+
+    const { chords, trueKey } = extractRealChordsFromSnippet(rawLinkTitle, snippetBlock);
+    const { title, artist } = parseTitleAndArtist(rawLinkTitle);
+
+    items.push({
+      id: 'web-' + hash(targetUrl),
+      title: title || q,
+      artist: artist || domain,
+      key: trueKey || '',
+      realChords: chords,
+      url: targetUrl,
+      domain,
+      snippet: snippetBlock.replace(/\*\*/g, '').split('\n')[0].slice(0, 120),
+      source: 'web'
+    });
+  }
+  return items;
+}
+
+// ค้นหาหน้าคอร์ดจริงจากเว็บ โดยยิงค้นหาแหล่งที่ดึงตารางคอร์ดจริงได้ 100% (MusicATM) ควบคู่กับเว็บคอร์ดทั่วไป
 async function searchRealWebChords(query) {
   const q = query.trim();
-  if (!q) return [];
+  if (!q) return { results: [], webTrueKey: '', webChordsSummary: [] };
 
   const results = [];
   const t = q.toLowerCase().split(/\s+/).filter(Boolean);
 
-  // 1. ตรวจสอบเพลงคอร์ดจริงในคลังมาตรฐานของแอปก่อน
+  // 1. คลังเพลงคอร์ดจริงในแอป
   for (const s of MOCK_DB) {
     const h = (s.title + ' ' + s.artist).toLowerCase();
     if (t.every(x => h.includes(x))) {
@@ -761,86 +900,59 @@ async function searchRealWebChords(query) {
         ...s,
         source: 'builtin',
         domain: 'คลังคอร์ดจริงในแอป',
-        realChords: [...new Set([...s.text.matchAll(/\b([A-G][#b]?(?:m|maj|min|sus|add|\d)*)\b/g)].map(m => m[1]).filter(isChord))].slice(0, 6)
+        realChords: extractUniqueChordsFromSheet(s.text)
       });
     }
   }
 
-  // 2. ค้นหาหน้าคอร์ดจริงจากเว็บคอร์ดเพลงไทยและสากล (dochord, chordzaa, chordtabs, musicatm, guitarthai, ultimate-guitar)
+  // 2. ค้นหาคู่ขนาน: (A) ค้นเจาะจงฐานข้อมูล MusicATM (ดึงตารางคอร์ดจริง+ตำแหน่งคอร์ดแม่นยำ 100%) และ (B) ค้นเว็บคอร์ดทั่วไปเพื่อสกัดคีย์และชุดคอร์ดอ้างอิง
   let webChordsSummary = [];
   let webTrueKey = '';
 
-  try {
-    const ddgUrl = `https://r.jina.ai/https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(q + ' คอร์ด')}`;
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 9000);
-    const res = await fetch(ddgUrl, { signal: ctrl.signal });
-    clearTimeout(timer);
+  const fetchDdg = async (searchStr) => {
+    try {
+      const ddgUrl = `https://r.jina.ai/https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(searchStr)}`;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8500);
+      const res = await fetch(ddgUrl, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (res.ok) return parseDdgLiteMarkdown(await res.text(), q);
+    } catch {}
+    return [];
+  };
 
-    if (res.ok) {
-      const md = await res.text();
-      // Parse numbered results from DuckDuckGo Lite markdown
-      const entryRegex = /\d+\.\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)\s*\n([\s\S]*?)(?=\n\d+\.\[|$)/g;
-      for (const m of md.matchAll(entryRegex)) {
-        const rawLinkTitle = m[1].trim();
-        let targetUrl = m[2].trim();
-        const snippetBlock = m[3].trim();
+  const [musicAtmItems, generalItems] = await Promise.all([
+    fetchDdg(`${q} คอร์ด site:musicatm.com`),
+    fetchDdg(`${q} คอร์ด`)
+  ]);
 
-        // Decode DuckDuckGo uddg redirect parameter
-        const uddgMatch = targetUrl.match(/[?&]uddg=([^&]+)/);
-        if (uddgMatch) {
-          targetUrl = decodeURIComponent(uddgMatch[1]);
-        }
+  const seenUrls = new Set();
+  for (const item of [...musicAtmItems, ...generalItems]) {
+    if (seenUrls.has(item.url)) continue;
+    seenUrls.add(item.url);
 
-        let domain = '';
-        try {
-          domain = new URL(targetUrl).hostname.replace(/^www\./, '');
-        } catch {
-          continue;
-        }
-
-        // Skip generic artist/category index pages
-        if (/\/(artist|category|tag|search)\//i.test(targetUrl)) continue;
-
-        const { chords, trueKey } = extractRealChordsFromSnippet(rawLinkTitle, snippetBlock);
-        if (chords.length > webChordsSummary.length) webChordsSummary = chords;
-        if (trueKey && !webTrueKey) webTrueKey = trueKey;
-
-        const { title, artist } = parseTitleAndArtist(rawLinkTitle);
-
-        results.push({
-          id: 'web-' + hash(targetUrl),
-          title: title || q,
-          artist: artist || domain,
-          key: trueKey || webTrueKey || '',
-          realChords: chords,
-          url: targetUrl,
-          domain,
-          snippet: snippetBlock.replace(/\*\*/g, '').split('\n')[0].slice(0, 120),
-          source: 'web'
-        });
-      }
+    if (item.realChords && item.realChords.length > webChordsSummary.length) {
+      webChordsSummary = item.realChords;
     }
-  } catch (err) {
-    console.warn('[Web Chord Search] Error:', err);
+    if (item.key && !webTrueKey) {
+      webTrueKey = item.key;
+    }
+    results.push(item);
   }
 
-  // Propagate detected true original key and real chords across matching results of the same song
-  if (webTrueKey || webChordsSummary.length) {
-    for (const r of results) {
-      if (!r.key && webTrueKey) r.key = webTrueKey;
-      if ((!r.realChords || !r.realChords.length) && webChordsSummary.length) {
-        r.realChords = webChordsSummary;
-      }
+  for (const r of results) {
+    if (!r.key && webTrueKey) r.key = webTrueKey;
+    if ((!r.realChords || !r.realChords.length) && webChordsSummary.length) {
+      r.realChords = webChordsSummary;
     }
   }
 
-  // Sort results: prioritize builtin full sheets & directly scrapable sites (musicatm.com, ultimate-guitar, etc.) first
   results.sort((a, b) => {
     const score = item => {
       if (item.source === 'builtin') return 100;
-      if (item.domain.includes('musicatm.com')) return 90;
-      if (item.realChords && item.realChords.length >= 3) return 80;
+      if (item.domain.includes('musicatm.com')) return 95;
+      if (item.domain.includes('ultimate-guitar.com')) return 85;
+      if (item.realChords && item.realChords.length >= 3) return 75;
       return 50;
     };
     return score(b) - score(a);
@@ -849,90 +961,58 @@ async function searchRealWebChords(query) {
   return { results, webTrueKey, webChordsSummary };
 }
 
-// ดึงเนื้อเพลงพร้อมวางคอร์ดจริงจากเว็บ (หรือประกอบเนื้อเพลงจริงเข้ากับชุดคอร์ดจริงและคีย์จริงที่สกัดได้จากเว็บคอร์ด)
-async function loadRealWebChordResult(item, allResults, webTrueKey, webChordsSummary) {
-  // 1. Try direct extraction from the selected URL first
-  const candidateUrls = [item.url];
-  // Also include any musicatm.com result for the same song as a high-reliability full-sheet fallback
+// ดึงตารางคอร์ดจริงจากเว็บ และตรวจสอบให้ "คีย์ของเพลง" กับ "คอร์ดที่แสดงบนเนื้อเพลง" ตรงกัน 100% เสมอ (ไม่วางคอร์ดมั่วเด็ดขาด)
+async function loadRealWebChordResult(item, allResults) {
+  const candidateUrls = [];
+  if (item.url) candidateUrls.push(item.url);
+
+  // If the clicked site is protected by Cloudflare (e.g. dochord/chordzaa), automatically fall back to MusicATM URLs for the same song
   for (const r of allResults) {
     if (r.url && r.domain && r.domain.includes('musicatm.com') && !candidateUrls.includes(r.url)) {
       candidateUrls.push(r.url);
     }
   }
 
+  // If no MusicATM URL was in the initial list, do a quick targeted lookup for this song title on MusicATM
+  if (!candidateUrls.some(u => u.includes('musicatm.com'))) {
+    try {
+      const ddgUrl = `https://r.jina.ai/https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(item.title + ' คอร์ด site:musicatm.com')}`;
+      const res = await fetch(ddgUrl);
+      if (res.ok) {
+        const extra = parseDdgLiteMarkdown(await res.text(), item.title);
+        for (const ex of extra) {
+          if (ex.url && !candidateUrls.includes(ex.url)) candidateUrls.push(ex.url);
+        }
+      }
+    } catch {}
+  }
+
   for (const targetUrl of candidateUrls) {
-    if (!targetUrl) continue;
     try {
       const rawHtml = await fetchPageWithFallbacks(targetUrl);
       const { rawTitle, text } = extractChordTextFromHtml(rawHtml);
-      // Verify that the extracted text genuinely contains chord lines or inline chords
-      const detected = detectKey(text, rawTitle);
-      if (text && text.length > 100 && detected) {
+      const formattedText = smartFormatChordSheet(text, false);
+      const sheetChords = extractUniqueChordsFromSheet(formattedText);
+
+      // Must contain real chords extracted from the sheet itself
+      if (formattedText && formattedText.length > 80 && sheetChords.length >= 2) {
+        // Compute the EXACT key of the chords actually present on the lyrics sheet!
+        const actualSheetKey = detectTrueKeyFromChords(sheetChords, formattedText);
         const parsed = parseTitleAndArtist(rawTitle, targetUrl);
+
         return {
           id: item.id,
           title: item.title || parsed.title,
-          artist: item.artist || parsed.artist,
-          key: item.key || detected,
-          text: smartFormatChordSheet(text, false),
+          artist: (item.artist && !item.artist.includes('.com')) ? item.artist : (parsed.artist || item.artist),
+          key: actualSheetKey || item.key || sheetChords[0],
+          text: formattedText,
           src: targetUrl
         };
       }
     } catch {}
   }
 
-  // 2. If the target site has Cloudflare CAPTCHA (e.g. dochord/chordzaa), we already extracted the REAL original key & REAL chords from its search metadata!
-  // Fetch the exact lyrics from LRCLIB and pair them with the real extracted chord list & original key from the chord site.
-  const trueKey = item.key || webTrueKey || 'C';
-  const realChords = (item.realChords && item.realChords.length) ? item.realChords : (webChordsSummary.length ? webChordsSummary : [trueKey]);
-
-  let lyricsText = '';
-  try {
-    const cleanQ = item.title.replace(/\(.*?\)/g, '').trim();
-    const res = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(cleanQ)}`);
-    if (res.ok) {
-      const lrcData = await res.json();
-      const match = (lrcData || []).find(x => x.plainLyrics);
-      if (match) lyricsText = match.plainLyrics;
-    }
-  } catch {}
-
-  const chordHeader = `[คอร์ดจริงจากเว็บ ${item.domain}: ${realChords.join('  ')}]\n[Intro]\n${realChords.slice(0, 4).join('   ')}\n`;
-
-  if (lyricsText) {
-    // Align real chords extracted from the web onto the song paragraphs without inventing fake keys
-    const lines = lyricsText.replace(/\r/g, '').split('\n');
-    const out = [chordHeader];
-    let cIdx = 0;
-    for (const l of lines) {
-      const trimmed = l.trim();
-      if (!trimmed) {
-        out.push('');
-        continue;
-      }
-      const c1 = realChords[cIdx % realChords.length];
-      const c2 = realChords[(cIdx + 1) % realChords.length];
-      cIdx += 2;
-      out.push(`${c1}                 ${c2}\n${trimmed}`);
-    }
-    return {
-      id: item.id,
-      title: item.title,
-      artist: item.artist,
-      key: trueKey,
-      text: out.join('\n'),
-      src: item.url
-    };
-  }
-
-  return {
-    id: item.id,
-    title: item.title,
-    artist: item.artist,
-    key: trueKey,
-    text: `${chordHeader}\n${item.snippet || ''}`,
-    src: item.url
-  };
+  throw new Error('เว็บปลายทางติดระบบป้องกัน Cloudflare');
 }
 
 /* ==============================================================================
@@ -1076,10 +1156,77 @@ const blobToDataURL = b =>
   });
 
 /* ==============================================================================
- * 8) ระบบนำทางแบบ Native PWA (Bottom Navigation & Views) & Wake Lock
+ * 8) ระบบนำทางแบบ Native PWA, Metronome & Wake Lock
  * ============================================================================== */
 let current = null, curPl = null, filterMode = 'all', wakeLock = null;
 let activeSetlistContext = null;
+
+// Metronome & Tap Tempo Engine
+let metroBpm = 100, metroPlaying = false, metroTimer = null, metroBeat = 0;
+let tapTimes = [];
+
+function playMetronomeClick(isDownbeat) {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(isDownbeat ? 1100 : 750, now);
+  gain.gain.setValueAtTime(0.22, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.05);
+}
+
+function setMetronome(on) {
+  metroPlaying = on;
+  clearInterval(metroTimer);
+  const btnEl = $('#metroBtn');
+  if (btnEl) {
+    btnEl.classList.toggle('metroOn', on);
+    btnEl.textContent = on ? `⏹️ ${metroBpm} BPM` : `⏱️ ${metroBpm} BPM`;
+  }
+  if (on) {
+    metroBeat = 0;
+    playMetronomeClick(true);
+    metroTimer = setInterval(() => {
+      metroBeat = (metroBeat + 1) % 4;
+      playMetronomeClick(metroBeat === 0);
+    }, (60 / metroBpm) * 1000);
+  }
+}
+
+if ($('#metroBtn')) {
+  $('#metroBtn').onclick = () => setMetronome(!metroPlaying);
+}
+
+if ($('#tapTempoBtn')) {
+  $('#tapTempoBtn').onclick = () => {
+    const now = performance.now();
+    tapTimes = tapTimes.filter(t => now - t < 2500);
+    tapTimes.push(now);
+    if (tapTimes.length >= 2) {
+      let sum = 0;
+      for (let i = 1; i < tapTimes.length; i++) sum += tapTimes[i] - tapTimes[i - 1];
+      const avgMs = sum / (tapTimes.length - 1);
+      metroBpm = Math.min(240, Math.max(45, Math.round(60000 / avgMs)));
+      if ($('#metroBtn')) {
+        $('#metroBtn').textContent = metroPlaying ? `⏹️ ${metroBpm} BPM` : `⏱️ ${metroBpm} BPM`;
+      }
+      if (metroPlaying) setMetronome(true);
+      toast(`⏱️ จังหวะ Tap Tempo: ${metroBpm} BPM`);
+    } else {
+      toast('👆 แตะซ้ำตามจังหวะเพลงอีก 2-3 ครั้งเพื่อวัด BPM');
+    }
+  };
+}
+
+if ($('#printBtn')) {
+  $('#printBtn').onclick = () => window.print();
+}
 
 async function requestWakeLock() {
   if ('wakeLock' in navigator) {
@@ -1124,6 +1271,7 @@ function show(name, push = true) {
   if (name !== 'song') {
     setFocus(false);
     setScroll(false);
+    setMetronome(false);
     releaseWakeLock();
   } else {
     requestWakeLock();
@@ -1179,10 +1327,8 @@ $$('#bottomNav .navTab').forEach(tab => {
 });
 
 /* ==============================================================================
- * 9) ค้นหาคอร์ดจริงจากเว็บในแอป (Real In-App Web Chord Search) & คลังเพลง
+ * 9) ค้นหาคอร์ดจริงจากเว็บในแอป & คลังเพลง
  * ============================================================================== */
-let sites = LS.get(SITES, [{ d: 'musicatm.com', on: false }, { d: 'chordtabs.in.th', on: false }]);
-
 function openInAppWebFinderModal(initialQuery = '') {
   modal('🔎 ดึงคอร์ดจากลิงก์เว็บเข้าแอปโดยตรง', (box, close) => {
     const qVal = initialQuery || $('#q').value.trim();
@@ -1238,9 +1384,9 @@ async function runInAppOnlineSearch() {
   box.hidden = false;
   $('#resultsTitle').textContent = `🌐 กำลังค้นหาคอร์ดจริงจากเว็บสำหรับ “${q}”…`;
   btnEl.disabled = true;
-  list.innerHTML = `<div class="empty"><span class="spinner"></span> กำลังสืบค้นคอร์ดจริงและคีย์ต้นฉบับจากเว็บคอร์ด…</div>`;
+  list.innerHTML = `<div class="empty"><span class="spinner"></span> กำลังสืบค้นตารางคอร์ดจริงจากเว็บคอร์ด…</div>`;
 
-  const { results: items, webTrueKey, webChordsSummary } = await searchRealWebChords(q);
+  const { results: items, webTrueKey } = await searchRealWebChords(q);
   if (seq !== searchSeq) return;
   btnEl.disabled = false;
 
@@ -1283,13 +1429,13 @@ async function runInAppOnlineSearch() {
 
       b.disabled = true;
       const origSub = b.lastChild.textContent;
-      b.lastChild.textContent = '⏳ กำลังดึงหน้าคอร์ดจริงและคีย์ต้นฉบับเข้าแอป…';
+      b.lastChild.textContent = '⏳ กำลังดึงตารางคอร์ดจริงบนเนื้อเพลงเข้าแอป…';
       try {
-        const loadedSong = await loadRealWebChordResult(it, items, webTrueKey, webChordsSummary);
+        const loadedSong = await loadRealWebChordResult(it, items);
         openSong(loadedSong, 0);
-        toast(`ดึงคอร์ดเพลง “${loadedSong.title}” (คีย์ ${loadedSong.key || '-'}) เรียบร้อย ✔`);
+        toast(`ดึงตารางคอร์ดจริง “${loadedSong.title}” (คีย์ ${loadedSong.key}) เรียบร้อย ✔`);
       } catch (err) {
-        toast('ดึงหน้าเว็บนี้ไม่ได้ — ลองเลือกแหล่งเว็บอื่นในรายการครับ', true);
+        toast('เว็บนี้ติดระบบป้องกันบอท — กรุณาเลือกผลลัพธ์จากเว็บอื่นในรายการ หรือคัดลอกมาวางครับ', true);
       } finally {
         b.disabled = false;
         b.lastChild.textContent = origSub;
@@ -1357,7 +1503,6 @@ $('#q').oninput = () => {
   deb = setTimeout(doInstantLocalFilter, 120);
 };
 
-// Filter Tabs
 $$('.filterTabs .pillTab').forEach(pill => {
   pill.onclick = () => {
     filterMode = pill.dataset.filter;
@@ -1430,7 +1575,8 @@ function renderSongbook() {
     const open = mk('button', 'open');
     const t = mk('div', 't', s.title);
 
-    if (s.key) t.appendChild(mk('span', 'badge', s.key));
+    const actualKey = detectKey(s.text) || s.key;
+    if (actualKey) t.appendChild(mk('span', 'badge', actualKey));
     if (s.shift) t.appendChild(mk('span', 'badge dim', (s.shift > 0 ? '+' : '') + s.shift));
     if (s.images && s.images.length) t.appendChild(mk('span', 'badge dim', '🖼 ' + s.images.length));
     if (isDefaultSeed) t.appendChild(mk('span', 'badge dim', 'คอร์ดจริงเริ่มต้น'));
@@ -1542,7 +1688,7 @@ $('#importFile').onchange = async e => {
 };
 
 /* ==============================================================================
- * 10) หน้าแสดงคอร์ดเพลง, โหมดเวที & แถบเลื่อนเพลงใน Setlist
+ * 10) หน้าแสดงคอร์ดเพลง, แถบสรุปคอร์ดทั้งหมดในเพลง & ตัวเลือกคีย์แบบกดข้ามคีย์ได้ทันที
  * ============================================================================== */
 let twoCols = LS.get(COLS, false);
 function applyCols() {
@@ -1557,10 +1703,64 @@ $('#colToggleBtn').onclick = () => {
 applyCols();
 
 function openSong(song, shift = 0) {
-  current = { song: { ...song }, shift: normShift(shift) };
+  // Ensure the song's base key always matches the actual chords in its text sheet
+  const sheetDetectedKey = detectKey(song.text);
+  const syncedSong = {
+    ...song,
+    key: sheetDetectedKey || song.key || ''
+  };
+  current = { song: syncedSong, shift: normShift(shift) };
   renderSong(true);
   renderSongbook();
   show('song');
+}
+
+// เปิดป๊อปอัปให้เลือกคีย์ที่ต้องการเล่นได้โดยตรง (เช่น C, Db, D, Eb, E, F...) แล้วทดคอร์ดทั้งเพลงให้ตรงคีย์ทันที
+function openDirectKeyPickerModal() {
+  if (!current) return;
+  const origKey = detectKey(current.song.text) || current.song.key;
+  if (!origKey) return;
+
+  const m = origKey.match(/^([A-G][#b]?)(m(?!aj))?/);
+  if (!m) return;
+  const origRoot = noteIndex(m[1]);
+  const isMinor = !!m[2];
+  const curShift = current.shift;
+
+  modal('🎹 เลือกคีย์ที่ต้องการเล่น (Instant Key Jump)', (box, close) => {
+    const info = mk('p', 'muted small', `คีย์ต้นฉบับบนชีท: ${origKey} · แตะเลือกคีย์ที่ต้องการเพื่อให้ระบบทดคอร์ดบนเนื้อเพลงทั้งหมดให้ตรงคีย์ทันที`);
+    info.style.marginTop = '0';
+    const grid = mk('div', 'keyGrid');
+
+    const keysList = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+    for (const kRoot of keysList) {
+      const targetIdx = noteIndex(kRoot);
+      const diff = normShift(targetIdx - origRoot);
+      const label = kRoot + (isMinor ? 'm' : '');
+      const isCur = diff === curShift;
+      const shiftTxt = diff === 0 ? ' (เดิม)' : ` (${diff > 0 ? '+' : ''}${diff})`;
+
+      const kBtn = btn(label + shiftTxt, () => {
+        setShift(diff);
+        close();
+        toast(`เปลี่ยนเป็นคีย์ ${label} เรียบร้อย ✔`);
+      }, isCur ? 'activeKey' : '');
+      grid.appendChild(kBtn);
+    }
+
+    const resetBtn = btn('🔄 รีเซ็ตกลับคีย์ต้นฉบับ (' + origKey + ')', () => {
+      setShift(0);
+      close();
+    }, 'small');
+    resetBtn.style.width = '100%';
+    resetBtn.style.marginTop = '8px';
+
+    box.append(info, grid, resetBtn);
+  });
+}
+
+if ($('#keyPickerTrigger')) {
+  $('#keyPickerTrigger').onclick = openDirectKeyPickerModal;
 }
 
 function updateSetlistQueueBar() {
@@ -1595,7 +1795,10 @@ let galTok = 0, galUrls = [];
 function renderSong(reload = true) {
   if (!current) return;
   const { song, shift } = current, hasText = !!(song.text && song.text.trim());
-  const key = song.key || detectKey(song.text, song.title), flat = preferFlat(key, shift), now = key ? transposeChord(key, shift, flat) : '-';
+  // Calculate true original key directly from the chords inside the song text so key and chords NEVER mismatch
+  const key = detectKey(song.text) || song.key;
+  const flat = preferFlat(key, shift);
+  const now = key ? transposeChord(key, shift, flat) : '-';
 
   $('#cTitle').textContent = song.title;
   $('#cArtist').textContent = song.artist || 'ไม่ระบุศิลปิน';
@@ -1611,6 +1814,27 @@ function renderSong(reload = true) {
     capoEl.hidden = false;
   } else {
     capoEl.hidden = true;
+  }
+
+  // Render All Chords Used in This Song Bar (Transposed to current key!)
+  const chordsBar = $('#songChordsBar');
+  if (chordsBar) {
+    const baseChords = extractUniqueChordsFromSheet(song.text);
+    if (baseChords.length) {
+      chordsBar.hidden = false;
+      chordsBar.replaceChildren(mk('small', null, `🎸 คอร์ดในเพลง (คีย์ ${now}):`));
+      const seenTransposed = new Set();
+      for (const ch of baseChords) {
+        const tr = transposeChord(ch, shift, flat);
+        if (seenTransposed.has(tr)) continue;
+        seenTransposed.add(tr);
+        const chip = btn(tr, () => showChordPopup(tr), 'chordChip');
+        chip.title = `แตะเพื่อฟังเสียงและดูวิธีจับคอร์ด ${tr}`;
+        chordsBar.appendChild(chip);
+      }
+    } else {
+      chordsBar.hidden = true;
+    }
   }
 
   $('#sheet').hidden = !hasText;
@@ -1661,7 +1885,7 @@ const setShift = n => {
 };
 $('#upBtn').onclick = () => setShift(current.shift + 1);
 $('#downBtn').onclick = () => setShift(current.shift - 1);
-$('#resetBtn').onclick = () => setShift(0);
+$('#resetBtn').onclick = () => openDirectKeyPickerModal();
 
 $('#saveBtn').onclick = () => {
   const { song, shift } = current;
@@ -1669,7 +1893,7 @@ $('#saveBtn').onclick = () => {
     id: song.id,
     title: song.title,
     artist: song.artist || '',
-    key: song.key || detectKey(song.text, song.title),
+    key: detectKey(song.text) || song.key,
     text: song.text || '',
     images: song.images || [],
     src: song.src || '',
@@ -1789,7 +2013,7 @@ function switchEditorMode(mode) {
   $('#livePreviewBox').hidden = !isPreview;
   if (isPreview) {
     const text = $('#fText').value.trim();
-    const key = $('#fKey').value.trim() || detectKey(text, $('#fTitle').value);
+    const key = detectKey(text) || $('#fKey').value.trim();
     if (text) {
       renderSheet($('#livePreviewBox'), text, 0, preferFlat(key, 0));
     } else {
@@ -1810,7 +2034,7 @@ async function openEditor(song, prefill = '') {
   $('#editorTitle').textContent = song ? 'แก้ไขเพลง' : 'เพิ่มเพลงใหม่';
   $('#fTitle').value = song ? song.title : prefill;
   $('#fArtist').value = song ? song.artist || '' : '';
-  $('#fKey').value = song ? song.key || '' : '';
+  $('#fKey').value = song ? (detectKey(song.text) || song.key || '') : '';
   $('#fText').value = song ? song.text || '' : '';
   $('#fUrl').value = song ? song.src || '' : '';
   switchEditorMode('edit');
@@ -1916,8 +2140,10 @@ $('#formatTextBtn').onclick = () => {
     return;
   }
   $('#fText').value = smartFormatChordSheet(currentText, false);
+  const actualKey = detectKey($('#fText').value);
+  if (actualKey) $('#fKey').value = actualKey;
   if (!$('#livePreviewBox').hidden) switchEditorMode('preview');
-  toast('✨ จัดระเบียบชื่อท่อนเพลงและคอร์ดเรียบร้อย ✔');
+  toast('✨ จัดระเบียบชื่อท่อนเพลงและซิงก์คีย์เรียบร้อย ✔');
 };
 
 $('#convertBracketBtn').onclick = () => {
@@ -1954,10 +2180,8 @@ async function runOcrOnImage(blob) {
       const existing = $('#fText').value.trim();
       $('#fText').value = existing ? existing + '\n\n' + formatted : formatted;
 
-      if (!$('#fKey').value.trim()) {
-        const detected = detectKey(formatted, $('#fTitle').value);
-        if (detected) $('#fKey').value = detected;
-      }
+      const detected = detectKey($('#fText').value);
+      if (detected) $('#fKey').value = detected;
       toast('สแกนเสร็จสิ้น — นำเข้าเนื้อเพลงและคอร์ดแล้ว ✔');
     }).catch(err => {
       statusText.textContent = 'เกิดข้อผิดพลาดในการสแกน: ' + (err.message || err);
@@ -1975,19 +2199,24 @@ $('#ocrScanBtn').onclick = () => {
   runOcrOnImage(edImgs[0].blob);
 };
 
+// เมื่อผู้ใช้พิมพ์หรือเปลี่ยนช่อง "คีย์เดิม" ในหน้าแก้ไข หากคอร์ดในเนื้อเพลงเป็นคนละคีย์ จะช่วยรักษาความสอดคล้อง
 $('#editorForm').onsubmit = async e => {
   e.preventDefault();
-  const text = $('#fText').value.replace(/\s+$/, '');
+  let text = $('#fText').value.replace(/\s+$/, '');
   if (!text.trim() && !edImgs.length) {
     toast('ใส่ข้อความคอร์ด หรือแนบรูปคอร์ดอย่างน้อย 1 อย่าง', true);
     return;
   }
-  const keyRaw = $('#fKey').value.trim(), badKey = keyRaw && !isChord(keyRaw);
+
+  const sheetKey = detectKey(text);
+  const keyRaw = $('#fKey').value.trim();
+  const finalKey = isChord(keyRaw) ? keyRaw : (sheetKey || '');
+
   const song = {
     id: editingId || 'u-' + Date.now(),
     title: $('#fTitle').value.trim(),
     artist: $('#fArtist').value.trim(),
-    key: isChord(keyRaw) ? keyRaw : detectKey(text, $('#fTitle').value),
+    key: finalKey,
     text,
     images: edImgs.map(i => i.id),
     src: $('#fUrl').value.trim(),
@@ -2007,7 +2236,7 @@ $('#editorForm').onsubmit = async e => {
   if (!saveBook(book)) return;
   renderSongbook();
   openSong(song, 0);
-  toast(badKey ? 'บันทึกแล้ว (วิเคราะห์คีย์จริงจากเพลงให้อัตโนมัติ)' : 'บันทึกเพลงเรียบร้อย ✔');
+  toast('บันทึกเพลงเรียบร้อย ✔');
 };
 
 $('#addBtn').onclick = () => openEditor(null, $('#q').value.trim());
@@ -2031,9 +2260,9 @@ $('#pasteBtn').onclick = async () => {
         if (artist) $('#fArtist').value = artist;
       }
       $('#fText').value = smartFormatChordSheet(t, false);
-      const guessedKey = detectKey(t, $('#fTitle').value);
-      if (guessedKey && !$('#fKey').value) $('#fKey').value = guessedKey;
-      toast(`วางและวิเคราะห์คีย์ต้นฉบับ (${guessedKey || 'อัตโนมัติ'}) เรียบร้อย ✔`);
+      const guessedKey = detectKey($('#fText').value);
+      if (guessedKey) $('#fKey').value = guessedKey;
+      toast(`วางและวิเคราะห์คีย์จากคอร์ดในเพลง (${guessedKey || 'อัตโนมัติ'}) เรียบร้อย ✔`);
     }
   } catch {
     toast('กดค้างในช่องข้อความแล้วเลือก “วาง” ได้เลย');
@@ -2057,12 +2286,13 @@ async function importFromUrl() {
 
     if (title && !$('#fTitle').value) $('#fTitle').value = title;
     if (artist && !$('#fArtist').value) $('#fArtist').value = artist;
-    $('#fText').value = smartFormatChordSheet(text, false);
+    const formatted = smartFormatChordSheet(text, false);
+    $('#fText').value = formatted;
 
-    const trueKey = detectKey(text, rawTitle);
+    const trueKey = detectKey(formatted);
     if (trueKey) $('#fKey').value = trueKey;
 
-    toast(text.length < 80 ? 'เว็บนี้แสดงคอร์ดเป็นรูปภาพ — แนะนำให้แคปหน้าจอแล้วใช้ปุ่มสแกน OCR' : `ดึงคอร์ดจริงและคีย์ต้นฉบับ (Key ${trueKey || '-'}) เรียบร้อยแล้ว ✔`);
+    toast(formatted.length < 80 ? 'เว็บนี้แสดงคอร์ดเป็นรูปภาพ — แนะนำให้แคปหน้าจอแล้วใช้ปุ่มสแกน OCR' : `ดึงคอร์ดจริงและคีย์ต้นฉบับ (Key ${trueKey || '-'}) เรียบร้อยแล้ว ✔`);
   } catch {
     toast('เว็บปลายทางติดระบบป้องกันบอท — คัดลอกเนื้อเพลงมาวางแทนได้ครับ', true);
   } finally {
@@ -2348,7 +2578,6 @@ function openAcct() {
         body.append(em, pw, msg, btnWrap);
       }
 
-      // 3. Step-by-step Supabase Unpause & Setup Guide inside the modal
       const guideDetails = mk('details');
       guideDetails.innerHTML = `
         <summary>💡 วิธีเปิดใช้งาน Supabase Cloud Sync (เช็คจุดที่ต้องเปิด)</summary>
@@ -2368,7 +2597,6 @@ function openAcct() {
       `;
       body.appendChild(guideDetails);
 
-      // 4. Advanced Proxy & Custom Supabase Config
       const advDetails = mk('details');
       const proxyInput = mk('input');
       proxyInput.placeholder = 'Custom Proxy URL เช่น https://xxx.workers.dev/?url={url}';
@@ -2596,7 +2824,7 @@ function encodePlaylistSharePayload(plName, songs) {
       i: s.id,
       t: s.title,
       a: s.artist || '',
-      k: s.key || '',
+      k: detectKey(s.text) || s.key || '',
       x: s.text || '',
       h: s.shift || 0
     }))
@@ -2690,7 +2918,7 @@ function renderPlView() {
       id: 'sh-' + (curPl.token || 'link').slice(0, 6) + '-' + s.id,
       title: s.title,
       artist: s.artist,
-      key: s.key,
+      key: detectKey(s.text) || s.key,
       text: s.text,
       shift: s.shift || 0
     }));
@@ -2761,7 +2989,8 @@ function renderPlView() {
   songs.forEach((s, idx) => {
     const row = mk('div', 'item'), o = mk('button', 'open');
     const t = mk('div', 't', `${idx + 1}. ${s.title}`);
-    if (s.key) t.appendChild(mk('span', 'badge', s.key));
+    const k = detectKey(s.text) || s.key;
+    if (k) t.appendChild(mk('span', 'badge', k));
     o.append(t, mk('div', 'a', s.artist || 'ไม่ระบุศิลปิน'));
     o.onclick = () => {
       activeSetlistContext = { plId: p ? p.id : 'shared', name: p ? p.name : curPl.data.name, songs, index: idx };
@@ -2890,7 +3119,7 @@ function importShared() {
         id,
         title: s.title,
         artist: s.artist,
-        key: s.key,
+        key: detectKey(s.text) || s.key,
         text: s.text,
         images: [],
         src: '',

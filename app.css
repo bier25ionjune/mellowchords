@@ -1345,3 +1345,120 @@ summary {
   margin: 10px 0;
   flex-wrap: wrap;
 }
+
+/* ==============================================================================
+ * 13) Song Chords Overview Bar, Direct Key Selector & Metronome
+ * ============================================================================== */
+.songChordsBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px dashed rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-md);
+}
+
+.songChordsBar small {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.chordChip {
+  min-height: 30px;
+  padding: 2px 10px;
+  border-radius: 8px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--chord);
+  background: var(--panel2);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.chordChip:hover {
+  background: var(--accent);
+  color: #09090b;
+}
+
+/* Key Selector Grid inside Modal */
+.keyGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.keyGrid button {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.keyGrid button.activeKey {
+  background: var(--accent);
+  color: #09090b;
+  border-color: var(--accent);
+}
+
+/* Metronome Beat Pulse */
+.metroOn {
+  border-color: var(--ok) !important;
+  color: var(--ok) !important;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.25);
+}
+
+/* ==============================================================================
+ * 14) Print / PDF Export Media Query (Clean White Paper Stage Sheet)
+ * ============================================================================== */
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    padding: 0 !important;
+    font-size: 14pt !important;
+  }
+  header, #side, #bottomNav, .dock, .songTopBar, .setlistNav, .focusTopBar, .viewToggles, #toast, .modal {
+    display: none !important;
+  }
+  .app, #pane {
+    display: block !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+  .card {
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    padding: 0 !important;
+  }
+  .songTitleWrap h2 {
+    color: #000 !important;
+    font-size: 20pt !important;
+  }
+  .artist {
+    color: #444 !important;
+  }
+  .keyBar, .songChordsBar {
+    background: #f4f4f5 !important;
+    border: 1px solid #ccc !important;
+    color: #000 !important;
+  }
+  .ch, .chordChip {
+    color: #b45309 !important;
+  }
+  .ly {
+    color: #000 !important;
+  }
+  .secBadge {
+    border: 1px solid #666 !important;
+    color: #000 !important;
+    background: #eee !important;
+  }
+}
+

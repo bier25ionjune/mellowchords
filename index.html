@@ -210,6 +210,7 @@
         <button id="saveBtn" class="primary small">💾 บันทึกเข้าคลัง</button>
         <button id="favBtn" class="small iconBtn" title="รายการโปรด" aria-label="รายการโปรด">☆</button>
         <button id="plBtn" class="small" title="เพิ่มเข้าเซ็ตเพลง">➕ เซ็ตเพลง</button>
+        <button id="printBtn" class="small" title="พิมพ์คอร์ด / บันทึกเป็น PDF">🖨️ PDF</button>
         <button id="editBtn" class="small" title="แก้ไขเพลง">✏️ แก้ไข</button>
         <button id="deleteBtn" class="small danger iconBtn" hidden title="ลบเพลง" aria-label="ลบเพลง">🗑</button>
       </div>
@@ -224,17 +225,22 @@
         <button id="focusBtn" class="primary small meta">🎭 โหมดเวทีเต็มจอ</button>
       </div>
 
-      <!-- Compact Key, Capo Hint & Column Layout Toggle -->
+      <!-- Compact Key, Capo Hint, Metronome & Column Layout Toggle -->
       <div class="keyBar meta">
         <span class="keyPill">คีย์เดิม <b id="cKeyOrig">-</b></span>
-        <span class="keyPill">เล่นคีย์ <b id="cKeyNow">-</b></span>
+        <span class="keyPill" id="keyPickerTrigger" style="cursor:pointer" title="แตะเพื่อเลือกคีย์ที่ต้องการเล่นโดยตรง">เล่นคีย์ <b id="cKeyNow">-</b> ▾</span>
         <span id="capoHint" class="capoHint" hidden>🎸 ทดคีย์</span>
         <div class="viewToggles">
+          <button type="button" id="metroBtn" class="small" title="เปิด/ปิด Metronome ให้จังหวะ">⏱️ 100 BPM</button>
+          <button type="button" id="tapTempoBtn" class="small" title="แตะตามจังหวะเพลงเพื่อหาค่า BPM">👆 Tap</button>
           <button type="button" id="colToggleBtn" class="small" title="สลับแสดงผล 1 หรือ 2 คอลัมน์">📄 1 คอลัมน์</button>
         </div>
       </div>
 
-      <!-- Rendered Chord Sheet (Tap any chord to inspect guitar fingering) -->
+      <!-- All Chords Used in This Song (Tap to hear strum & view diagram) -->
+      <div id="songChordsBar" class="songChordsBar meta" hidden></div>
+
+      <!-- Rendered Chord Sheet (Tap any chord to inspect guitar fingering & sound) -->
       <div id="sheet" class="sheet"></div>
       <div id="gallery" class="gallery" hidden></div>
     </article>
@@ -243,7 +249,7 @@
     <div class="dock" role="toolbar" aria-label="แผงควบคุมการเล่นสด">
       <div class="grp" id="tpGrp">
         <button id="downBtn" class="tp" aria-label="ลดคีย์ครึ่งเสียง">−</button>
-        <div id="resetBtn" class="shiftBadge" title="แตะเพื่อรีเซ็ตคีย์เดิม" role="button" tabindex="0">
+        <div id="resetBtn" class="shiftBadge" title="แตะเพื่อเลือกคีย์หรือรีเซ็ตคีย์เดิม" role="button" tabindex="0">
           <b id="dockKey">-</b>
           <small id="shiftLabel">คีย์เดิม</small>
         </div>
@@ -261,7 +267,7 @@
 
       <div class="grp">
         <button id="scrollBtn" class="primary">⏬ เลื่อน</button>
-        <button id="speedBtn" title="ความเร็วการเลื่อนอัตโนมัติ">1x</button>
+        <button id="speedBtn" title="ความเร็วการเลื่อนอัตโนมัติ">2x</button>
       </div>
     </div>
   </div>
