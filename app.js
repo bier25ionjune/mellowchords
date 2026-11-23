@@ -18,6 +18,13 @@ const CFG = {
 const POPULAR_SONGS = [];
 const MOCK_DB = [];
 
+function hash(s) {
+  if (!s || typeof s !== 'string') return '0';
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return '' + h;
+}
+
 /* ==============================================================================
  * 2) ทฤษฎีดนตรี, การวิเคราะห์คีย์จริงจากคอร์ดในเนื้อเพลง, เสียงดีดคอร์ดกีตาร์ & Capo
  * ============================================================================== */
@@ -826,7 +833,7 @@ async function searchRealWebChords(query) {
     try {
       const ddgUrl = `https://r.jina.ai/https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(searchStr)}`;
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 8500);
+      const timer = setTimeout(() => ctrl.abort(), 16000);
       const res = await fetch(ddgUrl, { signal: ctrl.signal });
       clearTimeout(timer);
       if (res.ok) return parseDdgLiteMarkdown(await res.text(), q);
@@ -928,7 +935,7 @@ async function loadRealWebChordResult(item, allResults) {
       try {
         const jinaUrl = `https://r.jina.ai/${targetUrl}`;
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 10000);
+        const timer = setTimeout(() => ctrl.abort(), 20000);
         const res = await fetch(jinaUrl, { headers: { 'X-With-Images-Summary': 'true' }, signal: ctrl.signal });
         clearTimeout(timer);
 
@@ -966,18 +973,22 @@ async function loadRealWebChordResult(item, allResults) {
           // ดาวน์โหลดรูปภาพคอร์ดและบันทึกลง IndexedDB ให้เล่นออฟไลน์ 100% (ไม่แนบเนื้อเพลงที่รกตา)
           const images = [];
           if (chordImgUrl) {
+            const proxyImg = `https://images.weserv.nl/?url=${encodeURIComponent(chordImgUrl)}&output=webp`;
             try {
-              const proxyImg = `https://images.weserv.nl/?url=${encodeURIComponent(chordImgUrl)}&output=webp`;
               const imgRes = await fetch(proxyImg);
               if (imgRes.ok) {
                 const blob = await imgRes.blob();
                 const imgId = 'ct-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
                 await idbPut(imgId, blob);
                 images.push(imgId);
+              } else {
+                images.push(proxyImg);
               }
             } catch (imgErr) {
               console.warn('Failed to cache image in idb:', imgErr);
+              images.push(proxyImg);
             }
+            if (!images.length) images.push(proxyImg);
           }
 
           return {
@@ -1464,13 +1475,15 @@ async function runInAppOnlineSearch() {
 
       b.disabled = true;
       const origSub = b.lastChild.textContent;
-      b.lastChild.textContent = '⏳ กำลังดึงตารางคอร์ดจริงบนเนื้อเพลงเข้าแอป…';
+      const isImgTab = it.isChordtabs || (it.domain && it.domain.includes('chordtabs'));
+      b.lastChild.textContent = isImgTab ? '⏳ กำลังดึงรูปคอร์ดจาก Chordtabs เข้าแอป…' : '⏳ กำลังดึงตารางคอร์ดเข้าแอป…';
       try {
         const loadedSong = await loadRealWebChordResult(it, items);
         openSong(loadedSong, 0);
-        toast(`ดึงตารางคอร์ดจริง “${loadedSong.title}” (คีย์ ${loadedSong.key}) เรียบร้อย ✔`);
+        toast(isImgTab ? `ดึงรูปคอร์ด “${loadedSong.title}” สำเร็จ ✔` : `ดึงตารางคอร์ด “${loadedSong.title}” (คีย์ ${loadedSong.key}) เรียบร้อย ✔`);
       } catch (err) {
-        toast('เว็บนี้ติดระบบป้องกันบอท — กรุณาเลือกผลลัพธ์จากเว็บอื่นในรายการ หรือคัดลอกมาวางครับ', true);
+        console.warn('Load web chord error:', err);
+        toast('การเชื่อมต่อไปยังเว็บต้นทางใช้เวลานานหรือติดขัด กรุณาลองใหม่อีกครั้งครับ', true);
       } finally {
         b.disabled = false;
         b.lastChild.textContent = origSub;
@@ -2617,11 +2630,15 @@ async function importFromUrl() {
       if (loaded.images && loaded.images.length) {
         for (const id of loaded.images) {
           const blob = await getImg(id);
-          if (blob) edImgs.push({ id, blob, url: URL.createObjectURL(blob), isNew: false });
+          if (blob) {
+            edImgs.push({ id, blob, url: URL.createObjectURL(blob), isNew: false });
+          } else if (typeof id === 'string' && (id.startsWith('http://') || id.startsWith('https://'))) {
+            edImgs.push({ id, url: id, isNew: false });
+          }
         }
         renderThumbs();
       }
-      toast(`ดึงรูปคอร์ดและเนื้อเพลง “${loaded.title}” จาก Chordtabs สำเร็จแล้ว ✔`);
+      toast(`ดึงรูปคอร์ด “${loaded.title}” จาก Chordtabs สำเร็จแล้ว ✔`);
       return;
     }
 
@@ -2664,11 +2681,6 @@ const conf = () => {
 };
 const getPls = () => LS.get(K.pls, []), setPls = p => LS.set(K.pls, p);
 const getMeta = () => LS.get(K.meta, { songs: {}, pls: {} });
-const hash = s => {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return '' + h;
-};
 const songH = (s, f) => hash(JSON.stringify([s.title, s.artist, s.key, s.text, s.shift || 0, !(!f), s.images || []]));
 const plH = p => hash(JSON.stringify([p.name, p.songIds, !(!p.shared), p.token || '']));
 const toRow = (s, f) => ({
