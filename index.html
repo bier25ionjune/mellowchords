@@ -50,14 +50,14 @@
 <div class="app">
 <!-- ==================== LEFT SIDEBAR / MOBILE TABS (HOME & PLAYLISTS) ==================== -->
 <aside id="side">
-  <!-- Unified Instant Search & Web Search Bar -->
+  <!-- Unified Instant Search & In-App Online Search Bar -->
   <form id="searchForm" class="searchBar" autocomplete="off">
     <div class="searchWrap">
       <span class="sIcon">🔍</span>
-      <input id="q" type="search" enterkeyhint="search" placeholder="ค้นหาเพลงในคลัง หรือค้นจากเว็บ…" aria-label="ค้นหา">
+      <input id="q" type="search" enterkeyhint="search" placeholder="ค้นชื่อเพลง / ศิลปิน (ในคลัง & ออนไลน์)…" aria-label="ค้นหา">
       <button type="button" id="clearSearchBtn" class="clearBtn" hidden aria-label="ล้างคำค้น">✕</button>
     </div>
-    <button class="primary small" type="submit" title="ค้นหาคอร์ดเพลงบน Google">🌐 ค้นเว็บ</button>
+    <button id="onlineSearchBtn" class="primary small" type="submit" title="ค้นหาเพลงและเนื้อร้องออนไลน์ภายในแอป">🌐 ค้นออนไลน์</button>
   </form>
 
   <!-- Quick 1-Tap Action Cards -->
@@ -78,10 +78,11 @@
     </button>
   </div>
 
-  <!-- Built-in Demo Songs Search Results -->
+  <!-- In-App Online & Catalog Search Results (Never leaves PWA) -->
   <section id="resultsBox" class="block" hidden>
     <div class="secHeader">
-      <h2>🎵 เพลงตัวอย่างในแอป</h2>
+      <h2 id="resultsTitle">🌐 ผลการค้นหาในแอป</h2>
+      <button type="button" id="extGoogleModalBtn" class="small ghost" title="เปิดหน้าค้นหาเว็บคอร์ดในป๊อปอัป">🔎 ค้นเว็บคอร์ดเพิ่ม</button>
     </div>
     <div id="results" class="list"></div>
   </section>

@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'mellowchords-v3';
+const CACHE_NAME = 'mellowchords-v4';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -36,27 +36,24 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Fetch: offline-first for app shell, network-first for Supabase & external proxies
+// Fetch: offline-first for app shell, complete bypass for Supabase & external APIs
 self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // Non-GET requests (e.g. Supabase POST/PUT): pass through
+  // Non-GET requests (e.g. Supabase Auth/DB POST/PUT/DELETE): pass through directly to network
   if (req.method !== 'GET') return;
 
-  // Supabase REST or dynamic API endpoints: network-first
-  if (url.hostname.includes('supabase.co') || url.pathname.includes('/rest/v1/') || url.pathname.includes('/auth/v1/')) {
-    event.respondWith(
-      fetch(req).catch(() => new Response(JSON.stringify({ offline: true }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 503
-      }))
-    );
-    return;
-  }
-
-  // Web scraping proxies: network-first, do not cache proxy scraping responses
-  if (url.hostname.includes('allorigins') || url.hostname.includes('corsproxy')) {
+  // Completely bypass Service Worker interception for Supabase, LRCLIB, and CORS proxies
+  // so browser handles live network & errors natively without false offline 503 responses
+  if (
+    url.hostname.includes('supabase.co') ||
+    url.hostname.includes('lrclib.net') ||
+    url.hostname.includes('allorigins') ||
+    url.hostname.includes('corsproxy') ||
+    url.hostname.includes('yahoo.com') ||
+    url.hostname.includes('duckduckgo.com')
+  ) {
     return;
   }
 
