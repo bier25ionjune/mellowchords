@@ -1276,45 +1276,66 @@ function cleanTitle(t) {
     .trim();
 }
 
-function parseTitleAndArtist(rawTitle, url = '') {
+function parseTitleAndArtist(rawTitle, snippet = '', url = '') {
   let title = '', artist = '', key = '';
-  const str = String(rawTitle || '').replace(/[\r\n]+/g, ' ').trim();
+  let str = String(rawTitle || '').replace(/[\r\n]+/g, ' ').trim();
 
-  // Extract ( Key X )
+  // Extract key
   const km = str.match(/\(\s*Key\s*([A-G][#b]?m?)\s*\)/i) || str.match(/\bKey\s*([A-G][#b]?m?)\b/i);
   if (km) key = km[1];
 
-  let cleaned = str.replace(/\(\s*Key\s*[A-G][#b]?m?\s*\)/gi, '').trim();
+  let cleaned = str
+    .replace(/\(\s*Key\s*[A-G][#b]?m?\s*\)/gi, '')
+    .replace(/\|\s*(Chordtabs|MusicATM|คอร์ดกีตาร์|คอร์ดเพลง|sanook|guitarthai|chordzaa|meemodel).*$/i, '')
+    .trim();
 
+  // Strip pipe if any remains
   if (cleaned.includes('|')) {
     const parts = cleaned.split('|');
-    const right = parts[parts.length - 1].replace(/^คอร์ด\s*/i, '').trim();
-    const left = parts[0].replace(/^คอร์ด\s*/i, '').replace(/คอร์ด\s*$/i, '').trim();
+    cleaned = parts[0].trim();
+  }
 
-    if (right.includes(' - ')) {
-      const p = right.split(' - ');
-      title = cleanTitle(p[0]);
-      artist = cleanTitle(p[1]);
-    } else {
-      const leftClean = cleanTitle(left);
-      if (leftClean && right.toLowerCase().startsWith(leftClean.toLowerCase())) {
-        title = leftClean;
-        artist = cleanTitle(right.slice(leftClean.length));
-      } else {
-        title = leftClean;
-        artist = cleanTitle(right);
-      }
-    }
-  } else if (cleaned.includes(' - ')) {
-    const parts = cleaned.split(' - ');
-    title = cleanTitle(parts[0]);
-    artist = cleanTitle(parts[1]);
+  // Common prefix clean
+  cleaned = cleaned
+    .replace(/^(เนื้อเพลง\s*และ\s*คอร์ด|เนื้อเพลง\s*คอร์ด|คอร์ดเพลง|คอร์ดกีตาร์|คอร์ด)\s*/i, '')
+    .replace(/\s*คอร์ด(กีตาร์|เพลง)?\s*$/i, '')
+    .replace(/\s*\(คอร์ด\s*ง่ายๆ?\).*$/i, '')
+    .trim();
+
+  // Split on hyphen or slash or 'โดย'
+  if (cleaned.includes(' - ')) {
+    const parts = cleaned.split(/\s+-\s+/);
+    title = parts[0].trim();
+    artist = parts.slice(1).join(' - ')
+      .replace(/\s*[-–—]\s*(คอร์ด|เนื้อเพลง|แทปกีตาร์|musicatm|chordtabs).*$/i, '')
+      .replace(/\s*(คอร์ด|เนื้อเพลง|แทปกีตาร์|musicatm|chordtabs).*$/i, '')
+      .replace(/\s*[-–—]\s*$/, '')
+      .trim();
   } else if (cleaned.includes(' / ')) {
-    const parts = cleaned.split(' / ');
-    title = cleanTitle(parts[0]);
-    artist = cleanTitle(parts[1]);
+    const parts = cleaned.split(/\s+\/\s+/);
+    title = parts[0].trim();
+    artist = parts.slice(1).join(' / ')
+      .replace(/\s*[-–—]\s*(คอร์ด|เนื้อเพลง|แทปกีตาร์|musicatm|chordtabs).*$/i, '')
+      .replace(/\s*(คอร์ด|เนื้อเพลง|แทปกีตาร์|musicatm|chordtabs).*$/i, '')
+      .replace(/\s*[-–—]\s*$/, '')
+      .trim();
+  } else if (cleaned.includes(' โดย ')) {
+    const parts = cleaned.split(/\s+โดย\s+/);
+    title = parts[0].trim();
+    artist = parts.slice(1).join(' โดย ').trim();
   } else {
-    title = cleanTitle(cleaned);
+    title = cleaned;
+  }
+
+  // If artist is still empty, look at snippet
+  if (!artist && snippet) {
+    const artSnippet = String(snippet).match(/(?:ศิลปิน|artist)\s*[:：]\s*([^\n,;|.]+?)(?=\s+(?:อัลบั้ม|album|ค่าย|สังกัด|คำร้อง|ทำนอง|เรียบเรียง|$|\n))/i);
+    if (artSnippet) artist = artSnippet[1].trim();
+  }
+
+  // If title still contains artist at the end (e.g. 'ฝนตกไหม Three Man Down')
+  if (artist && title.toLowerCase().endsWith(artist.toLowerCase())) {
+    title = title.slice(0, title.length - artist.length).trim();
   }
 
   if (!title && url) {
@@ -1492,7 +1513,7 @@ function parseDdgLiteMarkdown(md, q) {
     if (/\/(artist|category|tag|search)\//i.test(targetUrl)) continue;
 
     let { chords, trueKey } = extractRealChordsFromSnippet(rawLinkTitle, snippetBlock);
-    const { title, artist, key } = parseTitleAndArtist(rawLinkTitle, targetUrl);
+    const { title, artist, key } = parseTitleAndArtist(rawLinkTitle, snippetBlock, targetUrl);
     if (key && !trueKey) trueKey = key;
 
     const isChordtabs = domain.includes('chordtabs.in.th');
@@ -1501,7 +1522,7 @@ function parseDdgLiteMarkdown(md, q) {
     items.push({
       id: 'web-' + hash(targetUrl),
       title: title || q,
-      artist: artist || (isChordtabs ? 'Chordtabs' : domain),
+      artist: artist || (isChordtabs ? 'ศิลปินต้นฉบับ' : domain),
       key: trueKey || '',
       realChords: chords,
       url: targetUrl,
@@ -1803,6 +1824,7 @@ async function scanImageWithOCR(imageFileOrBlob, progressCb) {
  * ============================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const escapeHtml = s => String(s || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
 function mk(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -2175,11 +2197,13 @@ async function runInAppOnlineSearch() {
     }
     titleEl.appendChild(mk('span', 'badge green', it.domain));
 
-    const subText = (it.realChords && it.realChords.length)
-      ? `คอร์ดในเพลง: ${it.realChords.join(', ')}`
-      : (it.artist || it.snippet || '');
+    const artistEl = mk('div', 'a');
+    const chordsInfo = (it.realChords && it.realChords.length)
+      ? `<span class="muted small" style="margin-left:6px">· คอร์ด: ${it.realChords.slice(0, 7).join(' ')}</span>`
+      : '';
+    artistEl.innerHTML = `<span class="artistTag">🎤 <b>${escapeHtml(it.artist || 'ไม่ระบุศิลปิน')}</b></span>${chordsInfo}`;
 
-    b.append(titleEl, mk('div', 'a', subText));
+    b.append(titleEl, artistEl);
 
     b.onclick = async () => {
       activeSetlistContext = null;
@@ -2280,7 +2304,9 @@ function doInstantLocalFilter() {
       titleEl.appendChild(mk('span', 'badge', `Key ${it.key}`));
       const isSaved = loadBook().some(s => s.id === it.id);
       titleEl.appendChild(mk('span', 'badge ' + (isSaved ? 'green' : 'dim'), isSaved ? '💾 ในคลัง' : '🔥 เพลงฮิต'));
-      b.append(titleEl, mk('div', 'a', it.artist));
+      const artistEl = mk('div', 'a');
+      artistEl.innerHTML = `<span class="artistTag">🎤 <b>${escapeHtml(it.artist || 'ไม่ระบุศิลปิน')}</b></span>`;
+      b.append(titleEl, artistEl);
       b.onclick = () => {
         activeSetlistContext = null;
         const sv = loadBook().find(s => s.id === it.id);
@@ -2410,7 +2436,9 @@ function renderSongbook() {
       t.appendChild(mk('span', 'badge dim', '🔥 ฮิต'));
     }
 
-    open.append(t, mk('div', 'a', s.artist || 'ไม่ระบุศิลปิน'));
+    const artistEl = mk('div', 'a');
+    artistEl.innerHTML = `<span class="artistTag">🎤 <b>${escapeHtml(s.artist || 'ไม่ระบุศิลปิน')}</b></span>`;
+    open.append(t, artistEl);
     open.onclick = () => {
       activeSetlistContext = null;
       openSong(s, s.shift || 0);
@@ -2902,6 +2930,7 @@ applyFs();
 function setFocus(on) {
   document.body.classList.toggle('focus', on);
   $('#exitFocus').hidden = !on;
+  if ($('#stageQuickSearchBtn')) $('#stageQuickSearchBtn').hidden = !on;
   if (on) {
     scrollTo(0, 0);
     requestWakeLock();
@@ -2957,8 +2986,13 @@ $('#speedBtn').onclick = () => {
 );
 
 addEventListener('keydown', e => {
-  if (document.body.dataset.view !== 'song') return;
   if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+  if (e.key === '/' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) {
+    e.preventDefault();
+    openQuickSongSwitcherModal();
+    return;
+  }
+  if (document.body.dataset.view !== 'song') return;
   if (e.code === 'Space') {
     e.preventDefault();
     setScroll(!scrolling);
@@ -4732,6 +4766,317 @@ async function installPWA() {
 
 const pwaBtn = $('#pwaInstallHeaderBtn');
 if (pwaBtn) pwaBtn.onclick = installPWA;
+
+
+/* ==============================================================================
+ * 14.5) โหมดค้นหาเพลงต่อไปด่วน (Next Song Quick Switcher จากทุกหน้า)
+ * ============================================================================== */
+function openQuickSongSwitcherModal(initialQuery = '') {
+  modal('🔍 ค้นหาเพลงต่อไป (Next Song Jump)', (box, close) => {
+    box.classList.add('quickSwitcherBox');
+
+    const contextBanner = mk('div', 'qsContextBanner');
+    if (activeSetlistContext && activeSetlistContext.songs && activeSetlistContext.songs.length) {
+      const curIdx = activeSetlistContext.index;
+      const total = activeSetlistContext.songs.length;
+      contextBanner.innerHTML = `
+        <div class="qsContextTitle">🎼 เซ็ตเพลง: <b>${escapeHtml(activeSetlistContext.name)}</b> (เพลงที่ ${curIdx + 1}/${total})</div>
+        <small class="muted">แตะเพลงถัดไปในเซ็ต หรือค้นหาเพลงใหม่เพื่อเปลี่ยนเพลงทันที</small>
+      `;
+    } else if (current && current.song) {
+      contextBanner.innerHTML = `
+        <div class="qsContextTitle">🎸 เพลงปัจจุบัน: <b>${escapeHtml(current.song.title)}</b> (${escapeHtml(current.song.artist || 'ศิลปิน')})</div>
+        <small class="muted">แตะเพลงด้านล่าง หรือพิมพ์ค้นหาเพื่อเล่นเพลงต่อไปทันที</small>
+      `;
+    } else {
+      contextBanner.innerHTML = `
+        <div class="qsContextTitle">🎵 ค้นหาเพลงที่ต้องการเล่น</div>
+        <small class="muted">พิมพ์ชื่อเพลง หรือ ศิลปิน เพื่อเปิดคอร์ดทันที</small>
+      `;
+    }
+
+    const searchWrap = mk('div', 'searchWrap');
+    searchWrap.style.margin = '10px 0 8px';
+    const sIcon = mk('span', 'sIcon', '🔍');
+    const input = mk('input');
+    input.type = 'search';
+    input.id = 'qsModalInput';
+    input.placeholder = 'พิมพ์ชื่อเพลง หรือ ศิลปิน เพื่อเปลี่ยนเพลงทันที…';
+    input.value = initialQuery;
+    input.autocomplete = 'off';
+    input.autocapitalize = 'none';
+
+    const clearBtn = mk('button', 'clearBtn', '✕');
+    clearBtn.type = 'button';
+    clearBtn.hidden = !initialQuery;
+    clearBtn.onclick = () => {
+      input.value = '';
+      clearBtn.hidden = true;
+      renderQsResults('');
+      input.focus();
+    };
+
+    searchWrap.append(sIcon, input, clearBtn);
+
+    const chipsWrap = mk('div', 'popularChipsBar');
+    chipsWrap.style.margin = '0 0 8px';
+    chipsWrap.style.padding = '6px 8px';
+    const chipsHeader = mk('div', 'chipsHeader');
+    chipsHeader.innerHTML = '<span class="chipsLabel">🔥 เพลงฮิตเล่นสด:</span><small class="muted">แตะเพื่อเลือก</small>';
+    const chipsTrack = mk('div', 'popularChipsTrack');
+
+    for (const name of POPULAR_SEARCH_CHIPS.slice(0, 16)) {
+      const chip = mk('button', 'popularChip', name);
+      chip.type = 'button';
+      chip.onclick = () => {
+        input.value = name;
+        clearBtn.hidden = false;
+        renderQsResults(name);
+      };
+      chipsTrack.appendChild(chip);
+    }
+    chipsWrap.append(chipsHeader, chipsTrack);
+
+    const resultsContainer = mk('div', 'qsResultsContainer');
+
+    function renderQsResults(qStr) {
+      const q = qStr.trim().toLowerCase();
+      resultsContainer.replaceChildren();
+
+      const savedBook = loadBook();
+      const allKnown = [...savedBook];
+      for (const p of POPULAR_SONGS) {
+        if (!allKnown.some(x => x.id === p.id || x.title.toLowerCase() === p.title.toLowerCase())) {
+          allKnown.push(p);
+        }
+      }
+
+      if (!q) {
+        // 1. Show upcoming in current setlist if inside setlist
+        if (activeSetlistContext && activeSetlistContext.songs && activeSetlistContext.songs.length) {
+          const songs = activeSetlistContext.songs;
+          const curIdx = activeSetlistContext.index;
+          const upcoming = songs.map((s, idx) => ({ ...s, origIdx: idx })).filter(x => x.origIdx !== curIdx);
+
+          if (upcoming.length) {
+            const setHeader = mk('div', 'qsSecHeader', `🎼 เพลงในเซ็ตลิสต์นี้ (${upcoming.length} เพลง):`);
+            resultsContainer.appendChild(setHeader);
+
+            for (const s of upcoming) {
+              const card = mk('div', 'qsItem' + (s.origIdx === curIdx + 1 ? ' qsNextInQueue' : ''));
+              const isNext = s.origIdx === curIdx + 1;
+              const titleDiv = mk('div', 'qsTitleRow');
+              titleDiv.innerHTML = `
+                <b class="qsTitle">${s.origIdx + 1}. ${escapeHtml(s.title)}</b>
+                ${s.key ? `<span class="badge">Key ${s.key}</span>` : ''}
+                ${s.targetKey && s.targetKey !== s.key ? `<span class="badge green">เล่นจริง: ${s.targetKey}</span>` : ''}
+                ${isNext ? '<span class="badge accent">⏭ คิวต่อไป</span>' : ''}
+              `;
+
+              const artistDiv = mk('div', 'qsArtistRow');
+              artistDiv.innerHTML = `
+                <span class="artistTag">🎤 <b>${escapeHtml(s.artist || 'ไม่ระบุศิลปิน')}</b></span>
+                ${s.singer ? `<span class="cuePill">🎤 ${escapeHtml(s.singer)}</span>` : ''}
+                ${s.bpm ? `<span class="cuePill">⏱️ ${s.bpm} BPM</span>` : ''}
+                ${s.cue ? `<span class="cuePill">📢 ${escapeHtml(s.cue)}</span>` : ''}
+              `;
+
+              const playIcon = mk('span', 'qsPlayAction', '▶️ เล่น');
+              card.append(titleDiv, artistDiv, playIcon);
+
+              card.onclick = () => {
+                activeSetlistContext.index = s.origIdx;
+                let startShift = typeof s.shift === 'number' ? s.shift : 0;
+                if (s.targetKey && s.key) {
+                  startShift = calcKeyShift(s.key, s.targetKey);
+                }
+                openSong(s, startShift);
+                close();
+                toast(`🎶 เล่นเพลง “${s.title}” (ศิลปิน: ${s.artist}) แล้ว ✔`);
+              };
+
+              resultsContainer.appendChild(card);
+            }
+          }
+        }
+
+        // 2. Show popular songs / library
+        const hotHeader = mk('div', 'qsSecHeader', '🔥 เพลงฮิตเล่นสด & เพลงในคลัง:');
+        resultsContainer.appendChild(hotHeader);
+
+        for (const s of allKnown.slice(0, 15)) {
+          const card = mk('div', 'qsItem');
+          const isSaved = savedBook.some(x => x.id === s.id);
+          const titleDiv = mk('div', 'qsTitleRow');
+          titleDiv.innerHTML = `
+            <b class="qsTitle">${escapeHtml(s.title)}</b>
+            ${s.key ? `<span class="badge">Key ${s.key}</span>` : ''}
+            <span class="badge ${isSaved ? 'green' : 'dim'}">${isSaved ? '💾 ในคลัง' : '🔥 เพลงฮิต'}</span>
+            ${s.images && s.images.length ? '<span class="badge dim">🖼️ คอร์ดภาพ</span>' : ''}
+          `;
+
+          const artistDiv = mk('div', 'qsArtistRow');
+          artistDiv.innerHTML = `<span class="artistTag">🎤 <b>${escapeHtml(s.artist || 'ไม่ระบุศิลปิน')}</b></span>`;
+
+          const playIcon = mk('span', 'qsPlayAction', '▶️ เล่น');
+          card.append(titleDiv, artistDiv, playIcon);
+
+          card.onclick = () => {
+            activeSetlistContext = null;
+            openSong(s, s.shift || 0);
+            close();
+            toast(`🎶 เล่นเพลง “${s.title}” (ศิลปิน: ${s.artist}) แล้ว ✔`);
+          };
+
+          resultsContainer.appendChild(card);
+        }
+        return;
+      }
+
+      // Filter with query
+      const tokens = q.split(/\s+/).filter(Boolean);
+      const matches = allKnown.filter(s => {
+        const full = (s.title + ' ' + (s.artist || '') + ' ' + (s.text || '')).toLowerCase();
+        return tokens.every(tok => full.includes(tok));
+      });
+
+      matches.sort((a, b) => {
+        const aTitle = a.title.toLowerCase().includes(q);
+        const bTitle = b.title.toLowerCase().includes(q);
+        if (aTitle && !bTitle) return -1;
+        if (!aTitle && bTitle) return 1;
+        const aArt = (a.artist || '').toLowerCase().includes(q);
+        const bArt = (b.artist || '').toLowerCase().includes(q);
+        if (aArt && !bArt) return -1;
+        if (!aArt && bArt) return 1;
+        return a.title.localeCompare(b.title, 'th');
+      });
+
+      if (matches.length) {
+        const header = mk('div', 'qsSecHeader', `🎵 พบ ${matches.length} เพลงที่ตรงกับ “${qStr}”:`);
+        resultsContainer.appendChild(header);
+
+        for (const s of matches) {
+          const card = mk('div', 'qsItem');
+          const isSaved = savedBook.some(x => x.id === s.id);
+          const inSetlist = activeSetlistContext && activeSetlistContext.songs.some(x => x.id === s.id);
+
+          const titleDiv = mk('div', 'qsTitleRow');
+          titleDiv.innerHTML = `
+            <b class="qsTitle">${escapeHtml(s.title)}</b>
+            ${s.key ? `<span class="badge">Key ${s.key}</span>` : ''}
+            ${inSetlist ? '<span class="badge accent">🎼 ในเซ็ต</span>' : ''}
+            <span class="badge ${isSaved ? 'green' : 'dim'}">${isSaved ? '💾 ในคลัง' : '🔥 เพลงฮิต'}</span>
+            ${s.images && s.images.length ? '<span class="badge dim">🖼️ คอร์ดภาพ</span>' : ''}
+          `;
+
+          const artistDiv = mk('div', 'qsArtistRow');
+          artistDiv.innerHTML = `<span class="artistTag">🎤 <b>${escapeHtml(s.artist || 'ไม่ระบุศิลปิน')}</b></span>`;
+
+          const playIcon = mk('span', 'qsPlayAction', '▶️ เล่น');
+          card.append(titleDiv, artistDiv, playIcon);
+
+          card.onclick = () => {
+            if (inSetlist) {
+              const idx = activeSetlistContext.songs.findIndex(x => x.id === s.id);
+              if (idx >= 0) activeSetlistContext.index = idx;
+            } else {
+              activeSetlistContext = null;
+            }
+            openSong(s, s.shift || 0);
+            close();
+            toast(`🎶 เล่นเพลง “${s.title}” (ศิลปิน: ${s.artist}) แล้ว ✔`);
+          };
+
+          resultsContainer.appendChild(card);
+        }
+      } else {
+        const empty = mk('div', 'empty');
+        empty.innerHTML = `<b>🔍</b> ไม่พบเพลง “${escapeHtml(qStr)}” ในคลังเครื่อง`;
+        resultsContainer.appendChild(empty);
+      }
+
+      // Online Web Search Action Button at bottom
+      const webSearchBtn = btn(`🌐 ค้นหาคอร์ดจริง “${qStr}” จากเว็บ (Chordtabs / MusicATM)`, async () => {
+        webSearchBtn.disabled = true;
+        webSearchBtn.textContent = '⏳ กำลังค้นหาคอร์ดจริงจากเว็บ…';
+        try {
+          const { results: webResults } = await searchRealWebChords(qStr);
+          if (!webResults.length) {
+            toast('ไม่พบผลลัพธ์จากเว็บคอร์ด', true);
+            webSearchBtn.disabled = false;
+            webSearchBtn.textContent = `🌐 ลองค้นเว็บอีกครั้ง`;
+            return;
+          }
+          const webBox = mk('div', 'qsWebResultsBox');
+          webBox.innerHTML = `<div class="qsSecHeader" style="margin-top:12px">🌐 คอร์ดจากเว็บสำหรับ “${escapeHtml(qStr)}” (${webResults.length}):</div>`;
+
+          for (const it of webResults) {
+            const card = mk('div', 'qsItem qsWebItem');
+            const titleDiv = mk('div', 'qsTitleRow');
+            titleDiv.innerHTML = `
+              <b class="qsTitle">${escapeHtml(it.title)}</b>
+              ${it.key ? `<span class="badge">Key ${it.key}</span>` : ''}
+              <span class="badge green">${escapeHtml(it.domain)}</span>
+            `;
+
+            const artistDiv = mk('div', 'qsArtistRow');
+            const chordsText = (it.realChords && it.realChords.length)
+              ? `<span class="muted small" style="margin-left:6px">· คอร์ด: ${it.realChords.slice(0, 6).join(' ')}</span>`
+              : '';
+            artistDiv.innerHTML = `<span class="artistTag">🎤 <b>${escapeHtml(it.artist || 'ไม่ระบุศิลปิน')}</b></span>${chordsText}`;
+
+            card.append(titleDiv, artistDiv, mk('span', 'qsPlayAction', '📥 ดึงและเล่น'));
+
+            card.onclick = async () => {
+              card.style.opacity = '0.5';
+              toast('⏳ กำลังดึงคอร์ดเข้าแอป…');
+              try {
+                const loaded = await loadRealWebChordResult(it, webResults);
+                activeSetlistContext = null;
+                openSong(loaded, 0);
+                close();
+                toast(`ดึงและเปิดเล่น “${loaded.title}” (ศิลปิน: ${loaded.artist}) สำเร็จ ✔`);
+              } catch (err) {
+                toast('เว็บนี้ติดระบบป้องกัน — กรุณาเลือกผลลัพธ์อื่น', true);
+                card.style.opacity = '1';
+              }
+            };
+            webBox.appendChild(card);
+          }
+          resultsContainer.appendChild(webBox);
+          webBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          webSearchBtn.hidden = true;
+        } catch {
+          webSearchBtn.disabled = false;
+          webSearchBtn.textContent = `🌐 ค้นหา “${qStr}” จากเว็บ`;
+          toast('ค้นหาออนไลน์ไม่สำเร็จ กรุณาลองใหม่', true);
+        }
+      }, 'primary small');
+      webSearchBtn.style.width = '100%';
+      webSearchBtn.style.marginTop = '12px';
+      resultsContainer.appendChild(webSearchBtn);
+    }
+
+    input.oninput = () => {
+      clearBtn.hidden = !input.value.trim();
+      renderQsResults(input.value);
+    };
+
+    box.append(contextBanner, searchWrap, chipsWrap, resultsContainer);
+    renderQsResults(initialQuery);
+    setTimeout(() => input.focus(), 80);
+  });
+}
+
+// Button wiring for next song quick search across views
+if ($('#hdrSearchBtn')) $('#hdrSearchBtn').onclick = () => openQuickSongSwitcherModal();
+if ($('#quickNextSongBtn')) $('#quickNextSongBtn').onclick = () => openQuickSongSwitcherModal();
+if ($('#dockSearchBtn')) $('#dockSearchBtn').onclick = () => openQuickSongSwitcherModal();
+if ($('#stageQuickSearchBtn')) $('#stageQuickSearchBtn').onclick = () => openQuickSongSwitcherModal();
+if ($('#setlistSearchBtn')) $('#setlistSearchBtn').onclick = () => openQuickSongSwitcherModal();
+if ($('#setlistInfoTrigger')) $('#setlistInfoTrigger').onclick = () => openQuickSongSwitcherModal();
+if ($('#liveCueNextRow')) $('#liveCueNextRow').onclick = () => openQuickSongSwitcherModal();
 
 /* ==============================================================================
  * 15) การเริ่มต้นระบบ (Initialization)

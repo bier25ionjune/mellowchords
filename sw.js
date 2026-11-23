@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'mellowchords-v8';
+const CACHE_NAME = 'mellowchords-v9';
 const STATIC_ASSETS = [
   './',
   './index.html',

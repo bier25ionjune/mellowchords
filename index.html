@@ -35,6 +35,7 @@
       <h1>คลังคอร์ดกลางคืน</h1>
     </div>
     <div class="row" style="gap:6px">
+      <button id="hdrSearchBtn" class="small ghost" type="button" title="ค้นหาเพลงด่วน (ทุกหน้า)">🔍 ค้นเพลง</button>
       <button id="pwaInstallHeaderBtn" class="small primary" hidden>📲 ติดตั้งแอป</button>
       <button id="acct" class="small">☁️ ซิงก์ / ตั้งค่า</button>
     </div>
@@ -44,6 +45,7 @@
 <!-- Floating Stage Mode Indicators -->
 <div class="focusTopBar">
   <div id="wakeLockBadge" hidden>💡 จอเปิดค้าง</div>
+  <button id="stageQuickSearchBtn" class="small primary" hidden type="button">🔍 ค้นหาเพลงต่อไป</button>
   <button id="exitFocus" hidden>✕ ออกจากโหมดเวที</button>
 </div>
 
@@ -233,10 +235,11 @@
     <!-- Active Playlist Queue Bar (Shows when playing inside a Setlist) -->
     <div id="setlistNav" class="setlistNav meta" hidden>
       <button type="button" id="prevSongBtn" class="small">⏮ ก่อนหน้า</button>
-      <div class="setlistInfo">
+      <div class="setlistInfo" id="setlistInfoTrigger" role="button" tabindex="0" title="แตะเพื่อเลือกเพลงในเซ็ตหรือค้นหาเพลงใหม่">
         <small id="setlistName">เซ็ตเพลง</small>
-        <b id="setlistPos">เพลงที่ 1 / 1</b>
+        <b id="setlistPos">เพลงที่ 1 / 1 ▾</b>
       </div>
+      <button type="button" id="setlistSearchBtn" class="small ghost" title="ค้นหาเพลงต่อไปในเซ็ตหรือคลัง">🔍 ค้นเพลง</button>
       <button type="button" id="nextSongBtn" class="small primary">ถัดไป ⏭</button>
     </div>
 
@@ -259,6 +262,7 @@
     <div class="songTopBar meta">
       <button class="backBtn topBack small" type="button">← กลับ</button>
       <div class="songTopActions">
+        <button type="button" id="quickNextSongBtn" class="primary small" title="ค้นหาเพลงถัดไปทันทีโดยไม่ต้องย้อนกลับ">🔍 ค้นเพลงถัดไป</button>
         <span id="savedTag" class="badge green" hidden>บันทึกแล้ว ✔</span>
         <button id="saveBtn" class="primary small">💾 บันทึกเข้าคลัง</button>
         <button id="favBtn" class="small iconBtn" title="รายการโปรด" aria-label="รายการโปรด">☆</button>
@@ -343,6 +347,12 @@
       <div class="grp">
         <button id="scrollBtn" class="primary">⏬ เลื่อน</button>
         <button id="speedBtn" title="ความเร็วการเลื่อนอัตโนมัติ">2x</button>
+      </div>
+
+      <div class="dockDivider"></div>
+
+      <div class="grp">
+        <button type="button" id="dockSearchBtn" class="dockQuickNextBtn" title="ค้นหาเพลงถัดไปทันที (Next Song Search)">🔍 เพลงต่อไป</button>
       </div>
     </div>
   </div>
