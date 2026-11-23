@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'mellowchords-v4';
+const CACHE_NAME = 'mellowchords-v5';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -44,10 +44,10 @@ self.addEventListener('fetch', event => {
   // Non-GET requests (e.g. Supabase Auth/DB POST/PUT/DELETE): pass through directly to network
   if (req.method !== 'GET') return;
 
-  // Completely bypass Service Worker interception for Supabase, LRCLIB, and CORS proxies
-  // so browser handles live network & errors natively without false offline 503 responses
+  // Completely bypass Service Worker interception for Supabase, Jina Reader, LRCLIB, and CORS proxies
   if (
     url.hostname.includes('supabase.co') ||
+    url.hostname.includes('jina.ai') ||
     url.hostname.includes('lrclib.net') ||
     url.hostname.includes('allorigins') ||
     url.hostname.includes('corsproxy') ||
