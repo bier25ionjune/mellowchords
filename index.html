@@ -62,14 +62,6 @@
     <button id="onlineSearchBtn" class="primary small" type="submit" title="ค้นหาเพลงและเนื้อร้องออนไลน์ภายในแอป">🌐 ค้นออนไลน์</button>
   </form>
 
-  <!-- Popular Trending Night-Gig Searches Bar (เพลงฮิตเล่นสดกลางคืนที่นิยมค้นหา) -->
-  <div id="popularChipsBar" class="popularChipsBar">
-    <div class="chipsHeader">
-      <span class="chipsLabel">🔥 เพลงฮิตเล่นสด:</span>
-      <small class="muted">แตะเพื่อค้นหาทันที</small>
-    </div>
-    <div id="popularChipsTrack" class="popularChipsTrack"></div>
-  </div>
 
   <!-- Quick 1-Tap Action Cards -->
   <div id="quickAddBar" class="quickActions">
@@ -112,7 +104,6 @@
     <!-- Filter Pills -->
     <div class="filterTabs" role="tablist">
       <button type="button" class="pillTab active" data-filter="all">ทั้งหมด</button>
-      <button type="button" class="pillTab" data-filter="popular">🔥 เพลงฮิตยอดนิยม</button>
       <button type="button" class="pillTab" data-filter="fav">⭐ รายการโปรด</button>
       <button type="button" class="pillTab" data-filter="recent">🕒 ล่าสุด</button>
     </div>
@@ -290,6 +281,7 @@
         <div class="viewToggles">
           <button type="button" id="metroBtn" class="small" title="เปิด/ปิด Metronome ให้จังหวะ">⏱️ 100 BPM</button>
           <button type="button" id="tapTempoBtn" class="small" title="แตะตามจังหวะเพลงเพื่อหาค่า BPM">👆 Tap</button>
+          <button type="button" id="toggleLyricsBtn" class="small" title="ตัดเนื้อเพลงออก แสดงเฉพาะคอร์ด">🎸 ตัดเนื้อเพลง</button>
           <button type="button" id="colToggleBtn" class="small" title="สลับแสดงผล 1 หรือ 2 คอลัมน์">📄 1 คอลัมน์</button>
         </div>
       </div>
@@ -314,7 +306,6 @@
             <button type="button" id="toggleInvertImgBtn" class="small" title="สลับสีโหมดมืดเวที (พื้นดำ ตัวหนังสือขาว) ถนอมสายตาบนเวที">🌓 โหมดมืดเวที</button>
           </div>
           <div class="row" style="gap:6px; align-items:center">
-            <button type="button" id="toggleLyricsUnderImgBtn" class="small secondary" title="แสดง/ซ่อนเนื้อเพลงควบคู่ใต้รูป">📄 เนื้อเพลงควบคู่</button>
             <button type="button" id="openImgLightboxBtn" class="small secondary">🔍 ขยายเต็มจอ</button>
           </div>
         </div>

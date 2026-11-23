@@ -811,6 +811,38 @@ section.block:first-child {
   display: none;
 }
 
+/* Chords-Only Mode (ตัดเนื้อเพลงออก แสดงเฉพาะคอร์ด) */
+.sheet.hideLyrics .ly {
+  display: none !important;
+}
+
+.sheet.hideLyrics .line.noChords {
+  display: none !important;
+}
+
+.sheet.hideLyrics .line.blank {
+  height: 0.35em;
+}
+
+.sheet.hideLyrics .line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 0.55em;
+}
+
+.sheet.hideLyrics .seg {
+  display: inline-flex;
+  flex-direction: row;
+}
+
+.sheet.hideLyrics .ch {
+  font-size: 1.05em;
+  padding: 2px 7px;
+  background: rgba(239, 68, 68, 0.12);
+  border-radius: 5px;
+}
+
 /* Section Badges */
 .secBadge {
   display: inline-flex;

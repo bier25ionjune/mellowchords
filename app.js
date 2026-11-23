@@ -15,746 +15,8 @@ const CFG = {
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im90YmZ6eHlwcXl6b2JnbGJkcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI5NzA2MTksImV4cCI6MjEwODU0NjYxOX0.GouGscQsPmLRrHZwSz9W71IY-sgDo_nmOZs55Eciqf4'
 };
 
-const POPULAR_SONGS = [
-  {
-    id: 'cat-somsan',
-    title: 'ซมซาน',
-    artist: 'Loso (โลโซ)',
-    key: 'G',
-    text: `[Intro]
-G   Em   C   D (2 รอบ)
-
-[Verse 1]
-G                        Bm            C                    D
-เกิดมาไม่เคยเจอ ใครเหมือนเธอ หลับฝันละเมอ ภาพเธอคอยหลอนทุกคืน
-G                        Bm            C                    D
-หลับลงคราใด อยากนอนไม่ยอมตื่น ก็ทุกค่ำคืน เจอเธอที่ปลายฟ้าไกล
-
-[Verse 2]
-G                Em        C                    D
-ก็ได้แต่เพ้อ แต่ฝันลมลม ก็หลงชื่นชม โดยเธอไม่รู้ตัว
-G                Em        C                    D
-เจอเธอทีไร จิตใจเต้นรัว ฉันกลัวฉันกลัว กลัวเธอไม่สนใจ
-
-[Chorus]
-  Em                    Bm     C                 D
-อยากเดินเข้าไป บอกว่ารักเธอ เวลาที่เจอ ที่เธอส่งยิ้มมา
-  Bm                    Em     C                 D            G
-เหมือนดั่งโลกนี้ สดใสขึ้นทันตา ในช่วงเวลา ที่ต้องการใคร เข้าใจสักคน
-
-[Verse 3]
-G                        Em           C                    D
-หากเธอมีใจ ก็บอกกันสักหน่อย อย่าให้ฉันคอย คอยเธออย่างนี้เลย
-G                        Em           C                    D
-ให้คอยนานๆ มันซมซานรู้ไหมเอ่ย ยิ่งเธอทำเฉย ฉันเองจะบ้าตาย`
-  },
-  {
-    id: 'cat-saeng',
-    title: 'แสงสุดท้าย',
-    artist: 'Bodyslam (บอดี้สแลม)',
-    key: 'G',
-    text: `[Intro]
-G   D/F#   Em   D   C   D
-
-[Verse 1]
-Em                                      Bm
-รอนแรมมาเนิ่นนานเพียงหนึ่งใจ กับทางที่โรยเอาไว้ด้วยขวากหนาม
-     C                    D
-ดูแหลมคม ทิ่มแทง จนมันแทบจะทนไม่ไหว
-Em                                Bm
-ชีวิตถ้าไม่ยากเย็นขนาดนั้น สองมือจะมีเรี่ยวแรงขนาดไหน
-  C                 D
-แต่หัวใจ ของคน ยังยืนยันจะไม่ถอดใจ
-
-[Chorus]
-              C             D                      Bm         Em
-ในค่ำคืนที่ ฟ้านั้นไม่มีดาวอยู่ตรงนี้ ฉันยังคงก้าวไป
-          C                D            Bm   Em
-ยังคงมีรักแท้ เป็นแสงนำไปในคืนที่หลงทาง
-                   C                     D    Bm         Em
-กับที่ๆความฝัน นั้นพร้อมเป็นเพื่อนตาย เส้นทางนี้ ฉันยังมีจุดหมาย
-                     C            D            Bm    Em
-ตราบใดที่ปลายท้องฟ้ามีแสงรำไร จะไปจนถึงแสงสุดท้าย`
-  },
-  {
-    id: 'cat-chueak',
-    title: 'เชือกวิเศษ',
-    artist: 'Labanoon (ลาบานูน)',
-    key: 'G',
-    text: `[Intro]
-G   Em   C   D
-
-[Verse 1]
-G                      Em
-พยายามกี่ครั้ง เพื่อรั้งเธอเอาไว้
-      C                          D
-ยิ่งกอดแน่นเท่าไร ยิ่งเหมือนเธอไกลออกไป
-G                     Em
-ความรักที่เคยหวาน วันนี้จืดจางหาย
-        C                         D
-หมดแล้วความเข้าใจ ไม่เหลืออะไรอีกเลย
-
-[Chorus]
-            C                 D            Bm               Em
-ต่อให้มีเชือกวิเศษ ผูกเราไว้ ก็ดึงไม่อยู่ เมื่อใจเธอพร้อมจะไป
-            C                  D          G
-ให้รั้งอย่างไร เมื่อคนหมดใจ ก็ต้องยอม
-              C               D           Bm           Em
-ปล่อยมือเธอไป ให้เจอคนที่เธอฝัน ยอมเจ็บเพียงลำพัง
-      C           D             G
-เมื่อรักเรานั้น มันถึงทางตันไปต่อไม่ไหว`
-  },
-  {
-    id: 'cat-khukkhao',
-    title: 'คุกเข่า',
-    artist: 'Cocktail (ค็อกเทล)',
-    key: 'G',
-    text: `[Intro]
-Em   C   G   D
-
-[Verse 1]
-Em               C
-กี่ครั้งที่เธอต้องร้องไห้
-G                   D
-กับคนอย่างฉันที่ไม่เอาไหน
-Em                 C
-กี่แผลในใจที่ฉันทำไว้
-G                   D
-วันนี้เข้าใจเมื่อสายเกินไป
-
-[Chorus]
-           Em                C
-ต้องคุกเข่า อ้อนวอนเธอสักเท่าไร
-        G                   D
-เพื่อให้เธอ ให้อภัยกับฉันคนนี้
-          Em                  C
-ยอมทำทุกอย่าง ให้เธอกลับคืนมาหา
-      G                     D
-ก่อนน้ำตา จะล้นจนทนไม่ไหว
-         Em   C   G   D
-ได้โปรดเถิดเธอ`
-  },
-  {
-    id: 'cat-fontok',
-    title: 'ฝนตกไหม',
-    artist: 'Three Man Down',
-    key: 'G',
-    text: `[Intro]
-G   Bm   C   D
-
-[Verse 1]
-G                 Bm
-ฝนตกไหม ที่ตรงนั้นเป็นอย่างไร
-C                 D
-สบายดีไหม มีใครดูแลหรือยัง
-G                    Bm
-ส่วนฉันตรงนี้ มองดูฝนโปรยปราย
-C                 D
-คิดถึงวันวาน ที่เคยมีเธอเคียงข้าง
-
-[Chorus]
-            C               D
-เวลาที่ฝนโปรยลงมา ยิ่งคิดถึงเธอ
-          Bm                Em
-จำได้เสมอ วันที่เราร่มคันเดียวกัน
-          C                   D
-แต่ในวันนี้ เหลือเพียงฉันลำพัง
-          G
-กับหยดน้ำตาที่ไหลปนสายฝน`
-  },
-  {
-    id: 'cat-kidtae',
-    title: 'คิด(แต่ไม่)ถึง',
-    artist: 'Tilly Birds',
-    key: 'C',
-    text: `[Intro]
-C   Am   F   G
-
-[Verse 1]
-C                     Am
-อยู่คนเดียวในคืนที่เงียบงัน
-F                       G
-ภาพความทรงจำยังวนเวียนในนั้น
-C                     Am
-ยังคงคิดถึง เรื่องราวของเรา
-F                     G
-แต่รู้ว่าเธอ คงไม่คิดเหมือนเก่า
-
-[Chorus]
-          F            G
-คิดแต่ไม่ถึง คิด คิด แต่ไม่ถึงเธอ
-          Em           Am
-คิดถึงเสมอ แม้รู้เธอไม่กลับมา
-        F               G
-ได้แต่เฝ้ารอ อยู่กับรอยน้ำตา
-          C
-คิดถึงเธอคนดี`
-  },
-  {
-    id: 'cat-tharao',
-    title: 'ถ้าเราเจอกันอีก (Until Then)',
-    artist: 'Tilly Birds',
-    key: 'G',
-    text: `[Intro]
-G   Em   C   D
-
-[Verse 1]
-G                     Em
-จากกันไปเนิ่นนานแสนไกล
-C                     D
-เหลือเพียงความทรงจำในใจ
-G                   Em
-ภาพรอยยิ้มและแววตานั้น
-C                     D
-ยังติดตรึงไม่เคยจางหาย
-
-[Chorus]
-        C              D
-ถ้าหากเรา ได้พบกันอีกครั้ง
-        Bm             Em
-จะขอกอดเธอไว้ให้นานเท่านาน
-      C               D
-บอกคำที่เคยเก็บไว้ข้างใน
-          G
-ว่ารักเธอเสมอ`
-  },
-  {
-    id: 'cat-daekhadern',
-    title: 'ได้แค่เดินมาส่ง (The Last Walk)',
-    artist: 'Three Man Down feat. UrboyTJ',
-    key: 'A',
-    text: `[Intro]
-A   F#m   D   E
-
-[Verse 1]
-A                       F#m
-สิ้นสุดแล้วการเดินทางของเรา
-D                       E
-มองดูเธอเดินไปกับเขาคนใหม่
-A                      F#m
-ฉันคนนี้คงทำได้เพียงส่งใจ
-D                       E
-แม้เจ็บปวดสักเท่าไรก็ต้องยอม
-
-[Chorus]
-          D               E
-ได้แค่เดินมาส่ง ให้ถึงปลายทาง
-          C#m             F#m
-ปล่อยให้เธอไปเริ่มต้นใหม่กับเขา
-          Bm              E
-หมดหน้าที่ฉัน ที่คอยดูแลเธอเบาๆ
-          A
-ขอให้เธอโชคดี`
-  },
-  {
-    id: 'cat-jaisang',
-    title: 'ใจสั่งมา',
-    artist: 'Loso (โลโซ)',
-    key: 'G',
-    text: `[Intro]
-G   Em   C   D
-
-[Verse 1]
-G                   Em
-หากถามว่าทำไม ฉันถึงมารอเธอ
-C                     D
-ทั้งที่รู้ว่าเธอ มีใครอยู่ข้างกาย
-G                   Em
-ก็เพราะหัวใจ มันเรียกร้องแต่เธอ
-C                     D
-ไม่อาจห้ามใจ ไม่ให้รักได้เลย
-
-[Chorus]
-          C              D
-ก็ใจมันสั่งมา ให้รักเธอคนนี้
-          Bm             Em
-แม้ไม่มีหวัง ก็ยังยอมทุ่มเทใจ
-          C              D
-เจ็บก็ยอม เพื่อได้มองเห็นเธอไกลๆ
-          G
-แค่นี้ก็สุขใจพอ`
-  },
-  {
-    id: 'cat-jija',
-    title: 'จิ๊จ๊ะ',
-    artist: 'Silly Fools (ซิลลี่ ฟูลส์)',
-    key: 'Em',
-    text: `[Intro]
-Em   G   A   C  D (4 รอบ)
-
-[Verse 1]
-Em                     G
-อย่ามาทำเป็นจิ๊จ๊ะ ให้มันมากไป
-A                      C        D
-ฉันไม่ได้ง่ายดาย อย่างที่เธอเข้าใจ
-Em                     G
-คิดว่าน่ารักนักเหรอ ทำตัวแบบนี้
-A                      C        D
-เดี๋ยวเหอะจะโดนดี ไม่รู้ตัว
-
-[Chorus]
-Em             G
-ไม่ต้องมาจิ๊จ๊ะ ไม่ต้องมางอแง
-A              C       D
-ฉันไม่สนใจ ไม่ต้องมาแคร์
-Em             G
-ถ้าจะพูดไม่รู้เรื่อง ก็ไม่ต้องคุยกัน
-A              C       D   Em
-จบกันแค่นี้ พอแล้วใจ`
-  },
-  {
-    id: 'cat-lenkhongsoong',
-    title: 'เล่นของสูง',
-    artist: 'Big Ass (บิ๊กแอส)',
-    key: 'E',
-    text: `[Intro]
-E   G#m   A   B
-
-[Verse 1]
-E                     G#m
-รู้ว่าเธออยู่สูง เกินจะเอื้อมถึง
-A                     B
-เหมือนดวงดาวบนฟ้า ที่ไกลเกินคว้า
-E                     G#m
-แต่หัวใจดวงนี้ มันดื้อดึงนัก
-A                     B
-อยากลองเสี่ยงรัก กับเธอสักครั้ง
-
-[Chorus]
-          A              B
-ก็รู้ว่าเล่นของสูง แต่ใจมันรัก
-          G#m           C#m
-จะตกหรือเจ็บ ก็ไม่เคยหวั่นไหว
-          A              B
-ขอแค่ได้ลอง ยื่นมือออกไป
-          E
-แม้ดาวดวงนั้น จะสูงเกินเอื้อมถึง`
-  },
-  {
-    id: 'cat-rueduron',
-    title: 'ฤดูร้อน',
-    artist: 'Paradox (พาราด็อกซ์)',
-    key: 'C',
-    text: `[Intro]
-C   Am   F   G
-
-[Verse 1]
-C                     Am
-ยินเสียงคลื่นซัดสาด ท้องทะเลกว้างใหญ่
-F                     G
-แสงแดดส่องสดใส ในวันฤดูร้อน
-C                     Am
-ลมพัดพาความรัก ลอยมาตามสายลม
-F                     G
-หัวใจสุขสม เมื่อได้อยู่ข้างเธอ
-
-[Chorus]
-          F              G
-ในฤดูร้อนที่มีเธอเคียงข้างกาย
-          Em             Am
-โลกทั้งใบ สดใสด้วยรอยยิ้มเธอ
-          F              G
-จะเก็บความทรงจำ นี้ไว้เสมอ
-          C
-ไม่ลืมเลือน`
-  },
-  {
-    id: 'cat-sonklin',
-    title: 'ซ่อนกลิ่น',
-    artist: 'Palmy (ปาล์มมี่)',
-    key: 'C',
-    text: `[Intro]
-C   Em   Am   F
-
-[Verse 1]
-C                     Em
-คงได้แต่ซ่อนความรัก ไว้ในกลิ่นหอม
-Am                    F
-กลิ่นดอกไม้ที่เธอมอบให้ในวันวาน
-C                     Em
-แม้เวลาผ่านไป เนิ่นนานเท่าไร
-Am                    F
-กลิ่นแห่งรัก ยังคงอบอวลในใจ
-
-[Chorus]
-          F              G
-ซ่อนกลิ่นความหลัง ที่เคยงดงาม
-          Em             Am
-แม้ความรักเรา จะเป็นเพียงอดีต
-          F              G
-แต่ในความฝัน ยังมีเธอเคียงกาย
-          C
-ไม่เคยจางหาย`
-  },
-  {
-    id: 'cat-thingwai',
-    title: 'ทิ้งไว้กลางทาง',
-    artist: 'Potato (โปเตโต้)',
-    key: 'G',
-    text: `[Intro]
-G   D/F#   Em   D   C   D
-
-[Verse 1]
-G                 D/F#
-ขอบคุณที่ร่วมทางกันมา
-Em                D
-แม้สุดท้าย ต้องร้างราจากไป
-C                 Bm
-อย่าโทษตัวเอง เลยคนดี
-Am                D
-ฉันเข้าใจทุกอย่างดี
-
-[Chorus]
-          C              D
-ถ้าการทิ้งฉัน ไว้ตรงกลางทาง
-          Bm             Em
-จะทำให้เธอ ได้พบวันที่สดใส
-          C              D
-ปล่อยฉันไว้ตรงนี้ แล้วเดินต่อไป
-          G
-ไม่ต้องห่วงฉันเลย`
-  },
-  {
-    id: 'cat-wind',
-    title: 'ลม (Wind)',
-    artist: 'Num Kala (หนุ่ม กะลา)',
-    key: 'G',
-    text: `[Intro]
-G   Bm   C   D
-
-[Verse 1]
-G                    Bm
-ฝากสายลม พัดพาความคิดถึง
-C                    D
-ส่งไปถึง คนไกลที่ปลายฟ้า
-G                    Bm
-บอกเขาที ว่าคนที่รอคอย
-C                    D
-ยังเฝ้าคอย ด้วยใจที่เหมือนเดิม
-
-[Chorus]
-          G                  Bm
-แม้เป็นได้แค่สายลม ที่พัดผ่าน
-          C                  D
-ไม่อาจยืนเคียงข้างเธอ เหมือนใครเขา
-          G                  Bm
-ขอแค่ได้ดูแล อยู่เบาๆ
-          C        D         G
-บรรเทาความเหงา ให้ใจเธอ`
-  },
-  {
-    id: 'cat-kidtueng',
-    title: 'คิดถึง',
-    artist: 'Silly Fools (ซิลลี่ ฟูลส์)',
-    key: 'C',
-    text: `[Intro]
-C   Am   F   G
-
-[Verse 1]
-C                 Am
-เป็นเพราะอะไร ทำไมต้องเป็นเธอ
-F                 G
-ที่ฉันละเมอ คิดถึงอยู่ทุกวัน
-C                 Am
-แม้เวลาผ่าน เนิ่นนานสักเท่าไร
-F                 G
-ในหัวใจ ยังคงมีแต่เธอ
-
-[Chorus]
-          C            Am
-อยากบอกให้รู้ ว่าฉันคิดถึง
-        F              G
-คิดถึงเธอ จนหมดหัวใจ
-          C            Am
-อยากกอดเธอไว้ เหมือนวันเก่าๆ
-        F      G       C
-วันที่เรา ยังรักกัน`
-  },
-  {
-    id: 'cat-hellomama',
-    title: 'Hello Mama',
-    artist: 'TaitosmitH (ไททศมิตร)',
-    key: 'C',
-    text: `[Intro]
-C   Em   Am   F
-
-[Verse 1]
-C                     Em
-ฮัลโหลแม่ ลูกอยู่สบายดี
-Am                    F
-ถึงเหนื่อยกาย แต่ใจยังมีแรงสู้
-C                     Em
-เมืองหลวงวุ่นวาย ผู้คนมากมาย
-Am                    F
-ยังคิดถึง กับข้าวฝีมือแม่เสมอ
-
-[Chorus]
-          F              G
-บอกพ่อด้วยนะ ว่าลูกยังไหว
-          Em             Am
-อีกไม่นาน จะหอบเงินกลับไปกอด
-          F              G
-กอดแม่ให้หายคิดถึง ให้หัวใจอิ่มอุ่น
-          C
-Hello Mama`
-  },
-  {
-    id: 'cat-khuenkham',
-    title: 'คืนข้ามปี',
-    artist: 'Da Endorphine (ดา เอ็นโดรฟิน)',
-    key: 'G',
-    text: `[Intro]
-G   Em   C   Am   D
-
-[Verse 1]
-G            D/F#    Em   D
-มองเวลาก็เกือบเที่ยงคืน
-     C    Bm  Am           D
-สิ้นคืนนี้    ก็เป็น เวลาของปีใหม่
-G            D/F#   Em   D
-มองทางใดมีแต่แสงไฟ
-       C         Bm   Am        D
-สวยเพียงไหน   หัวใจก็จำได้เลือนราง
-
-[Chorus]
-              C                 Bm
-อยากมีคนพิเศษ อยู่ในคืนพิเศษ
-Em          Am        D/F#    G
-คืนสำคัญอีกคืน ที่ต้องอยู่อย่างเหงาใจ
-              C                 Bm
-อยากมีคนพิเศษ จับมือกันข้ามผ่าน
-Em          Am                 D            G
-คืนสำคัญอีกคืน ที่ความเหงาคืบคลาน หัวใจ`
-  },
-  {
-    id: 'cat-watjai',
-    title: 'วัดใจ',
-    artist: 'Silly Fools (ซิลลี่ ฟูลส์)',
-    key: 'E',
-    text: `[Intro]
-E   G   A   C  D (4 รอบ)
-
-[Verse 1]
-E                     G
-มีคนมากมาย บอกให้ฉันหยุด
-A                     C        D
-แต่ฉันไม่เคย คิดจะยอมแพ้
-E                     G
-ทางข้างหน้า แม้จะยากเย็น
-A                     C        D
-ฉันพร้อมก้าวไป วัดใจให้รู้
-
-[Chorus]
-E             G
-มาวัดใจกันดู สักครั้งในชีวิต
-A              C       D
-ไม่มีถอยหลัง ให้ใครมาชี้หน้า
-E             G
-จะสู้ให้สุดใจ เพื่อสิ่งที่ศรัทธา
-A              C       D   E
-วัดใจกันไปเลย`
-  },
-  {
-    id: 'cat-songrak',
-    title: 'สองรัก',
-    artist: 'Zeal (ซีล)',
-    key: 'G',
-    text: `[Intro]
-Em   C   G   D
-
-[Verse 1]
-Em                     C
-คนหนึ่งก็ดี คนหนึ่งก็รัก
-G                      D
-ใจมันชัก จะไปกันใหญ่
-Em                     C
-ไม่อยากหลอกใคร ให้เสียน้ำตา
-G                      D
-แต่ก็เลือกไม่ได้ สักคนเดียว
-
-[Chorus]
-          Em             C
-สองรัก ฉันรับมันไม่ไหว
-          G              D
-ต้องเลือกใคร สักคนให้จบลง
-          Em             C
-ไม่อยากเป็นคนเห็นแก่ตัว
-          G              D
-ที่ดึงทุกคน มาร่วมเจ็บปวด
-          Em
-กับสองรักนี้`
-  },
-  {
-    id: 'cat-kho-pen-tua-lueak',
-    title: 'ขอเป็นตัวเลือก',
-    artist: 'Kala (กะลา)',
-    key: 'G',
-    text: `[Intro]
-G   Em   C   D
-
-[Verse 1]
-G                      Em
-รู้ดีว่าเธอ ยังมีเขาในใจ
-C                      D
-แต่ฉันพร้อมจะรอ ไม่ไปไหน
-G                      Em
-หากวันใด เขาทำให้เธอเสียใจ
-C                      D
-หันมามองฉัน คนนี้ที่ยืนรอ
-
-[Chorus]
-          C              D
-ขอเป็นตัวเลือก เผื่อเธอไม่มีใคร
-          Bm             Em
-ในวันที่เธอ ต้องร้องไห้ลำพัง
-          C              D
-พร้อมจะปลอบใจ ให้รอยยิ้มกลับคืน
-          G
-ขอเพียงเท่านี้พอ`
-  },
-  {
-    id: 'cat-tasawang',
-    title: 'ตาสว่าง',
-    artist: 'Moderndog (โมเดิร์นด็อก)',
-    key: 'A',
-    text: `[Intro]
-A   C#m   D   E
-
-[Verse 1]
-A                     C#m
-อยู่ในความมืดมิด มาเนิ่นนาน
-D                     E
-คิดว่าสิ่งที่เห็น คือความจริง
-A                     C#m
-จนเมื่อแสงสว่าง ส่องเข้ามา
-D                     E
-ความจริงปรากฏ ชัดเจนในใจ
-
-[Chorus]
-          D              E
-ตาสว่างแล้ว เมื่อได้เห็นความจริง
-          C#m            F#m
-ที่ซ่อนอยู่ ใต้ภาพลวงตา
-          Bm             E
-ไม่หลงงมงาย อีกต่อไป
-          A
-ตาสว่างเสียที`
-  },
-  {
-    id: 'cat-kheeheung',
-    title: 'ขี้หึง',
-    artist: 'Silly Fools (ซิลลี่ ฟูลส์)',
-    key: 'C',
-    text: `[Intro]
-C   Am   F   G
-
-[Verse 1]
-C                     Am
-อย่ามองใครแบบนั้น ฉันไม่ชอบใจ
-F                     G
-รอยยิ้มของเธอ ฉันอยากเก็บไว้คนเดียว
-C                     Am
-ไม่ได้ตั้งใจ จะทำตัวน่ารำคาญ
-F                     G
-แต่มันห้ามไม่ไหวจริงๆ
-
-[Chorus]
-          C              Am
-ก็คนมันขี้หึง เพราะรักเธอมากไป
-          F              G
-กลัวใครมาแย่งเธอ ไปจากฉัน
-          C              Am
-ขอโทษทีนะ ที่คอยตามหวง
-          F       G       C
-ก็ใจมันรักเธอ เกินกว่าใคร`
-  },
-  {
-    id: 'cat-wela',
-    title: 'เวลาเธอยิ้ม',
-    artist: 'Polycat (โพลีแคต)',
-    key: 'Bb',
-    text: `[Intro]
-Bb   Gm   Eb   F
-
-[Verse 1]
-Bb                    Gm
-ในวันที่ฟ้าดูมืดมน ไร้เรี่ยวแรง
-Eb                    F
-แค่เพียงเห็นเธอยิ้ม โลกก็เปลี่ยนไป
-Bb                    Gm
-ความสดใสของเธอ เหมือนเวทมนตร์
-Eb                    F
-ชุบชีวิตหัวใจ ให้กลับมาเต้นแรง
-
-[Chorus]
-          Eb             F
-เวลาเธอยิ้ม โลกหยุดหมุนทันที
-          Dm             Gm
-ทุกสิ่งรอบกาย ดูสวยงามสดใส
-          Eb             F
-อยากหยุดเวลานี้ ไว้ตลอดไป
-          Bb
-เวลาเธอยิ้มให้ฉัน`
-  },
-  {
-    id: 'cat-deknoi',
-    title: 'เจ้าเด็กน้อย',
-    artist: 'TaitosmitH (ไททศมิตร)',
-    key: 'G',
-    text: `[Intro]
-G   Em   C   D
-
-[Verse 1]
-G                     Em
-เจ้าเด็กน้อยเอย วิ่งเล่นใต้ดวงตะวัน
-C                     D
-ฝันถึงอนาคต ที่สดใสงดงาม
-G                     Em
-ไม่รู้เลยว่า โลกของผู้ใหญ่
-C                     D
-มีขวากหนาม และความยากเย็น
-
-[Chorus]
-          C              D
-จงเติบโต ด้วยรอยยิ้มและพลัง
-          Bm             Em
-อย่าให้ความจริง พรากความฝันเจ้าไป
-          C              D
-สู้ต่อไปนะ เจ้าเด็กน้อยคนเก่ง
-          G
-โลกใบนี้รอเจ้าอยู่`
-  },
-  {
-    id: 'cat-phaethang',
-    title: 'แพ้ทาง',
-    artist: 'Labanoon (ลาบานูน)',
-    key: 'A',
-    text: `[Intro]
-A   F#m   D   E
-
-[Verse 1]
-A                     F#m
-ปกติใจแข็ง ไม่เคยยอมใคร
-D                     E
-เจอใครน่ารัก ก็เฉยๆ ไป
-A                     F#m
-แต่พอเจอเธอ หัวใจละลาย
-D                     E
-แพ้รอยยิ้มเธอ เข้าอย่างจัง
-
-[Chorus]
-          D              E
-แพ้ทางเธอจริงจัง ยอมแพ้หมดใจ
-          C#m            F#m
-แค่เธอสบตา ก็แทบยืนไม่ไหว
-          Bm             E
-ตกหลุมรักเธอ ตั้งแต่วันแรกเจอ
-          A
-แพ้ทางเธอคนเดียว`
-  }
-];;
-
-const MOCK_DB = POPULAR_SONGS;
+const POPULAR_SONGS = [];
+const MOCK_DB = [];
 
 /* ==============================================================================
  * 2) ทฤษฎีดนตรี, การวิเคราะห์คีย์จริงจากคอร์ดในเนื้อเพลง, เสียงดีดคอร์ดกีตาร์ & Capo
@@ -1191,8 +453,8 @@ function renderSheet(box, text, shift, flat) {
       continue;
     }
 
-    const row = mk('div', 'line' + (item.chordOnly ? ' chordonly' : ''));
     const hasChord = item.segs.some(s => s.chord);
+    const row = mk('div', 'line' + (item.chordOnly ? ' chordonly' : '') + (hasChord ? ' hasChords' : ' noChords'));
     for (const s of item.segs) {
       const seg = mk('span', 'seg');
       if (hasChord) {
@@ -1701,17 +963,7 @@ async function loadRealWebChordResult(item, allResults) {
           }
           if (!key && chordsUsed.length) key = chordsUsed[0];
 
-          // สกัดเนื้อเพลง
-          let lyrics = '';
-          const lyricsIdx = md.indexOf('### เนื้อเพลง');
-          if (lyricsIdx >= 0) {
-            lyrics = md.slice(lyricsIdx)
-              .replace(/^### เนื้อเพลง[^\n]*\n+/i, '')
-              .split(/\n(?:คอร์ดเพลง|คอร์ดกีต้าร์|อัลบั้ม|เนื้อเพลงอื่นๆ)/i)[0]
-              .trim();
-          }
-
-          // ดาวน์โหลดรูปภาพและบันทึกลง IndexedDB ให้เล่นออฟไลน์ 100%
+          // ดาวน์โหลดรูปภาพคอร์ดและบันทึกลง IndexedDB ให้เล่นออฟไลน์ 100% (ไม่แนบเนื้อเพลงที่รกตา)
           const images = [];
           if (chordImgUrl) {
             try {
@@ -1728,16 +980,14 @@ async function loadRealWebChordResult(item, allResults) {
             }
           }
 
-          const sections = autoExtractSectionsFromText(lyrics);
-
           return {
             id: item.id || ('ct-' + Date.now().toString(36)),
             title: title || item.title,
-            artist: artist || item.artist || 'Chordtabs',
+            artist: artist || item.artist || '',
             key: key || item.key || (chordsUsed[0] || 'C'),
-            text: lyrics || (title ? `[Intro]\n${title}\n\n[Verse 1]\n\n[Chorus]\n\n[Outro]` : ''),
+            text: '', // ตัดเนื้อเพลงที่แนบมาออก
             images,
-            sections,
+            sections: [],
             src: targetUrl,
             shift: 0
           };
@@ -2246,30 +1496,11 @@ $('#clearSearchBtn').onclick = () => {
 };
 
 
-const POPULAR_SEARCH_CHIPS = [
-  'ซมซาน', 'แสงสุดท้าย', 'เชือกวิเศษ', 'คุกเข่า', 'ฝนตกไหม',
-  'คิด(แต่ไม่)ถึง', 'ถ้าเราเจอกันอีก', 'ได้แค่เดินมาส่ง', 'ใจสั่งมา',
-  'จิ๊จ๊ะ', 'เล่นของสูง', 'ฤดูร้อน', 'ซ่อนกลิ่น', 'ทิ้งไว้กลางทาง',
-  'Hello Mama', 'ลม', 'คิดถึง', 'วัดใจ', 'สองรัก', 'ขี้หึง'
-];
+const POPULAR_SEARCH_CHIPS = [];
 
 function renderPopularChips() {
-  const track = $('#popularChipsTrack');
-  if (!track) return;
-  track.replaceChildren();
-  for (const name of POPULAR_SEARCH_CHIPS) {
-    const chip = mk('button', 'popularChip', name);
-    chip.type = 'button';
-    chip.onclick = () => {
-      $('#q').value = name;
-      $('#clearSearchBtn').hidden = false;
-      renderSongbook();
-      doInstantLocalFilter();
-      if (document.body.dataset.view === 'song') show('home');
-      $('#librarySection')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    };
-    track.appendChild(chip);
-  }
+  const bar = $('#popularChipsBar');
+  if (bar) bar.hidden = true;
 }
 
 let deb;
@@ -2284,7 +1515,7 @@ function doInstantLocalFilter() {
   }
 
   const t = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const allLookup = [...loadBook(), ...POPULAR_SONGS];
+  const allLookup = loadBook();
   const seenIds = new Set();
   const localMatches = allLookup.filter(s => {
     if (seenIds.has(s.id)) return false;
@@ -2297,18 +1528,16 @@ function doInstantLocalFilter() {
   const box = $('#resultsBox'), list = $('#results');
   if (localMatches.length) {
     box.hidden = false;
-    $('#resultsTitle').textContent = `🎵 พบในคลังและเพลงฮิต (${localMatches.length}) · กด “🌐 ค้นออนไลน์” เพื่อดึงจากเว็บคอร์ด`;
+    $('#resultsTitle').textContent = `🎵 พบในคลังเพลง (${localMatches.length}) · กด “🌐 ค้นออนไลน์” เพื่อดึงจากเว็บคอร์ด`;
     list.replaceChildren();
     for (const it of localMatches) {
       const row = mk('div', 'item'), b = mk('button', 'open'), titleEl = mk('div', 't', it.title);
       titleEl.appendChild(mk('span', 'badge', `Key ${it.key}`));
-      const isSaved = loadBook().some(s => s.id === it.id);
-      titleEl.appendChild(mk('span', 'badge ' + (isSaved ? 'green' : 'dim'), isSaved ? '💾 ในคลัง' : '🔥 เพลงฮิต'));
+      titleEl.appendChild(mk('span', 'badge green', '💾 ในคลัง'));
       b.append(titleEl);
       b.onclick = () => {
         activeSetlistContext = null;
-        const sv = loadBook().find(s => s.id === it.id);
-        sv ? openSong(sv, sv.shift || 0) : openSong({ ...it }, 0);
+        openSong(it, it.shift || 0);
       };
       row.appendChild(b);
       list.appendChild(row);
@@ -2355,29 +1584,17 @@ function renderSongbook() {
   const savedBook = loadBook();
 
   let book = [];
-  if (filterMode === 'popular') {
-    book = [...POPULAR_SONGS];
-  } else if (filterMode === 'fav') {
-    const allKnown = [...savedBook, ...POPULAR_SONGS.filter(p => !savedBook.some(s => s.id === p.id))];
-    book = allKnown.filter(s => F.has(s.id));
+  if (filterMode === 'fav') {
+    book = savedBook.filter(s => F.has(s.id));
   } else if (filterMode === 'recent') {
     book = [...savedBook].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
   } else {
     // filterMode === 'all'
-    if (savedBook.length === 0) {
-      book = [...POPULAR_SONGS];
-    } else {
-      const popularNotInSaved = POPULAR_SONGS.filter(p =>
-        !savedBook.some(s => s.id === p.id || s.title.toLowerCase() === p.title.toLowerCase())
-      );
-      book = [...savedBook, ...popularNotInSaved];
-    }
+    book = [...savedBook];
   }
 
   if (filterMode === 'recent') {
     // already sorted
-  } else if (filterMode === 'popular') {
-    // keep popularity order
   } else if (q) {
     book.sort((a, b) => {
       const aTitleMatch = a.title.toLowerCase().includes(q);
@@ -2387,26 +1604,20 @@ function renderSongbook() {
       return a.title.localeCompare(b.title, 'th');
     });
   } else {
-    book.sort((a, b) => {
-      const aSaved = savedBook.some(s => s.id === a.id);
-      const bSaved = savedBook.some(s => s.id === b.id);
-      if (aSaved && !bSaved) return -1;
-      if (!aSaved && bSaved) return 1;
-      return a.title.localeCompare(b.title, 'th');
-    });
+    book.sort((a, b) => a.title.localeCompare(b.title, 'th'));
   }
 
   if (q) {
     book = book.filter(s => (s.title + ' ' + (s.artist || '') + ' ' + (s.text || '')).toLowerCase().includes(q));
   }
 
-  $('#count').textContent = savedBook.length || POPULAR_SONGS.length;
+  $('#count').textContent = savedBook.length;
   const list = $('#songbook');
   list.replaceChildren();
 
   if (!book.length) {
     const emptyBox = mk('div', 'empty');
-    emptyBox.innerHTML = `<b>🎶</b>${q ? `ไม่พบเพลง “${q}” ในคลังเครื่อง` : (filterMode === 'fav' ? 'ยังไม่มีเพลงรายการโปรด (กด ☆ บนเพลงที่ชอบ)' : (filterMode === 'popular' ? 'ยังไม่มีเพลงในหมวดนี้' : 'ยังไม่มีเพลงในคลัง'))}`;
+    emptyBox.innerHTML = `<b>🎶</b>${q ? `ไม่พบเพลง “${escapeHtml(q)}” ในคลังเครื่อง` : (filterMode === 'fav' ? 'ยังไม่มีเพลงรายการโปรด (กด ☆ บนเพลงที่ชอบ)' : 'ยังไม่มีเพลงในคลัง — แตะ “+ เพิ่มเพลง / รูปคอร์ด” หรือค้นหาจากเว็บเพื่อเพิ่มเพลง')}`;
     if (q) {
       const searchOnlineNowBtn = btn(`🌐 ค้นหาคอร์ดจริง “${q}” จากเว็บ`, runInAppOnlineSearch, 'primary small');
       searchOnlineNowBtn.style.marginTop = '10px';
@@ -2417,7 +1628,6 @@ function renderSongbook() {
   }
 
   for (const s of book) {
-    const isSaved = savedBook.some(x => x.id === s.id);
     const isCurrent = current && current.song.id === s.id;
     const row = mk('div', 'item' + (isCurrent ? ' active' : ''));
     const open = mk('button', 'open');
@@ -2428,11 +1638,7 @@ function renderSongbook() {
     if (actualKey) t.appendChild(mk('span', 'badge', `Key ${actualKey}`));
     if (s.shift) t.appendChild(mk('span', 'badge dim', (s.shift > 0 ? '+' : '') + s.shift));
     if (s.images && s.images.length) t.appendChild(mk('span', 'badge dim', '🖼 ' + s.images.length));
-    if (isSaved) {
-      t.appendChild(mk('span', 'badge green', '💾 ในคลัง'));
-    } else {
-      t.appendChild(mk('span', 'badge dim', '🔥 ฮิต'));
-    }
+    t.appendChild(mk('span', 'badge green', '💾 ในคลัง'));
 
     if (q) {
       open.append(t);
@@ -2637,11 +1843,24 @@ if ($('#toggleInvertImgBtn')) {
   };
 }
 
-if ($('#toggleLyricsUnderImgBtn')) {
-  $('#toggleLyricsUnderImgBtn').onclick = () => {
-    const sheetEl = $('#sheet');
-    sheetEl.hidden = !sheetEl.hidden;
-    $('#toggleLyricsUnderImgBtn').textContent = sheetEl.hidden ? '📄 แสดงเนื้อเพลง' : '📄 ซ่อนเนื้อเพลง';
+let hideLyrics = LS.get('hide_lyrics', false);
+
+function applyLyricsVisibility() {
+  const sheetEl = $('#sheet');
+  if (sheetEl) sheetEl.classList.toggle('hideLyrics', hideLyrics);
+  const btnEl = $('#toggleLyricsBtn');
+  if (btnEl) {
+    btnEl.textContent = hideLyrics ? '📄 แสดงเนื้อเพลง' : '🎸 ตัดเนื้อเพลง';
+    btnEl.classList.toggle('active', hideLyrics);
+  }
+}
+
+if ($('#toggleLyricsBtn')) {
+  $('#toggleLyricsBtn').onclick = () => {
+    hideLyrics = !hideLyrics;
+    LS.set('hide_lyrics', hideLyrics);
+    applyLyricsVisibility();
+    toast(hideLyrics ? 'ตัดเนื้อเพลงออก — แสดงเฉพาะคอร์ด 🎸' : 'แสดงเนื้อเพลงควบคู่คอร์ด 📄');
   };
 }
 
@@ -2775,8 +1994,9 @@ $('#nextSongBtn').onclick = () => {
 let galTok = 0, galUrls = [];
 function renderSong(reload = true) {
   if (!current) return;
-  const { song, shift } = current, hasText = !!(song.text && song.text.trim());
   const hasImages = !!(song.images && song.images.length);
+  // ถ้ามีภาพคอร์ด ให้ตัดเนื้อเพลงที่แนบมาออก ไม่แสดงเนื้อเพลงใต้รูป
+  const hasText = !hasImages && !!(song.text && song.text.trim());
 
   const key = detectKey(song.text) || song.key;
   const flat = preferFlat(key, shift);
@@ -2821,7 +2041,12 @@ function renderSong(reload = true) {
 
   $('#sheet').hidden = !hasText;
   $('#tpGrp').hidden = !hasText;
-  if (hasText) renderSheet($('#sheet'), song.text, shift, flat);
+  if (hasText) {
+    renderSheet($('#sheet'), song.text, shift, flat);
+    applyLyricsVisibility();
+  }
+  const lyricsToggleBtn = $('#toggleLyricsBtn');
+  if (lyricsToggleBtn) lyricsToggleBtn.hidden = !hasText;
   if (reload) loadGallery(song);
   renderSongRoadmap(song);
 
@@ -4125,7 +3350,7 @@ function renderPlView() {
     }
     $('#plTitle').textContent = '🎼 ' + p.name;
     const book = loadBook();
-    const allLookup = [...book, ...POPULAR_SONGS];
+    const allLookup = [...book];
     items = (p.songIds || []).map(normalizePlItem);
 
     // Build playable songs list
@@ -4445,7 +3670,7 @@ async function exportBandScriptPackage(plId) {
   const p = getPls().find(x => x.id === plId);
   if (!p) return;
   const book = loadBook();
-  const allLookup = [...book, ...MOCK_DB];
+  const allLookup = [...book];
   const items = (p.songIds || []).map(normalizePlItem);
   const bundleSongs = [];
 
@@ -4818,34 +4043,6 @@ function openQuickSongSwitcherModal(initialQuery = '') {
 
     searchWrap.append(sIcon, input, clearBtn);
 
-    const chipsWrap = mk('div', 'popularChipsBar');
-    chipsWrap.style.margin = '0 0 8px';
-    chipsWrap.style.padding = '6px 8px';
-    const chipsHeader = mk('div', 'chipsHeader');
-    chipsHeader.innerHTML = '<span class="chipsLabel">🔥 เพลงฮิตเล่นสด:</span><small class="muted">แตะเพื่อเล่นทันที</small>';
-    const chipsTrack = mk('div', 'popularChipsTrack');
-
-    for (const name of POPULAR_SEARCH_CHIPS.slice(0, 16)) {
-      const chip = mk('button', 'popularChip', name);
-      chip.type = 'button';
-      chip.onclick = () => {
-        const found = POPULAR_SONGS.find(p => p.title.toLowerCase() === name.toLowerCase()) ||
-                      loadBook().find(s => s.title.toLowerCase() === name.toLowerCase());
-        if (found) {
-          close();
-          activeSetlistContext = null;
-          openSong(found, found.shift || 0);
-          toast(`🎶 เปิดเพลง “${found.title}” เรียบร้อย ✔`);
-        } else {
-          input.value = name;
-          clearBtn.hidden = false;
-          renderQsResults(name);
-        }
-      };
-      chipsTrack.appendChild(chip);
-    }
-    chipsWrap.append(chipsHeader, chipsTrack);
-
     const resultsContainer = mk('div', 'qsResultsContainer');
 
     function renderQsResults(qStr) {
@@ -4854,11 +4051,6 @@ function openQuickSongSwitcherModal(initialQuery = '') {
 
       const savedBook = loadBook();
       const allKnown = [...savedBook];
-      for (const p of POPULAR_SONGS) {
-        if (!allKnown.some(x => x.id === p.id || x.title.toLowerCase() === p.title.toLowerCase())) {
-          allKnown.push(p);
-        }
-      }
 
       if (!q) {
         // 1. Show upcoming in current setlist if inside setlist
@@ -4905,19 +4097,25 @@ function openQuickSongSwitcherModal(initialQuery = '') {
           }
         }
 
-        // 2. Show popular songs / library
-        const hotHeader = mk('div', 'qsSecHeader', '🔥 เพลงฮิตเล่นสด & เพลงในคลัง:');
+        // 2. Show library
+        const hotHeader = mk('div', 'qsSecHeader', '📚 เพลงในคลังของคุณ:');
         resultsContainer.appendChild(hotHeader);
+
+        if (!allKnown.length) {
+          const emptyHint = mk('div', 'muted small');
+          emptyHint.style.padding = '8px 4px';
+          emptyHint.textContent = 'ยังไม่มีเพลงในคลัง — พิมพ์ชื่อเพลงด้านบนเพื่อค้นหาจากเว็บ';
+          resultsContainer.appendChild(emptyHint);
+        }
 
         for (const s of allKnown.slice(0, 15)) {
           const card = mk('button', 'qsItem');
           card.type = 'button';
-          const isSaved = savedBook.some(x => x.id === s.id);
           const titleDiv = mk('div', 'qsTitleRow');
           titleDiv.innerHTML = `
             <b class="qsTitle">${escapeHtml(s.title)}</b>
             ${s.key ? `<span class="badge">Key ${s.key}</span>` : ''}
-            <span class="badge ${isSaved ? 'green' : 'dim'}">${isSaved ? '💾 ในคลัง' : '🔥 เพลงฮิต'}</span>
+            <span class="badge green">💾 ในคลัง</span>
             ${s.images && s.images.length ? '<span class="badge dim">🖼️ คอร์ดภาพ</span>' : ''}
           `;
 
@@ -4972,7 +4170,7 @@ function openQuickSongSwitcherModal(initialQuery = '') {
             <b class="qsTitle">${escapeHtml(s.title)}</b>
             ${s.key ? `<span class="badge">Key ${s.key}</span>` : ''}
             ${inSetlist ? '<span class="badge accent">🎼 ในเซ็ต</span>' : ''}
-            <span class="badge ${isSaved ? 'green' : 'dim'}">${isSaved ? '💾 ในคลัง' : '🔥 เพลงฮิต'}</span>
+            <span class="badge ${isSaved ? 'green' : 'dim'}">${isSaved ? '💾 ในคลัง' : '🌐 เว็บ'}</span>
             ${s.images && s.images.length ? '<span class="badge dim">🖼️ คอร์ดภาพ</span>' : ''}
           `;
 
@@ -5036,8 +4234,8 @@ function openQuickSongSwitcherModal(initialQuery = '') {
               artist: targetItem.artist || '',
               key: targetItem.key || 'C',
               text: targetItem.realChords && targetItem.realChords.length
-                ? `[Intro]\n${targetItem.realChords.join('   ')}\n\n[Verse 1]\n\n[Chorus]\n\n[Outro]`
-                : `[Intro]\n${targetItem.title || qStr}\n\n[Verse 1]\n\n[Chorus]\n\n[Outro]`,
+                ? `[Intro]\n${targetItem.realChords.join('   ')}`
+                : '',
               images: targetItem.images || [],
               src: targetItem.url || ''
             }, 0);
@@ -5053,7 +4251,7 @@ function openQuickSongSwitcherModal(initialQuery = '') {
           title: qStr,
           artist: '',
           key: 'C',
-          text: `[Intro]\n${qStr}\n\n[Verse 1]\n\n[Chorus]\n\n[Outro]`,
+          text: '',
           images: [],
           src: ''
         }, 0);
@@ -5068,7 +4266,7 @@ function openQuickSongSwitcherModal(initialQuery = '') {
       renderQsResults(input.value);
     };
 
-    box.append(contextBanner, searchWrap, chipsWrap, resultsContainer);
+    box.append(contextBanner, searchWrap, resultsContainer);
     renderQsResults(initialQuery);
     setTimeout(() => input.focus(), 80);
   });
