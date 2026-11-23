@@ -112,7 +112,11 @@
   <section id="plSection" class="block">
     <div class="secHeader">
       <h2>🎼 เซ็ตเพลง (Playlist) <span id="plCount" class="badge dim">0</span></h2>
-      <button id="plNew" class="small primary">＋ สร้างเซ็ตใหม่</button>
+      <div class="row" style="gap:6px">
+        <button id="plImportBandBtn" class="small ghost" title="นำเข้าไฟล์สคริปต์วง (.mellow / .json) พร้อมรูปคอร์ดออฟไลน์">📥 นำเข้าสคริปต์วง</button>
+        <button id="plNew" class="small primary">＋ สร้างเซ็ตใหม่</button>
+      </div>
+      <input type="file" id="importBandFile" accept=".json,.mellow,application/json" hidden>
     </div>
     <div id="plList" class="list"></div>
   </section>
@@ -136,20 +140,20 @@
     </div>
 
     <form id="editorForm" class="card">
-      <label for="fUrl" style="margin-top:0">🔗 ดึงคอร์ดอัตโนมัติจากลิงก์เว็บ (ไม่บังคับ)</label>
+      <label for="fUrl" style="margin-top:0">🔗 ดึงคอร์ดอัตโนมัติจาก Chordtabs (รูปภาพ+เนื้อเพลง) หรือลิงก์เว็บ</label>
       <div class="row">
-        <input id="fUrl" class="grow" type="url" placeholder="วางลิงก์ https://… (เช่น chordtabs, sanook, blog)" autocapitalize="none" autocorrect="off">
+        <input id="fUrl" class="grow" type="text" placeholder="วางลิงก์ https://chordtabs.in.th/…, รหัสเพลง (เช่น 69998, 73167) หรือ URL เว็บคอร์ด" autocapitalize="none" autocorrect="off">
         <button type="button" id="fetchUrlBtn" class="primary">🌐 ดึงคอร์ด</button>
       </div>
 
       <div class="row" style="margin-top:10px">
         <div class="grow" style="min-width:180px">
           <label for="fTitle" style="margin-top:0">ชื่อเพลง *</label>
-          <input id="fTitle" required placeholder="เช่น ค่ำคืนนี้">
+          <input id="fTitle" required placeholder="เช่น ซมซาน">
         </div>
         <div class="grow" style="min-width:150px">
           <label for="fArtist" style="margin-top:0">ศิลปิน</label>
-          <input id="fArtist" placeholder="เช่น Bodyslam">
+          <input id="fArtist" placeholder="เช่น Loso">
         </div>
         <div style="width:105px">
           <label for="fKey" style="margin-top:0">คีย์เดิม</label>
@@ -157,10 +161,11 @@
         </div>
       </div>
 
-      <!-- Editor / Live Preview Toggle -->
+      <!-- Live Band Gig Cue & Section Arrangement Tabs -->
       <div class="row between" style="margin-top:14px; margin-bottom:6px">
         <div class="editorTabs">
-          <button type="button" id="tabEditBtn" class="pillTab active">✏️ แก้ไขข้อความ</button>
+          <button type="button" id="tabEditBtn" class="pillTab active">✏️ เนื้อเพลง & คอร์ด</button>
+          <button type="button" id="tabSectionsBtn" class="pillTab">🎼 โครงสร้างท่อน & สคริปต์วง</button>
           <button type="button" id="tabPreviewBtn" class="pillTab">👁️ ดูตัวอย่างคอร์ด</button>
         </div>
         <div class="row" style="gap:6px">
@@ -169,10 +174,33 @@
         </div>
       </div>
 
+      <!-- Text Chord Sheet Editor -->
       <textarea id="fText" spellcheck="false" placeholder="วางเนื้อเพลงและคอร์ดได้ทุกรูปแบบ:&#10;&#10;1) คอร์ดอยู่บรรทัดบน เนื้ออยู่บรรทัดล่าง&#10;G        Em&#10;ค่ำคืนนี้ลมเย็น&#10;&#10;2) คอร์ดแทรกในเนื้อ [G]ค่ำคืนนี้ลม[Em]เย็น"></textarea>
+
+      <!-- Visual Section & Arrangement Editor Box -->
+      <div id="sectionEditorBox" class="sectionEditorWrap" hidden>
+        <div class="row between" style="margin-bottom:8px">
+          <b>🎼 ลำดับท่อนเพลง & โน้ตบอกคิวในวง (Arrangement)</b>
+          <button type="button" id="autoExtractSectionsBtn" class="small secondary">✨ สกัดท่อนจากเนื้อเพลง</button>
+        </div>
+        <div class="sectionQuickBar">
+          <span class="small muted">เพิ่มท่อนด่วน:</span>
+          <button type="button" class="small pillTab addSecBtn" data-name="Intro">+ Intro</button>
+          <button type="button" class="small pillTab addSecBtn" data-name="Verse 1">+ Verse 1</button>
+          <button type="button" class="small pillTab addSecBtn" data-name="Verse 2">+ Verse 2</button>
+          <button type="button" class="small pillTab addSecBtn" data-name="Pre-Chorus">+ Pre-Chorus</button>
+          <button type="button" class="small pillTab addSecBtn" data-name="Chorus">+ Chorus</button>
+          <button type="button" class="small pillTab addSecBtn" data-name="Solo">+ Solo</button>
+          <button type="button" class="small pillTab addSecBtn" data-name="Bridge">+ Bridge</button>
+          <button type="button" class="small pillTab addSecBtn" data-name="Outro">+ Outro</button>
+          <button type="button" class="small pillTab addSecBtn" data-name="ท่อนจบ">+ ท่อนจบ</button>
+        </div>
+        <div id="sectionCardList" class="sectionCardList"></div>
+      </div>
+
       <div id="livePreviewBox" class="previewBox sheet" hidden></div>
 
-      <label>🖼 ภาพคอร์ด / สกรีนช็อต (พร้อม AI สแกนเป็นข้อความ)</label>
+      <label>🖼 ภาพคอร์ด / สกรีนช็อต (บันทึกออฟไลน์ในเครื่อง พร้อมสแกน OCR)</label>
       <div class="row">
         <label for="fImgs" class="small secondary" style="margin:0; cursor:pointer; display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border:1.5px solid var(--line); border-radius:10px; background:var(--panel2)">
           📁 เลือกรูปภาพ
@@ -200,6 +228,21 @@
         <b id="setlistPos">เพลงที่ 1 / 1</b>
       </div>
       <button type="button" id="nextSongBtn" class="small primary">ถัดไป ⏭</button>
+    </div>
+
+    <!-- Live Gig Script Cue Banner (Shows live cues, singer, target key & next song) -->
+    <div id="liveCueBanner" class="liveCueBanner meta" hidden>
+      <div class="cueRow">
+        <div class="cueMain">
+          <span class="cueIcon">📢</span>
+          <span id="liveCueText">คิวสด</span>
+        </div>
+        <div class="cueMetaPills" id="liveCuePills"></div>
+      </div>
+      <div id="liveCueNextRow" class="cueNextPreview" hidden>
+        <span>เพลงถัดไป: <b id="liveCueNextTitle">-</b></span>
+        <span id="liveCueNextKey" class="badge"></span>
+      </div>
     </div>
 
     <!-- Clean Top Navigation & Action Bar -->
@@ -237,12 +280,34 @@
         </div>
       </div>
 
+      <!-- Arrangement Roadmap Bar (Tap chips to follow sections live on stage) -->
+      <div id="songRoadmap" class="roadmapWrap meta" hidden>
+        <div class="roadmapHeader">
+          <span>🎼 ผังโครงสร้างท่อนเพลง (แตะเพื่อมาร์กท่อนที่เล่นอยู่)</span>
+          <small id="roadmapSummary"></small>
+        </div>
+        <div id="roadmapChips" class="roadmapScroll"></div>
+      </div>
+
       <!-- All Chords Used in This Song (Tap to hear strum & view diagram) -->
       <div id="songChordsBar" class="songChordsBar meta" hidden></div>
 
-      <!-- Rendered Chord Sheet (Tap any chord to inspect guitar fingering & sound) -->
+      <!-- Rendered Chord Sheet & Chordtabs Images (With Stage Dark Mode Invert) -->
+      <div id="galleryWrap" class="galleryWrap" hidden>
+        <div class="galleryToolbar meta">
+          <div class="row" style="gap:6px; align-items:center">
+            <span class="badge green">🖼️ คอร์ดภาพ (พร้อมเล่นออฟไลน์)</span>
+            <button type="button" id="toggleInvertImgBtn" class="small" title="สลับสีโหมดมืดเวที (พื้นดำ ตัวหนังสือขาว) ถนอมสายตาบนเวที">🌓 โหมดมืดเวที</button>
+          </div>
+          <div class="row" style="gap:6px; align-items:center">
+            <button type="button" id="toggleLyricsUnderImgBtn" class="small secondary" title="แสดง/ซ่อนเนื้อเพลงควบคู่ใต้รูป">📄 เนื้อเพลงควบคู่</button>
+            <button type="button" id="openImgLightboxBtn" class="small secondary">🔍 ขยายเต็มจอ</button>
+          </div>
+        </div>
+        <div id="gallery" class="gallery"></div>
+      </div>
+
       <div id="sheet" class="sheet"></div>
-      <div id="gallery" class="gallery" hidden></div>
     </article>
 
     <!-- Single-Row Compact Performer Floating Dock -->

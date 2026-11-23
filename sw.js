@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'mellowchords-v6';
+const CACHE_NAME = 'mellowchords-v7';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -51,6 +51,8 @@ self.addEventListener('fetch', event => {
     url.hostname.includes('lrclib.net') ||
     url.hostname.includes('allorigins') ||
     url.hostname.includes('corsproxy') ||
+    url.hostname.includes('weserv.nl') ||
+    url.hostname.includes('chordtabs.in.th') ||
     url.hostname.includes('yahoo.com') ||
     url.hostname.includes('duckduckgo.com')
   ) {

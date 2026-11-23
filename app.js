@@ -666,20 +666,45 @@ function smartFormatChordSheet(rawText, convertToBracket = false) {
  * ============================================================================== */
 function cleanTitle(t) {
   return (t || '')
-    .replace(/\s*[|｜@]\s.*$/, '')
+    .replace(/\s*\(Key\s*[A-G][#b]?m?\)/gi, '')
+    .replace(/\s*\(คอร์ด\s*ง่ายๆ?\).*$/i, '')
+    .replace(/\s*-\s*เนื้อเพลง.*$/i, '')
     .replace(/^คอร์ด(เพลง)?\s*/i, '')
     .replace(/คอร์ด\s*$/i, '')
-    .replace(/\s*-\s*เนื้อเพลง.*$/i, '')
-    .replace(/\s*\(คอร์ด\s*ง่ายๆ?\).*$/i, '')
     .replace(/\s*เวอร์ชั่น\s*\d+.*$/i, '')
     .trim();
 }
 
 function parseTitleAndArtist(rawTitle, url = '') {
-  let cleaned = cleanTitle(rawTitle);
-  let title = '', artist = '';
+  let title = '', artist = '', key = '';
+  const str = String(rawTitle || '').replace(/[\r\n]+/g, ' ').trim();
 
-  if (cleaned.includes(' - ')) {
+  // Extract ( Key X )
+  const km = str.match(/\(\s*Key\s*([A-G][#b]?m?)\s*\)/i) || str.match(/\bKey\s*([A-G][#b]?m?)\b/i);
+  if (km) key = km[1];
+
+  let cleaned = str.replace(/\(\s*Key\s*[A-G][#b]?m?\s*\)/gi, '').trim();
+
+  if (cleaned.includes('|')) {
+    const parts = cleaned.split('|');
+    const right = parts[parts.length - 1].replace(/^คอร์ด\s*/i, '').trim();
+    const left = parts[0].replace(/^คอร์ด\s*/i, '').replace(/คอร์ด\s*$/i, '').trim();
+
+    if (right.includes(' - ')) {
+      const p = right.split(' - ');
+      title = cleanTitle(p[0]);
+      artist = cleanTitle(p[1]);
+    } else {
+      const leftClean = cleanTitle(left);
+      if (leftClean && right.toLowerCase().startsWith(leftClean.toLowerCase())) {
+        title = leftClean;
+        artist = cleanTitle(right.slice(leftClean.length));
+      } else {
+        title = leftClean;
+        artist = cleanTitle(right);
+      }
+    }
+  } else if (cleaned.includes(' - ')) {
     const parts = cleaned.split(' - ');
     title = cleanTitle(parts[0]);
     artist = cleanTitle(parts[1]);
@@ -688,7 +713,7 @@ function parseTitleAndArtist(rawTitle, url = '') {
     title = cleanTitle(parts[0]);
     artist = cleanTitle(parts[1]);
   } else {
-    title = cleaned;
+    title = cleanTitle(cleaned);
   }
 
   if (!title && url) {
@@ -699,7 +724,7 @@ function parseTitleAndArtist(rawTitle, url = '') {
         .trim();
     } catch {}
   }
-  return { title, artist };
+  return { title, artist, key };
 }
 
 function cleanExtractedWebChordPage(rawContent) {
@@ -801,8 +826,7 @@ async function fetchPageWithFallbacks(url) {
 
   const endpoints = [
     `https://r.jina.ai/${url}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    `https://corsproxy.io/?url=${encodeURIComponent(url)}`
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
   ];
 
   for (const endpoint of endpoints) {
@@ -866,17 +890,22 @@ function parseDdgLiteMarkdown(md, q) {
 
     if (/\/(artist|category|tag|search)\//i.test(targetUrl)) continue;
 
-    const { chords, trueKey } = extractRealChordsFromSnippet(rawLinkTitle, snippetBlock);
-    const { title, artist } = parseTitleAndArtist(rawLinkTitle);
+    let { chords, trueKey } = extractRealChordsFromSnippet(rawLinkTitle, snippetBlock);
+    const { title, artist, key } = parseTitleAndArtist(rawLinkTitle, targetUrl);
+    if (key && !trueKey) trueKey = key;
+
+    const isChordtabs = domain.includes('chordtabs.in.th');
+    const displayDomain = isChordtabs ? 'chordtabs.in.th (คอร์ดภาพ)' : domain;
 
     items.push({
       id: 'web-' + hash(targetUrl),
       title: title || q,
-      artist: artist || domain,
+      artist: artist || (isChordtabs ? 'Chordtabs' : domain),
       key: trueKey || '',
       realChords: chords,
       url: targetUrl,
-      domain,
+      domain: displayDomain,
+      isChordtabs,
       snippet: snippetBlock.replace(/\*\*/g, '').split('\n')[0].slice(0, 120),
       source: 'web'
     });
@@ -884,7 +913,7 @@ function parseDdgLiteMarkdown(md, q) {
   return items;
 }
 
-// ค้นหาหน้าคอร์ดจริงจากเว็บ โดยยิงค้นหาแหล่งที่ดึงตารางคอร์ดจริงได้ 100% (MusicATM) ควบคู่กับเว็บคอร์ดทั่วไป
+// ค้นหาหน้าคอร์ดจริงจากเว็บ โดยยิงค้นหา Chordtabs (คอร์ดภาพตรงสุด) ควบคู่กับ MusicATM และเว็บทั่วไป
 async function searchRealWebChords(query) {
   const q = query.trim();
   if (!q) return { results: [], webTrueKey: '', webChordsSummary: [] };
@@ -905,7 +934,7 @@ async function searchRealWebChords(query) {
     }
   }
 
-  // 2. ค้นหาคู่ขนาน: (A) ค้นเจาะจงฐานข้อมูล MusicATM (ดึงตารางคอร์ดจริง+ตำแหน่งคอร์ดแม่นยำ 100%) และ (B) ค้นเว็บคอร์ดทั่วไปเพื่อสกัดคีย์และชุดคอร์ดอ้างอิง
+  // 2. ค้นหาคู่ขนาน: (A) Chordtabs (B) MusicATM (C) เว็บคอร์ดทั่วไป
   let webChordsSummary = [];
   let webTrueKey = '';
 
@@ -921,13 +950,14 @@ async function searchRealWebChords(query) {
     return [];
   };
 
-  const [musicAtmItems, generalItems] = await Promise.all([
+  const [chordtabsItems, musicAtmItems, generalItems] = await Promise.all([
+    fetchDdg(`${q} site:chordtabs.in.th`),
     fetchDdg(`${q} คอร์ด site:musicatm.com`),
     fetchDdg(`${q} คอร์ด`)
   ]);
 
   const seenUrls = new Set();
-  for (const item of [...musicAtmItems, ...generalItems]) {
+  for (const item of [...chordtabsItems, ...musicAtmItems, ...generalItems]) {
     if (seenUrls.has(item.url)) continue;
     seenUrls.add(item.url);
 
@@ -950,6 +980,7 @@ async function searchRealWebChords(query) {
   results.sort((a, b) => {
     const score = item => {
       if (item.source === 'builtin') return 100;
+      if (item.domain.includes('chordtabs.in.th')) return 98; // Highest priority for accurate chords!
       if (item.domain.includes('musicatm.com')) return 95;
       if (item.domain.includes('ultimate-guitar.com')) return 85;
       if (item.realChords && item.realChords.length >= 3) return 75;
@@ -961,19 +992,147 @@ async function searchRealWebChords(query) {
   return { results, webTrueKey, webChordsSummary };
 }
 
-// ดึงตารางคอร์ดจริงจากเว็บ และตรวจสอบให้ "คีย์ของเพลง" กับ "คอร์ดที่แสดงบนเนื้อเพลง" ตรงกัน 100% เสมอ (ไม่วางคอร์ดมั่วเด็ดขาด)
+// ฟังก์ชันสกัดท่อนเพลงเริ่มต้นสำหรับเล่นสด
+function autoExtractSectionsFromText(text) {
+  if (!text) return [];
+  const lines = text.split('\n');
+  const sections = [];
+  let secIdx = 1;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const m = trimmed.match(/^\[(Intro|Instru|Verse\s*\d*|Pre-Chorus|Chorus|Hook|Solo|Bridge|Outro|ท่อน[^\s\]]+)\]/i) ||
+              trimmed.match(/^(Intro|Instru|Verse\s*\d*|Pre-Chorus|Chorus|Hook|Solo|Bridge|Outro|ท่อน[^\s:]+)\s*[:\-]/i);
+    if (m) {
+      const name = m[1].replace(/[:\-]$/, '').trim();
+      const cue = trimmed.slice(m[0].length).replace(/^[\s:\-]+/, '').trim();
+      sections.push({
+        id: 'sec-' + (secIdx++),
+        name,
+        tag: name.toLowerCase().includes('chorus') ? 'x2' : '',
+        cue: cue || ''
+      });
+    }
+  }
+
+  if (!sections.length) {
+    sections.push(
+      { id: 'sec-1', name: 'Intro', tag: '', cue: '' },
+      { id: 'sec-2', name: 'Verse 1', tag: '', cue: '' },
+      { id: 'sec-3', name: 'Pre-Chorus', tag: '', cue: '' },
+      { id: 'sec-4', name: 'Chorus', tag: 'x2', cue: 'ร้องคู่' },
+      { id: 'sec-5', name: 'Verse 2', tag: '', cue: '' },
+      { id: 'sec-6', name: 'Chorus', tag: 'x2', cue: '' },
+      { id: 'sec-7', name: 'Solo', tag: '8 ห้อง', cue: 'กีต้าร์ลีด' },
+      { id: 'sec-8', name: 'Chorus', tag: 'x2', cue: 'ส่งกลองเต็ม' },
+      { id: 'sec-9', name: 'Outro', tag: '', cue: 'จบ' }
+    );
+  }
+
+  return sections;
+}
+
+// ดึงตารางคอร์ดจริง หรือรูปภาพคอร์ดจาก Chordtabs และบันทึกลง IndexedDB ให้ออฟไลน์ 100%
 async function loadRealWebChordResult(item, allResults) {
   const candidateUrls = [];
   if (item.url) candidateUrls.push(item.url);
 
-  // If the clicked site is protected by Cloudflare (e.g. dochord/chordzaa), automatically fall back to MusicATM URLs for the same song
+  // 1. ตรวจสอบว่าผลลัพธ์เป็น Chordtabs.in.th หรือไม่ (ดึงรูปภาพ + เนื้อเพลง + คีย์)
+  const isChordtabs = candidateUrls.some(u => u.includes('chordtabs.in.th'));
+  if (isChordtabs) {
+    for (const targetUrl of candidateUrls.filter(u => u.includes('chordtabs.in.th'))) {
+      try {
+        const jinaUrl = `https://r.jina.ai/${targetUrl}`;
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 10000);
+        const res = await fetch(jinaUrl, { headers: { 'X-With-Images-Summary': 'true' }, signal: ctrl.signal });
+        clearTimeout(timer);
+
+        if (res.ok) {
+          const md = await res.text();
+
+          // หา Chord Image URL
+          let chordImgUrl = '';
+          const imgMatch = md.match(/!\[.*?\]\((https:\/\/chordtabs\.in\.th\/img\/nm\/[^\s)]+\.png)\)/i) ||
+                           md.match(/(https:\/\/chordtabs\.in\.th\/img\/nm\/[^\s)]+\.png)/i);
+          if (imgMatch) {
+            chordImgUrl = imgMatch[1];
+          } else {
+            const idMatch = targetUrl.match(/chordtabs\.in\.th\/(\d+)/);
+            if (idMatch) chordImgUrl = `https://chordtabs.in.th/img/nm/${idMatch[1]}.png`;
+          }
+
+          // สกัด Title, Artist, Key จาก Markdown และ Header
+          let { title, artist, key } = parseTitleAndArtist(item.title || '', targetUrl);
+          const titleLine = md.split('\n').find(l => l.startsWith('Title:') || l.startsWith('# '));
+          if (titleLine) {
+            const parsedH = parseTitleAndArtist(titleLine.replace(/^Title:\s*|^#\s*/, ''), targetUrl);
+            if (parsedH.title) title = parsedH.title;
+            if (parsedH.artist) artist = parsedH.artist;
+            if (parsedH.key && !key) key = parsedH.key;
+          }
+
+          // ตรวจสอบคอร์ดที่ใช้ในเพลงจากไอคอนคอร์ด
+          const chordsUsed = [];
+          for (const cm of md.matchAll(/chord-([A-G][#b]?(?:m|maj|dim|aug|sus|\d+)*)\.webp/gi)) {
+            if (!chordsUsed.includes(cm[1])) chordsUsed.push(cm[1]);
+          }
+          if (!key && chordsUsed.length) key = chordsUsed[0];
+
+          // สกัดเนื้อเพลง
+          let lyrics = '';
+          const lyricsIdx = md.indexOf('### เนื้อเพลง');
+          if (lyricsIdx >= 0) {
+            lyrics = md.slice(lyricsIdx)
+              .replace(/^### เนื้อเพลง[^\n]*\n+/i, '')
+              .split(/\n(?:คอร์ดเพลง|คอร์ดกีต้าร์|อัลบั้ม|เนื้อเพลงอื่นๆ)/i)[0]
+              .trim();
+          }
+
+          // ดาวน์โหลดรูปภาพและบันทึกลง IndexedDB ให้เล่นออฟไลน์ 100%
+          const images = [];
+          if (chordImgUrl) {
+            try {
+              const proxyImg = `https://images.weserv.nl/?url=${encodeURIComponent(chordImgUrl)}&output=webp`;
+              const imgRes = await fetch(proxyImg);
+              if (imgRes.ok) {
+                const blob = await imgRes.blob();
+                const imgId = 'ct-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+                await idbPut(imgId, blob);
+                images.push(imgId);
+              }
+            } catch (imgErr) {
+              console.warn('Failed to cache image in idb:', imgErr);
+            }
+          }
+
+          const sections = autoExtractSectionsFromText(lyrics);
+
+          return {
+            id: item.id || ('ct-' + Date.now().toString(36)),
+            title: title || item.title,
+            artist: artist || item.artist || 'Chordtabs',
+            key: key || item.key || (chordsUsed[0] || 'C'),
+            text: lyrics || (title ? `[Intro]\n${title}\n\n[Verse 1]\n\n[Chorus]\n\n[Outro]` : ''),
+            images,
+            sections,
+            src: targetUrl,
+            shift: 0
+          };
+        }
+      } catch (err) {
+        console.warn('Chordtabs direct load error:', err);
+      }
+    }
+  }
+
+  // 2. ถ้าเป็นเว็บข้อความคอร์ดทั่วไป (เช่น MusicATM)
   for (const r of allResults) {
     if (r.url && r.domain && r.domain.includes('musicatm.com') && !candidateUrls.includes(r.url)) {
       candidateUrls.push(r.url);
     }
   }
 
-  // If no MusicATM URL was in the initial list, do a quick targeted lookup for this song title on MusicATM
   if (!candidateUrls.some(u => u.includes('musicatm.com'))) {
     try {
       const ddgUrl = `https://r.jina.ai/https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(item.title + ' คอร์ด site:musicatm.com')}`;
@@ -994,9 +1153,7 @@ async function loadRealWebChordResult(item, allResults) {
       const formattedText = smartFormatChordSheet(text, false);
       const sheetChords = extractUniqueChordsFromSheet(formattedText);
 
-      // Must contain real chords extracted from the sheet itself
       if (formattedText && formattedText.length > 80 && sheetChords.length >= 2) {
-        // Compute the EXACT key of the chords actually present on the lyrics sheet!
         const actualSheetKey = detectTrueKeyFromChords(sheetChords, formattedText);
         const parsed = parseTitleAndArtist(rawTitle, targetUrl);
 
@@ -1006,13 +1163,14 @@ async function loadRealWebChordResult(item, allResults) {
           artist: (item.artist && !item.artist.includes('.com')) ? item.artist : (parsed.artist || item.artist),
           key: actualSheetKey || item.key || sheetChords[0],
           text: formattedText,
+          sections: autoExtractSectionsFromText(formattedText),
           src: targetUrl
         };
       }
     } catch {}
   }
 
-  throw new Error('เว็บปลายทางติดระบบป้องกัน Cloudflare');
+  throw new Error('เว็บปลายทางติดระบบป้องกันบอท');
 }
 
 /* ==============================================================================
@@ -1759,22 +1917,146 @@ function openDirectKeyPickerModal() {
   });
 }
 
-if ($('#keyPickerTrigger')) {
-  $('#keyPickerTrigger').onclick = openDirectKeyPickerModal;
+let stageInvertImg = LS.get('stage_invert_img', false);
+
+function applyImgInvertFilter() {
+  document.querySelectorAll('.sheetImg').forEach(im => {
+    im.classList.toggle('invertFilter', stageInvertImg);
+  });
+  const btnEl = $('#toggleInvertImgBtn');
+  if (btnEl) {
+    btnEl.textContent = stageInvertImg ? '☀️ สีกระดาษปกติ' : '🌓 โหมดมืดเวที';
+  }
+}
+
+if ($('#toggleInvertImgBtn')) {
+  $('#toggleInvertImgBtn').onclick = () => {
+    stageInvertImg = !stageInvertImg;
+    LS.set('stage_invert_img', stageInvertImg);
+    applyImgInvertFilter();
+    toast(stageInvertImg ? 'เปิดโหมดมืดเวที (พื้นดำ ตัวหนังสือขาว) แล้ว 🌓' : 'กลับสู่สีต้นฉบับ ☀️');
+  };
+}
+
+if ($('#toggleLyricsUnderImgBtn')) {
+  $('#toggleLyricsUnderImgBtn').onclick = () => {
+    const sheetEl = $('#sheet');
+    sheetEl.hidden = !sheetEl.hidden;
+    $('#toggleLyricsUnderImgBtn').textContent = sheetEl.hidden ? '📄 แสดงเนื้อเพลง' : '📄 ซ่อนเนื้อเพลง';
+  };
+}
+
+if ($('#openImgLightboxBtn')) {
+  $('#openImgLightboxBtn').onclick = () => {
+    if (galUrls.length) openLightbox(galUrls[0]);
+  };
 }
 
 function updateSetlistQueueBar() {
   const nav = $('#setlistNav');
+  const cueBanner = $('#liveCueBanner');
+
   if (!activeSetlistContext || !activeSetlistContext.songs.length) {
     nav.hidden = true;
+    if (cueBanner) {
+      if (current && current.song && current.song.cue) {
+        cueBanner.hidden = false;
+        $('#liveCueText').textContent = current.song.cue;
+        $('#liveCuePills').replaceChildren(mk('span', 'cuePill', `คีย์: ${$('#cKeyNow').textContent}`));
+        $('#liveCueNextRow').hidden = true;
+      } else {
+        cueBanner.hidden = true;
+      }
+    }
     return;
   }
+
   nav.hidden = false;
   const { name, songs, index } = activeSetlistContext;
-  $('#setlistName').textContent = `🎼 เซ็ต: ${name}`;
-  $('#setlistPos').textContent = `เพลงที่ ${index + 1} / ${songs.length} · ${songs[index].title}`;
+  const curSong = songs[index];
+  $('#setlistName').textContent = `🎼 สคริปต์สด: ${name}`;
+  $('#setlistPos').textContent = `เพลงที่ ${index + 1} / ${songs.length} · ${curSong.title}`;
   $('#prevSongBtn').disabled = index <= 0;
   $('#nextSongBtn').disabled = index >= songs.length - 1;
+
+  if (cueBanner) {
+    cueBanner.hidden = false;
+    const itemCue = curSong.cue || (curSong.sections && curSong.sections.find(s => s.cue)?.cue) || 'คิวพร้อมเล่นสด — โฟกัสท่อนเพลง';
+    $('#liveCueText').textContent = itemCue;
+
+    const pills = $('#liveCuePills');
+    pills.replaceChildren();
+
+    if (curSong.singer) pills.appendChild(mk('span', 'cuePill', `🎤 ร้อง: ${curSong.singer}`));
+    if (curSong.targetKey) pills.appendChild(mk('span', 'cuePill', `🎹 คีย์เล่นจริง: ${curSong.targetKey}`));
+    if (curSong.bpm) {
+      pills.appendChild(mk('span', 'cuePill', `⏱️ ${curSong.bpm} BPM`));
+      metroBpm = parseInt(curSong.bpm, 10) || metroBpm;
+      updateMetroBtnLabel();
+    }
+
+    const nextRow = $('#liveCueNextRow');
+    if (index < songs.length - 1) {
+      nextRow.hidden = false;
+      const nextSong = songs[index + 1];
+      $('#liveCueNextTitle').textContent = `${nextSong.title} (${nextSong.artist || 'ศิลปิน'})`;
+      const nextKey = nextSong.targetKey || detectKey(nextSong.text) || nextSong.key || '-';
+      $('#liveCueNextKey').textContent = `Key ${nextKey}`;
+    } else {
+      nextRow.hidden = true;
+    }
+  }
+}
+
+function renderSongRoadmap(song) {
+  const mapWrap = $('#songRoadmap');
+  const chipsBox = $('#roadmapChips');
+  const summaryEl = $('#roadmapSummary');
+  if (!mapWrap || !chipsBox) return;
+
+  const sections = song.sections && song.sections.length
+    ? song.sections
+    : autoExtractSectionsFromText(song.text || '');
+
+  if (!sections.length) {
+    mapWrap.hidden = true;
+    return;
+  }
+
+  mapWrap.hidden = false;
+  chipsBox.replaceChildren();
+  if (summaryEl) summaryEl.textContent = `${sections.length} ท่อน`;
+
+  sections.forEach((sec, idx) => {
+    if (idx > 0) {
+      chipsBox.appendChild(mk('span', 'roadmapArrow', '➔'));
+    }
+    const chip = mk('button', 'roadmapChip');
+    chip.type = 'button';
+    chip.textContent = sec.name;
+
+    if (sec.tag) {
+      chip.appendChild(mk('span', 'badge', sec.tag));
+    }
+    if (sec.cue) {
+      chip.appendChild(mk('span', 'roadmapCue', `📢 ${sec.cue}`));
+    }
+
+    chip.onclick = () => {
+      chipsBox.querySelectorAll('.roadmapChip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      if (song.text) {
+        const needle = sec.name.toLowerCase();
+        const headers = Array.from($('#sheet').querySelectorAll('.secBadge, b, .ch'));
+        const target = headers.find(h => h.textContent.toLowerCase().includes(needle));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    };
+
+    chipsBox.appendChild(chip);
+  });
 }
 
 $('#prevSongBtn').onclick = () => {
@@ -1795,7 +2077,8 @@ let galTok = 0, galUrls = [];
 function renderSong(reload = true) {
   if (!current) return;
   const { song, shift } = current, hasText = !!(song.text && song.text.trim());
-  // Calculate true original key directly from the chords inside the song text so key and chords NEVER mismatch
+  const hasImages = !!(song.images && song.images.length);
+
   const key = detectKey(song.text) || song.key;
   const flat = preferFlat(key, shift);
   const now = key ? transposeChord(key, shift, flat) : '-';
@@ -1816,7 +2099,7 @@ function renderSong(reload = true) {
     capoEl.hidden = true;
   }
 
-  // Render All Chords Used in This Song Bar (Transposed to current key!)
+  // Render All Chords Used in This Song Bar
   const chordsBar = $('#songChordsBar');
   if (chordsBar) {
     const baseChords = extractUniqueChordsFromSheet(song.text);
@@ -1841,6 +2124,7 @@ function renderSong(reload = true) {
   $('#tpGrp').hidden = !hasText;
   if (hasText) renderSheet($('#sheet'), song.text, shift, flat);
   if (reload) loadGallery(song);
+  renderSongRoadmap(song);
 
   const saved = loadBook().some(s => s.id === song.id);
   $('#savedTag').hidden = !saved;
@@ -1853,30 +2137,35 @@ function renderSong(reload = true) {
 }
 
 async function loadGallery(song) {
-  const tok = ++galTok, g = $('#gallery');
+  const tok = ++galTok, g = $('#gallery'), wrap = $('#galleryWrap');
   galUrls.forEach(u => URL.revokeObjectURL(u));
   galUrls = [];
   g.replaceChildren();
   if (!song.images || !song.images.length) {
+    if (wrap) wrap.hidden = true;
     g.hidden = true;
     return;
   }
+  if (wrap) wrap.hidden = false;
   g.hidden = false;
+
   for (const id of song.images) {
     const b = await getImg(id);
     if (tok !== galTok) return;
     if (!b) {
-      g.appendChild(mk('div', 'empty', 'ไม่พบภาพในเครื่อง'));
+      g.appendChild(mk('div', 'empty', 'ไม่พบภาพในเครื่อง (อาจลบไปแล้ว)'));
       continue;
     }
     const url = URL.createObjectURL(b);
     galUrls.push(url);
     const im = mk('img', 'sheetImg');
+    if (stageInvertImg) im.classList.add('invertFilter');
     im.src = url;
     im.alt = 'ภาพคอร์ด';
     im.onclick = () => openLightbox(url);
     g.appendChild(im);
   }
+  applyImgInvertFilter();
 }
 
 const setShift = n => {
@@ -2001,17 +2290,25 @@ addEventListener('keydown', e => {
 });
 
 /* ==============================================================================
- * 11) เพิ่ม / แก้ไขเพลง, ดูตัวอย่างคอร์ดสด (Live Preview) & OCR
+ * 11) เพิ่ม / แก้ไขเพลง, ดูตัวอย่างคอร์ดสด (Live Preview), จัดท่อนเพลง & OCR
  * ============================================================================== */
-let editingId = null, edImgs = [], edRemoved = [];
+let editingId = null, edImgs = [], edRemoved = [], edSections = [];
 
 function switchEditorMode(mode) {
-  const isPreview = mode === 'preview';
-  $('#tabEditBtn').classList.toggle('active', !isPreview);
-  $('#tabPreviewBtn').classList.toggle('active', isPreview);
-  $('#fText').hidden = isPreview;
-  $('#livePreviewBox').hidden = !isPreview;
-  if (isPreview) {
+  $('#tabEditBtn').classList.toggle('active', mode === 'edit');
+  if ($('#tabSectionsBtn')) $('#tabSectionsBtn').classList.toggle('active', mode === 'sections');
+  $('#tabPreviewBtn').classList.toggle('active', mode === 'preview');
+
+  $('#fText').hidden = mode !== 'edit';
+  if ($('#sectionEditorBox')) $('#sectionEditorBox').hidden = mode !== 'sections';
+  $('#livePreviewBox').hidden = mode !== 'preview';
+
+  if (mode === 'sections') {
+    if (!edSections.length) {
+      edSections = autoExtractSectionsFromText($('#fText').value.trim());
+    }
+    renderSectionEditorList(edSections);
+  } else if (mode === 'preview') {
     const text = $('#fText').value.trim();
     const key = detectKey(text) || $('#fKey').value.trim();
     if (text) {
@@ -2022,15 +2319,98 @@ function switchEditorMode(mode) {
   }
 }
 
+function renderSectionEditorList(sections) {
+  const list = $('#sectionCardList');
+  if (!list) return;
+  list.replaceChildren();
+
+  if (!sections.length) {
+    list.innerHTML = `<div class="muted small" style="text-align:center; padding:15px">ยังไม่มีท่อนเพลง — กดปุ่ม “เพิ่มท่อนด่วน” ด้านบน หรือ “✨ สกัดท่อนจากเนื้อเพลง”</div>`;
+    return;
+  }
+
+  sections.forEach((sec, idx) => {
+    const card = mk('div', 'sectionCard');
+
+    const nameInp = mk('input', 'secName');
+    nameInp.value = sec.name || '';
+    nameInp.placeholder = 'ชื่อท่อน (เช่น Chorus)';
+    nameInp.oninput = () => { sec.name = nameInp.value; };
+
+    const tagInp = mk('input', 'secTag');
+    tagInp.value = sec.tag || '';
+    tagInp.placeholder = 'ซ้ำ (เช่น x2)';
+    tagInp.oninput = () => { sec.tag = tagInp.value; };
+
+    const cueInp = mk('input', 'secCue');
+    cueInp.value = sec.cue || '';
+    cueInp.placeholder = 'โน้ตบอกคิวในวง (เช่น ร้องคู่ / โซโล่ 8 ห้อง)';
+    cueInp.oninput = () => { sec.cue = cueInp.value; };
+
+    const actions = mk('div', 'sectionCardActions');
+    const moveUpBtn = btn('↑', () => {
+      if (idx > 0) {
+        [sections[idx - 1], sections[idx]] = [sections[idx], sections[idx - 1]];
+        renderSectionEditorList(sections);
+      }
+    });
+    const moveDownBtn = btn('↓', () => {
+      if (idx < sections.length - 1) {
+        [sections[idx + 1], sections[idx]] = [sections[idx], sections[idx + 1]];
+        renderSectionEditorList(sections);
+      }
+    });
+    const dupBtn = btn('⧉', () => {
+      sections.splice(idx + 1, 0, { ...sec, id: 'sec-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5) });
+      renderSectionEditorList(sections);
+    });
+    const delBtn = btn('✕', () => {
+      sections.splice(idx, 1);
+      renderSectionEditorList(sections);
+    });
+
+    actions.append(moveUpBtn, moveDownBtn, dupBtn, delBtn);
+    card.append(nameInp, tagInp, cueInp, actions);
+    list.appendChild(card);
+  });
+}
+
 $('#tabEditBtn').onclick = () => switchEditorMode('edit');
+if ($('#tabSectionsBtn')) $('#tabSectionsBtn').onclick = () => switchEditorMode('sections');
 $('#tabPreviewBtn').onclick = () => switchEditorMode('preview');
 $('#topSaveEditorBtn').onclick = () => $('#editorForm').requestSubmit();
+
+document.querySelectorAll('.addSecBtn').forEach(b => {
+  b.onclick = () => {
+    const rawName = b.dataset.name;
+    const name = rawName === 'Custom' ? (prompt('ชื่อท่อน (เช่น Hook, ท่อนแยก)') || 'ท่อนใหม่') : rawName;
+    edSections.push({
+      id: 'sec-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+      name,
+      tag: name.toLowerCase().includes('chorus') ? 'x2' : '',
+      cue: ''
+    });
+    renderSectionEditorList(edSections);
+  };
+});
+
+if ($('#autoExtractSectionsBtn')) {
+  $('#autoExtractSectionsBtn').onclick = () => {
+    edSections = autoExtractSectionsFromText($('#fText').value);
+    renderSectionEditorList(edSections);
+    toast('สกัดโครงสร้างท่อนจากเนื้อเพลงเรียบร้อย ✔');
+  };
+}
 
 async function openEditor(song, prefill = '') {
   const keep = song && (song.id.startsWith('u-') || song.id.startsWith('sh-') || loadBook().some(s => s.id === song.id));
   editingId = keep ? song.id : null;
   edImgs = [];
   edRemoved = [];
+  edSections = song && song.sections && song.sections.length
+    ? JSON.parse(JSON.stringify(song.sections))
+    : autoExtractSectionsFromText(song ? song.text || '' : '');
+
   $('#editorTitle').textContent = song ? 'แก้ไขเพลง' : 'เพิ่มเพลงใหม่';
   $('#fTitle').value = song ? song.title : prefill;
   $('#fArtist').value = song ? song.artist || '' : '';
@@ -2199,7 +2579,6 @@ $('#ocrScanBtn').onclick = () => {
   runOcrOnImage(edImgs[0].blob);
 };
 
-// เมื่อผู้ใช้พิมพ์หรือเปลี่ยนช่อง "คีย์เดิม" ในหน้าแก้ไข หากคอร์ดในเนื้อเพลงเป็นคนละคีย์ จะช่วยรักษาความสอดคล้อง
 $('#editorForm').onsubmit = async e => {
   e.preventDefault();
   let text = $('#fText').value.replace(/\s+$/, '');
@@ -2219,6 +2598,7 @@ $('#editorForm').onsubmit = async e => {
     key: finalKey,
     text,
     images: edImgs.map(i => i.id),
+    sections: edSections,
     src: $('#fUrl').value.trim(),
     shift: 0,
     savedAt: Date.now()
@@ -2249,7 +2629,7 @@ $('#pasteBtn').onclick = async () => {
       toast('คลิปบอร์ดว่างเปล่า — วางข้อความหรือเลือกรูปคอร์ดได้เลย');
       return;
     }
-    if (/^https?:\/\/\S+$/.test(t)) {
+    if (/^https?:\/\/\S+$/.test(t) || /^\d{3,6}$/.test(t)) {
       $('#fUrl').value = t;
       importFromUrl();
     } else {
@@ -2271,15 +2651,41 @@ $('#pasteBtn').onclick = async () => {
 };
 
 async function importFromUrl() {
-  const url = $('#fUrl').value.trim(), b = $('#fetchUrlBtn');
+  let url = $('#fUrl').value.trim();
+  const b = $('#fetchUrlBtn');
+  if (/^\d{3,6}$/.test(url)) {
+    url = `https://chordtabs.in.th/${url}/`;
+    $('#fUrl').value = url;
+  }
   if (!/^https?:\/\//.test(url)) {
-    toast('วางลิงก์ที่ขึ้นต้นด้วย https:// ก่อนครับ', true);
+    toast('วางลิงก์ https://chordtabs.in.th/… หรือรหัสเพลงก่อนครับ', true);
     return;
   }
   b.disabled = true;
   const old = b.textContent;
   b.textContent = 'กำลังดึง…';
   try {
+    if (url.includes('chordtabs.in.th')) {
+      const loaded = await loadRealWebChordResult({ url, title: '', artist: '', id: 'imp-' + Date.now() }, []);
+      if (loaded.title) $('#fTitle').value = loaded.title;
+      if (loaded.artist) $('#fArtist').value = loaded.artist;
+      if (loaded.key) $('#fKey').value = loaded.key;
+      if (loaded.text) $('#fText').value = loaded.text;
+      if (loaded.sections && loaded.sections.length) {
+        edSections = loaded.sections;
+        renderSectionEditorList(edSections);
+      }
+      if (loaded.images && loaded.images.length) {
+        for (const id of loaded.images) {
+          const blob = await getImg(id);
+          if (blob) edImgs.push({ id, blob, url: URL.createObjectURL(blob), isNew: false });
+        }
+        renderThumbs();
+      }
+      toast(`ดึงรูปคอร์ดและเนื้อเพลง “${loaded.title}” จาก Chordtabs สำเร็จแล้ว ✔`);
+      return;
+    }
+
     const html = await fetchPageWithFallbacks(url);
     const { rawTitle, text } = extractChordTextFromHtml(html);
     const { title, artist } = parseTitleAndArtist(rawTitle, url);
@@ -2288,11 +2694,13 @@ async function importFromUrl() {
     if (artist && !$('#fArtist').value) $('#fArtist').value = artist;
     const formatted = smartFormatChordSheet(text, false);
     $('#fText').value = formatted;
+    edSections = autoExtractSectionsFromText(formatted);
+    renderSectionEditorList(edSections);
 
     const trueKey = detectKey(formatted);
     if (trueKey) $('#fKey').value = trueKey;
 
-    toast(formatted.length < 80 ? 'เว็บนี้แสดงคอร์ดเป็นรูปภาพ — แนะนำให้แคปหน้าจอแล้วใช้ปุ่มสแกน OCR' : `ดึงคอร์ดจริงและคีย์ต้นฉบับ (Key ${trueKey || '-'}) เรียบร้อยแล้ว ✔`);
+    toast(`ดึงคอร์ดจริงและคีย์ต้นฉบับ (Key ${trueKey || '-'}) เรียบร้อยแล้ว ✔`);
   } catch {
     toast('เว็บปลายทางติดระบบป้องกันบอท — คัดลอกเนื้อเพลงมาวางแทนได้ครับ', true);
   } finally {
@@ -2303,7 +2711,8 @@ async function importFromUrl() {
 
 $('#fetchUrlBtn').onclick = importFromUrl;
 $('#fUrl').addEventListener('paste', () => setTimeout(() => {
-  if (/^https?:\/\//.test($('#fUrl').value.trim())) importFromUrl();
+  const val = $('#fUrl').value.trim();
+  if (/^https?:\/\//.test(val) || /^\d{3,6}$/.test(val)) importFromUrl();
 }, 60));
 
 /* ==============================================================================
@@ -2855,8 +3264,68 @@ function decodePlaylistSharePayload(b64) {
   };
 }
 
+function normalizePlItem(it) {
+  if (!it) return { id: 'it-' + Math.random().toString(36).slice(2, 7), type: 'song', songId: '' };
+  if (typeof it === 'string') return { id: 'it-' + hash(it), type: 'song', songId: it, targetKey: '', singer: '', bpm: '', cue: '' };
+  return {
+    id: it.id || ('it-' + hash(it.songId || it.title || Math.random())),
+    type: it.type || 'song',
+    songId: it.songId || '',
+    targetKey: it.targetKey || '',
+    singer: it.singer || '',
+    bpm: it.bpm || '',
+    cue: it.cue || '',
+    title: it.title || ''
+  };
+}
+
+function encodePlaylistSharePayload(plName, songs, rawItems = []) {
+  const payload = {
+    n: plName,
+    s: songs.map(s => ({
+      i: s.id,
+      t: s.title,
+      a: s.artist || '',
+      k: detectKey(s.text) || s.key || '',
+      x: s.text || '',
+      h: s.shift || 0,
+      c: s.cue || '',
+      sec: s.sections || []
+    })),
+    it: rawItems
+  };
+  const jsonStr = JSON.stringify(payload);
+  const bytes = new TextEncoder().encode(jsonStr);
+  let bin = '';
+  bytes.forEach(b => (bin += String.fromCharCode(b)));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decodePlaylistSharePayload(b64) {
+  const norm = b64.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(norm);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const obj = JSON.parse(new TextDecoder().decode(bytes));
+  return {
+    name: obj.n || 'สคริปต์เพลงที่แชร์มา',
+    songs: (obj.s || []).map(x => ({
+      id: x.i || 's-' + Math.random().toString(36).slice(2, 7),
+      title: x.t,
+      artist: x.a,
+      key: x.k,
+      text: x.x,
+      shift: x.h || 0,
+      cue: x.c || '',
+      sections: x.sec || []
+    })),
+    rawItems: obj.it || []
+  };
+}
+
 function createPlaylist(name, songIds = []) {
-  const p = { id: crypto.randomUUID(), name, songIds, shared: false, token: null, updatedAt: Date.now() };
+  const normIds = songIds.map(normalizePlItem);
+  const p = { id: crypto.randomUUID(), name, songIds: normIds, shared: false, token: null, updatedAt: Date.now() };
   setPls([...getPls(), p]);
   renderPlaylists();
   schedSync();
@@ -2875,7 +3344,7 @@ function mutPl(id, fn) {
 }
 
 $('#plNew').onclick = () => {
-  const n = (prompt('ตั้งชื่อเซ็ตเพลง / Playlist (เช่น เซ็ตคืนวันศุกร์, เพลงเร็ว)') || '').trim();
+  const n = (prompt('ตั้งชื่อสคริปต์เล่นสด / Setlist (เช่น เล่นสดคืนวันศุกร์, เซ็ต 1 ร้านชิล)') || '').trim();
   if (n) createPlaylist(n);
 };
 
@@ -2885,13 +3354,14 @@ function renderPlaylists() {
   box.replaceChildren();
   if (!P.length) {
     const empty = mk('div', 'empty');
-    empty.innerHTML = `<b>🎼</b>ยังไม่มีเซ็ตเพลง — กด <b>“＋ สร้างเซ็ตใหม่”</b> เพื่อจัดลำดับเพลงขึ้นเล่นสด`;
+    empty.innerHTML = `<b>🎼</b>ยังไม่มีเซ็ตสคริปต์เพลง — กด <b>“＋ สร้างเซ็ตใหม่”</b> หรือ <b>“📥 นำเข้าสคริปต์วง”</b> เพื่อจัดลำดับเพลงขึ้นเล่นสด`;
     box.appendChild(empty);
     return;
   }
   for (const p of P) {
     const row = mk('div', 'item'), b = mk('button', 'open'), t = mk('div', 't', p.name);
-    t.appendChild(mk('span', 'badge dim', p.songIds.length + ' เพลง'));
+    const count = (p.songIds || []).filter(i => (typeof i === 'string' ? true : i.type !== 'break')).length;
+    t.appendChild(mk('span', 'badge dim', count + ' เพลง'));
     if (p.shared) t.appendChild(mk('span', 'badge', 'แชร์ลิงก์'));
     b.appendChild(t);
     b.onclick = () => openPlaylist(p.id);
@@ -2911,7 +3381,8 @@ function renderPlView() {
   [box, bar, lk].forEach(e => e.replaceChildren());
   lk.className = '';
   if (!curPl) return;
-  let songs, p = null;
+  let songs = [], p = null, items = [];
+
   if (curPl.shared) {
     $('#plTitle').textContent = '🎼 ' + curPl.data.name + ' (แชร์มา)';
     songs = curPl.data.songs.map(s => ({
@@ -2920,7 +3391,9 @@ function renderPlView() {
       artist: s.artist,
       key: detectKey(s.text) || s.key,
       text: s.text,
-      shift: s.shift || 0
+      shift: s.shift || 0,
+      cue: s.cue || '',
+      sections: s.sections || []
     }));
     bar.append(
       btn('▶️ เริ่มเล่นเซ็ตนี้', () => {
@@ -2939,18 +3412,56 @@ function renderPlView() {
     $('#plTitle').textContent = '🎼 ' + p.name;
     const book = loadBook();
     const allLookup = [...book, ...MOCK_DB];
-    songs = p.songIds.map(id => allLookup.find(s => s.id === id)).filter(Boolean);
+    items = (p.songIds || []).map(normalizePlItem);
 
-    if (songs.length) {
+    // Build playable songs list
+    songs = [];
+    items.forEach(it => {
+      if (it.type === 'break') {
+        songs.push({
+          type: 'break',
+          id: it.id,
+          title: it.title || 'ช่วงพูดคุย / พักเบรก',
+          cue: it.cue || ''
+        });
+        return;
+      }
+      const found = allLookup.find(s => s.id === it.songId);
+      if (found) {
+        songs.push({
+          ...found,
+          targetKey: it.targetKey || '',
+          singer: it.singer || '',
+          bpm: it.bpm || found.bpm || '',
+          cue: it.cue || found.cue || '',
+          itemId: it.id
+        });
+      }
+    });
+
+    const playableOnly = songs.filter(s => s.type !== 'break');
+
+    if (playableOnly.length) {
       bar.append(
         btn('▶️ เริ่มเล่นเซ็ตนี้', () => {
-          activeSetlistContext = { plId: p.id, name: p.name, songs, index: 0 };
-          openSong(songs[0], songs[0].shift || 0);
+          activeSetlistContext = { plId: p.id, name: p.name, songs: playableOnly, index: 0 };
+          const first = playableOnly[0];
+          let startShift = first.shift || 0;
+          if (first.targetKey) {
+            const origKey = detectKey(first.text) || first.key;
+            if (origKey) {
+              const diff = noteIndex(first.targetKey.replace(/m$/, '')) - noteIndex(origKey.replace(/m$/, ''));
+              startShift = normShift(diff);
+            }
+          }
+          openSong(first, startShift);
         }, 'primary small')
       );
     }
 
     bar.append(
+      btn('📢 + เพิ่มช่วงพูด/พักเบรก', () => openAddBreakModal(p.id), 'small'),
+      btn('📦 ส่งสคริปต์ให้เพื่อนในวง', () => exportBandScriptPackage(p.id), 'small primary'),
       btn('✏️ เปลี่ยนชื่อ', () => {
         const n = (prompt('ชื่อเซ็ตใหม่', p.name) || '').trim();
         if (n) {
@@ -2958,12 +3469,12 @@ function renderPlView() {
           renderPlView();
         }
       }, 'small'),
-      btn(p.shared ? '🔗 แชร์อยู่' : '🔗 สร้างลิงก์แชร์ให้เพื่อน', () => sharePlaylist(p.id), 'small'),
+      btn(p.shared ? '🔗 แชร์อยู่' : '🔗 สร้างลิงก์แชร์', () => sharePlaylist(p.id), 'small'),
       btn('🗑 ลบเซ็ต', () => delPlaylist(p.id), 'danger small')
     );
 
     if (p.shared) {
-      const encodedData = encodePlaylistSharePayload(p.name, songs);
+      const encodedData = encodePlaylistSharePayload(p.name, playableOnly, items);
       const link = location.origin + location.pathname + '#/s/' + encodedData;
       const inp = mk('input');
       inp.readOnly = true;
@@ -2982,28 +3493,30 @@ function renderPlView() {
   }
 
   if (!songs.length) {
-    box.appendChild(mk('div', 'empty', 'ยังไม่มีเพลงในเซ็ตนี้ — เปิดเพลงแล้วกดปุ่ม “➕ เซ็ตเพลง”'));
+    box.appendChild(mk('div', 'empty', 'ยังไม่มีเพลงในสคริปต์นี้ — เปิดเพลงแล้วกดปุ่ม “➕ เซ็ตเพลง” หรือเพิ่มช่วงพูดคุย'));
     return;
   }
 
+  let songIndex = 0;
   songs.forEach((s, idx) => {
-    const row = mk('div', 'item'), o = mk('button', 'open');
-    const t = mk('div', 't', `${idx + 1}. ${s.title}`);
-    const k = detectKey(s.text) || s.key;
-    if (k) t.appendChild(mk('span', 'badge', k));
-    o.append(t, mk('div', 'a', s.artist || 'ไม่ระบุศิลปิน'));
-    o.onclick = () => {
-      activeSetlistContext = { plId: p ? p.id : 'shared', name: p ? p.name : curPl.data.name, songs, index: idx };
-      openSong(s, s.shift || 0);
-    };
-    row.appendChild(o);
+    if (s.type === 'break') {
+      const breakCard = mk('div', 'plBreakCard');
+      const left = mk('div', 'row', style => (left.style.gap = '8px'));
+      left.style.gap = '10px';
+      left.style.alignItems = 'center';
+      left.append(
+        mk('span', 'plBreakIcon', '🎙️'),
+        mk('div', null, [
+          mk('b', null, s.title),
+          s.cue ? mk('div', 'small muted', `📢 ${s.cue}`) : ''
+        ].filter(Boolean))
+      );
 
-    if (p) {
       const actions = mk('div', 'itemActions');
       const mv = d => {
         mutPl(p.id, x => {
-          const i = x.songIds.indexOf(s.id), j = i + d;
-          if (j >= 0 && j < x.songIds.length) [x.songIds[i], x.songIds[j]] = [x.songIds[j], x.songIds[i]];
+          const j = idx + d;
+          if (j >= 0 && j < x.songIds.length) [x.songIds[idx], x.songIds[j]] = [x.songIds[j], x.songIds[idx]];
         });
         renderPlView();
       };
@@ -3011,14 +3524,288 @@ function renderPlView() {
         btn('↑', () => mv(-1)),
         btn('↓', () => mv(1)),
         btn('✕', () => {
-          mutPl(p.id, x => { x.songIds = x.songIds.filter(i => i !== s.id); });
+          mutPl(p.id, x => { x.songIds.splice(idx, 1); });
           renderPlView();
         })
       );
-      row.appendChild(actions);
+
+      breakCard.append(left, actions);
+      box.appendChild(breakCard);
+      return;
     }
+
+    songIndex++;
+    const row = mk('div', 'plItemCard');
+    const topRow = mk('div', 'plItemTop');
+
+    const mainBtn = mk('button', 'plItemMainBtn');
+    const titleWrap = mk('div', 'row', style => (titleWrap.style.gap = '8px'));
+    titleWrap.style.gap = '8px';
+    titleWrap.style.alignItems = 'center';
+
+    const t = mk('b', null, `${songIndex}. ${s.title}`);
+    const origK = detectKey(s.text) || s.key;
+    titleWrap.append(t);
+
+    if (origK) titleWrap.appendChild(mk('span', 'badge', `Key ${origK}`));
+    if (s.targetKey && s.targetKey !== origK) {
+      titleWrap.appendChild(mk('span', 'badge green', `เล่นจริง: ${s.targetKey}`));
+    }
+    if (s.images && s.images.length) {
+      titleWrap.appendChild(mk('span', 'badge', '🖼️ คอร์ดภาพ'));
+    }
+
+    mainBtn.append(titleWrap, mk('div', 'small muted', s.artist || 'ไม่ระบุศิลปิน'));
+    mainBtn.onclick = () => {
+      const playableOnly = songs.filter(x => x.type !== 'break');
+      const playIdx = playableOnly.findIndex(x => x.id === s.id);
+      activeSetlistContext = { plId: p ? p.id : 'shared', name: p ? p.name : curPl.data.name, songs: playableOnly, index: playIdx >= 0 ? playIdx : 0 };
+
+      let startShift = s.shift || 0;
+      if (s.targetKey && origK) {
+        const diff = noteIndex(s.targetKey.replace(/m$/, '')) - noteIndex(origK.replace(/m$/, ''));
+        startShift = normShift(diff);
+      }
+      openSong(s, startShift);
+    };
+
+    topRow.appendChild(mainBtn);
+
+    if (p) {
+      const actions = mk('div', 'itemActions');
+      const mv = d => {
+        mutPl(p.id, x => {
+          const j = idx + d;
+          if (j >= 0 && j < x.songIds.length) [x.songIds[idx], x.songIds[j]] = [x.songIds[j], x.songIds[idx]];
+        });
+        renderPlView();
+      };
+      const editCueBtn = btn('✏️ สคริปต์/คีย์', () => openEditPlaylistItemModal(p.id, items[idx], s), 'small secondary');
+      actions.append(
+        editCueBtn,
+        btn('↑', () => mv(-1)),
+        btn('↓', () => mv(1)),
+        btn('✕', () => {
+          mutPl(p.id, x => { x.songIds.splice(idx, 1); });
+          renderPlView();
+        })
+      );
+      topRow.appendChild(actions);
+    }
+    row.appendChild(topRow);
+
+    // Cue Info Sub-bar
+    const cuesRow = mk('div', 'plItemCues');
+    if (s.singer) cuesRow.appendChild(mk('span', 'cuePill', `🎤 ร้อง: ${s.singer}`));
+    if (s.bpm) cuesRow.appendChild(mk('span', 'cuePill', `⏱️ ${s.bpm} BPM`));
+    if (s.cue) cuesRow.appendChild(mk('span', 'cuePill', `📢 ${s.cue}`));
+    if (!s.singer && !s.bpm && !s.cue) {
+      cuesRow.appendChild(mk('span', 'small muted', '💡 แตะ “✏️ สคริปต์/คีย์” เพื่อนัดแนะคีย์, ผู้ร้อง และคิวในวง'));
+    }
+    row.appendChild(cuesRow);
+
     box.appendChild(row);
   });
+}
+
+function openEditPlaylistItemModal(plId, item, song) {
+  modal(`✏️ ตั้งค่าคิวสด: ${song.title}`, (box, close) => {
+    const origKey = detectKey(song.text) || song.key || 'C';
+
+    const form = mk('div');
+    form.innerHTML = `
+      <div class="row" style="margin-top:0">
+        <div class="grow" style="min-width:140px">
+          <label style="margin-top:0">คีย์ที่วงเล่นจริง (ออริจินอล: ${origKey})</label>
+          <input id="cueKeyInp" placeholder="เช่น ${origKey}" value="${item.targetKey || origKey}" autocapitalize="characters">
+        </div>
+        <div class="grow" style="min-width:120px">
+          <label style="margin-top:0">ผู้ร้องนำ</label>
+          <input id="cueSingerInp" placeholder="เช่น บอย, เมย์" value="${item.singer || ''}">
+        </div>
+        <div style="width:105px">
+          <label style="margin-top:0">จังหวะ (BPM)</label>
+          <input id="cueBpmInp" type="number" placeholder="เช่น 100" value="${item.bpm || ''}">
+        </div>
+      </div>
+      <label style="margin-top:10px">📢 โน้ตบอกคิวเล่นสด / สคริปต์ส่งเพลงในวง</label>
+      <textarea id="cueNoteInp" rows="3" placeholder="เช่น ส่งไม้กลอง 4 จังหวะ, จบแล้วต่อเพลงซมซานทันที (Medley), ท่อนฮุกรอบสุดท้ายดรอปเครื่อง">${item.cue || ''}</textarea>
+    `;
+
+    const saveBtn = btn('💾 บันทึกคิวนี้', () => {
+      const targetKey = $('#cueKeyInp').value.trim();
+      const singer = $('#cueSingerInp').value.trim();
+      const bpm = $('#cueBpmInp').value.trim();
+      const cue = $('#cueNoteInp').value.trim();
+
+      mutPl(plId, x => {
+        const it = x.songIds.find(i => (typeof i === 'string' ? i : i.id) === item.id || (i.songId && i.songId === song.id));
+        if (it) {
+          if (typeof it === 'string') {
+            const idx = x.songIds.indexOf(it);
+            x.songIds[idx] = { id: 'it-' + hash(it), type: 'song', songId: it, targetKey, singer, bpm, cue };
+          } else {
+            it.targetKey = targetKey;
+            it.singer = singer;
+            it.bpm = bpm;
+            it.cue = cue;
+          }
+        }
+      });
+      close();
+      renderPlView();
+      toast('บันทึกคิวและคีย์เรียบร้อย ✔');
+    }, 'primary');
+    saveBtn.style.width = '100%';
+    saveBtn.style.marginTop = '12px';
+
+    box.append(form, saveBtn);
+  });
+}
+
+function openAddBreakModal(plId) {
+  modal('📢 เพิ่มช่วงพูดคุย / พักเบรกในสคริปต์', (box, close) => {
+    const form = mk('div');
+    form.innerHTML = `
+      <label style="margin-top:0">ชื่อช่วงกิจกรรม *</label>
+      <input id="brkTitleInp" placeholder="เช่น ช่วงทักทายคนดู & แนะนำวง (3 นาที)" value="ช่วงพูดคุย / แนะนำวง">
+      <label style="margin-top:10px">โน้ตบอกคิวในวง (ไม่บังคับ)</label>
+      <textarea id="brkCueInp" rows="2" placeholder="เช่น เปิดเพลงคลอเบาๆ, นักร้องนำพูดขอบคุณร้าน"></textarea>
+    `;
+
+    const addBtn = btn('➕ เพิ่มลงในสคริปต์', () => {
+      const title = $('#brkTitleInp').value.trim() || 'ช่วงพูดคุย / พักเบรก';
+      const cue = $('#brkCueInp').value.trim();
+      mutPl(plId, x => {
+        x.songIds.push({
+          id: 'brk-' + Date.now(),
+          type: 'break',
+          title,
+          cue
+        });
+      });
+      close();
+      renderPlView();
+      toast('เพิ่มช่วงพักเบรกในสคริปต์แล้ว ✔');
+    }, 'primary');
+    addBtn.style.width = '100%';
+    addBtn.style.marginTop = '12px';
+
+    box.append(form, addBtn);
+  });
+}
+
+// ส่งออกแพ็กเกจสคริปต์วง (.mellow / .json) พร้อมรูปคอร์ดออฟไลน์ 100% ส่งเข้า LINE / AirDrop ได้ทันที
+async function exportBandScriptPackage(plId) {
+  const p = getPls().find(x => x.id === plId);
+  if (!p) return;
+  const book = loadBook();
+  const allLookup = [...book, ...MOCK_DB];
+  const items = (p.songIds || []).map(normalizePlItem);
+  const bundleSongs = [];
+
+  for (const it of items) {
+    if (it.type === 'break') continue;
+    const s = allLookup.find(x => x.id === it.songId);
+    if (!s) continue;
+    const songObj = { ...s };
+    if (s.images && s.images.length) {
+      songObj.imagesData = [];
+      for (const imgId of s.images) {
+        const blob = await getImg(imgId);
+        if (blob) {
+          songObj.imagesData.push({ id: imgId, data: await blobToDataURL(blob) });
+        }
+      }
+    }
+    bundleSongs.push(songObj);
+  }
+
+  const pkg = {
+    type: 'mellowchords-band-package',
+    version: 1,
+    playlist: p,
+    songs: bundleSongs,
+    exportedAt: new Date().toISOString()
+  };
+
+  const fileName = `band-script-${p.name.replace(/[^a-zA-Z0-9ก-๙_-]+/g, '_')}.mellow`;
+  const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
+  const file = new File([blob], fileName, { type: 'application/json' });
+
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: `สคริปต์เล่นสด: ${p.name}` });
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+    }
+  }
+
+  const a = mk('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = fileName;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast(`สร้างไฟล์สคริปต์วง “${p.name}” พร้อมรูปคอร์ดออฟไลน์เรียบร้อย ✔`);
+}
+
+// นำเข้าแพ็กเกจสคริปต์วงจากเพื่อน (.mellow / .json)
+async function importBandScriptPackage(file) {
+  try {
+    const text = await file.text();
+    const pkg = JSON.parse(text);
+    if (!pkg || !pkg.playlist || !Array.isArray(pkg.songs)) {
+      toast('ไฟล์สคริปต์วงไม่ถูกต้อง', true);
+      return;
+    }
+    const book = loadBook();
+    const map = new Map(book.map(s => [s.id, s]));
+    let imgCount = 0;
+
+    for (const s of pkg.songs) {
+      if (!s || !s.id) continue;
+      const { imagesData, ...cleanSong } = s;
+      if (imagesData && imagesData.length) {
+        for (const im of imagesData) {
+          try {
+            const resp = await fetch(im.data);
+            const blob = await resp.blob();
+            await idbPut(im.id, blob);
+            imgCount++;
+          } catch {}
+        }
+      }
+      map.set(String(s.id), { ...cleanSong, id: String(s.id) });
+    }
+    saveBook([...map.values()]);
+
+    const pls = getPls();
+    const existingIdx = pls.findIndex(p => p.id === pkg.playlist.id);
+    if (existingIdx >= 0) {
+      pls[existingIdx] = pkg.playlist;
+    } else {
+      pls.push(pkg.playlist);
+    }
+    setPls(pls);
+    renderSongbook();
+    renderPlaylists();
+    openPlaylist(pkg.playlist.id);
+    toast(`นำเข้าสคริปต์ “${pkg.playlist.name}” (${pkg.songs.length} เพลง, ${imgCount} รูปคอร์ด) สำเร็จแล้ว ✔`);
+  } catch (err) {
+    toast('นำเข้าไฟล์สคริปต์ไม่สำเร็จ', true);
+  }
+}
+
+if ($('#plImportBandBtn')) {
+  $('#plImportBandBtn').onclick = () => $('#importBandFile').click();
+}
+if ($('#importBandFile')) {
+  $('#importBandFile').onchange = e => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (f) importBandScriptPackage(f);
+  };
 }
 
 function delPlaylist(id) {
@@ -3032,20 +3819,22 @@ function delPlaylist(id) {
 $('#plBtn').onclick = () => {
   const song = current.song;
   if (!loadBook().some(s => s.id === song.id)) $('#saveBtn').click();
-  modal('➕ เพิ่มเพลงเข้าเซ็ต (Playlist)', box => {
+  modal('➕ เพิ่มเพลงเข้าสคริปต์ / Setlist', box => {
     const body = mk('div');
     box.appendChild(body);
     const draw = () => {
       body.replaceChildren();
       const pls = getPls();
       if (!pls.length) {
-        body.appendChild(mk('p', 'muted small', 'ยังไม่มีเซ็ตเพลง กดปุ่มด้านล่างเพื่อสร้างเซ็ตแรกได้เลย'));
+        body.appendChild(mk('p', 'muted small', 'ยังไม่มีเซ็ตสคริปต์เพลง กดปุ่มด้านล่างเพื่อสร้างเซ็ตแรกได้เลย'));
       }
       for (const p of pls) {
-        const inn = p.songIds.includes(song.id);
+        const inn = (p.songIds || []).some(i => (typeof i === 'string' ? i : i.songId) === song.id);
         const b = btn((inn ? '✅ ' : '⬜ ') + p.name + ` (${p.songIds.length})`, () => {
           mutPl(p.id, x => {
-            x.songIds = inn ? x.songIds.filter(i => i !== song.id) : [...x.songIds, song.id];
+            x.songIds = inn
+              ? x.songIds.filter(i => (typeof i === 'string' ? i : i.songId) !== song.id)
+              : [...x.songIds, { id: 'it-' + Date.now(), type: 'song', songId: song.id, targetKey: song.key || '', singer: '', bpm: 100, cue: '' }];
           });
           draw();
         });
@@ -3053,11 +3842,11 @@ $('#plBtn').onclick = () => {
         body.appendChild(b);
       }
       const newBtn = btn('＋ สร้างเซ็ตเพลงใหม่พร้อมเพิ่มเพลงนี้', () => {
-        const n = (prompt('ชื่อเซ็ตเพลงใหม่') || '').trim();
+        const n = (prompt('ชื่อเซ็ตสคริปต์ใหม่') || '').trim();
         if (n) {
-          createPlaylist(n, [song.id]);
+          createPlaylist(n, [{ id: 'it-' + Date.now(), type: 'song', songId: song.id, targetKey: song.key || '', singer: '', bpm: 100, cue: '' }]);
           draw();
-          toast(`เพิ่มเข้าเซ็ต “${n}” แล้ว ✔`);
+          toast(`เพิ่มเข้าสคริปต์ “${n}” แล้ว ✔`);
         }
       }, 'primary');
       newBtn.style.width = '100%';

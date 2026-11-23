@@ -1462,3 +1462,316 @@ summary {
   }
 }
 
+/* ==============================================================================
+ * 13) Chordtabs & Image Viewer Controls (Stage Dark Mode / Invert Filter)
+ * ============================================================================== */
+.galleryWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.galleryToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+}
+
+.sheetImg {
+  width: 100%;
+  border-radius: var(--radius-md);
+  background: #fff;
+  display: block;
+  cursor: zoom-in;
+  transition: filter 0.25s ease, background 0.25s ease;
+}
+
+.sheetImg.invertFilter {
+  filter: invert(0.92) hue-rotate(180deg) contrast(1.18) brightness(0.95);
+  background: #111116;
+}
+
+/* ==============================================================================
+ * 14) Arrangement Roadmap Bar (Visual Song Section Tracker)
+ * ============================================================================== */
+.roadmapWrap {
+  margin-top: 12px;
+  margin-bottom: 8px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.roadmapHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.roadmapScroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.roadmapChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1.5px solid var(--line);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.roadmapChip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.roadmapChip.active {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
+}
+
+.roadmapCue {
+  font-size: 0.74rem;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-weight: normal;
+  color: var(--text-dim);
+}
+
+.roadmapArrow {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+/* ==============================================================================
+ * 15) Live Stage Show Script & Cue Banner
+ * ============================================================================== */
+.liveCueBanner {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(217, 119, 6, 0.08));
+  border: 1.5px solid rgba(245, 158, 11, 0.35);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-top: 10px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cueRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cueMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.96rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.cueMetaPills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cuePill {
+  font-size: 0.8rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cueNextPreview {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  border-top: 1px dashed rgba(245, 158, 11, 0.25);
+  padding-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ==============================================================================
+ * 16) Visual Section & Arrangement Editor (Song Editor)
+ * ============================================================================== */
+.sectionEditorWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  background: var(--panel);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
+.sectionQuickBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+}
+
+.sectionQuickBar .pillTab {
+  padding: 4px 10px;
+  font-size: 0.82rem;
+}
+
+.sectionCardList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.sectionCard {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  flex-wrap: wrap;
+}
+
+.sectionCard .secName {
+  width: 125px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.sectionCard .secTag {
+  width: 90px;
+  font-size: 0.85rem;
+}
+
+.sectionCard .secCue {
+  flex: 1;
+  min-width: 140px;
+  font-size: 0.85rem;
+}
+
+.sectionCardActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sectionCardActions button {
+  padding: 4px 8px;
+  min-height: 32px;
+  font-size: 0.85rem;
+}
+
+/* ==============================================================================
+ * 17) Setlist & Live Script Cards (With MC Break & Band Cues)
+ * ============================================================================== */
+.plItemCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.plItemCard:hover {
+  border-color: var(--primary);
+}
+
+.plItemTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.plItemMainBtn {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  flex: 1;
+}
+
+.plItemCues {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  padding-top: 4px;
+  border-top: 1px dashed var(--line);
+}
+
+.plBreakCard {
+  background: rgba(99, 102, 241, 0.08);
+  border: 1.5px dashed rgba(99, 102, 241, 0.35);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.plBreakIcon {
+  font-size: 1.25rem;
+}
+
+
