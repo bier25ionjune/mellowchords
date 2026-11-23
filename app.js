@@ -3,7 +3,7 @@
 /**
  * ==============================================================================
  * mellowchords - คลังคอร์ดกลางคืน (Night Busker Chordbook)
- * Modern PWA & Smart Chord Sheet Manager
+ * User-Friendly Native PWA & Stage-Ready Chord Manager
  * ==============================================================================
  */
 
@@ -16,6 +16,22 @@ const CFG = {
 };
 
 const MOCK_DB = [
+  {
+    id: 'mock-night',
+    title: 'ค่ำคืนริมทาง (เพลงตัวอย่าง)',
+    artist: 'Night Busker Demo',
+    key: 'G',
+    text: `[Intro]
+[G] [Em] [C] [D]
+
+[Verse 1]
+[G]ค่ำคืนนี้ลมเย็น[Em]พัดผ่านมา
+[C]กีตาร์ตัวเก่าๆ ยัง[D]เล่นเพลงเดิม
+
+[Chorus]
+[G]ร้องเพลงใต้แสงดาว [Em]เคล้าเสียงผู้คน
+[C]บนถนนสายเดิมที่[D]คุ้นเคย [G]`
+  },
   {
     id: 'mock-amazing',
     title: 'Amazing Grace',
@@ -37,38 +53,11 @@ Am    C    D        F
 There is a house in New Orleans
 Am   C        E7
 They call the Rising Sun`
-  },
-  {
-    id: 'mock-night',
-    title: 'ค่ำคืนริมทาง (เพลงตัวอย่าง)',
-    artist: 'Night Busker Demo',
-    key: 'G',
-    text: `[Intro]
-[G] [Em] [C] [D]
-
-[Verse 1]
-[G]ค่ำคืนนี้ลมเย็น[Em]พัดผ่านมา
-[C]กีตาร์ตัวเก่าๆ ยัง[D]เล่นเพลงเดิม
-
-[Chorus]
-[G]ร้องเพลงใต้แสงดาว [Em]เคล้าเสียงผู้คน
-[C]บนถนนสายเดิมที่[D]คุ้นเคย [G]`
   }
 ];
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-async function searchSongs(q) {
-  await sleep(150);
-  const t = q.toLowerCase().split(/\s+/).filter(Boolean);
-  return MOCK_DB.filter(s => {
-    const h = (s.title + ' ' + s.artist).toLowerCase();
-    return t.every(x => h.includes(x));
-  });
-}
-
 /* ==============================================================================
- * 2) ทฤษฎีดนตรี & การทดคีย์ (Music Theory & Transpose)
+ * 2) ทฤษฎีดนตรี, การทดคีย์, ตัวคำนวณ Capo & แผนภาพการจับคอร์ดกีตาร์
  * ============================================================================== */
 const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const FLATS  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -99,7 +88,104 @@ const normShift = s => {
   return s > 6 ? s - 12 : s;
 };
 
-const fmtShift = s => (s > 0 ? '+' : '') + s;
+const fmtShift = s => (s === 0 ? 'คีย์เดิม' : (s > 0 ? '+' : '') + s + ' คีย์');
+
+// คำนวณคำแนะนำการหนีบ Capo เพื่อให้จับคอร์ดเปิด (Open Chords: C, G, D, A, E, Am, Em, Dm) ได้ง่าย
+function getCapoRecommendation(origKey, targetKey) {
+  if (!origKey || !targetKey) return '';
+  const m = targetKey.match(/^([A-G][#b]?)(m(?!aj))?/);
+  if (!m) return '';
+  const targetIdx = noteIndex(m[1]);
+  const isMinor = !!m[2];
+  const easyShapes = isMinor
+    ? [{ name: 'Am', idx: 9 }, { name: 'Em', idx: 4 }, { name: 'Dm', idx: 2 }]
+    : [{ name: 'C', idx: 0 }, { name: 'G', idx: 7 }, { name: 'D', idx: 2 }, { name: 'A', idx: 9 }, { name: 'E', idx: 4 }];
+
+  let best = null;
+  for (const sh of easyShapes) {
+    const capo = (targetIdx - sh.idx + 12) % 12;
+    if (capo > 0 && capo <= 7) {
+      if (!best || capo < best.capo) best = { capo, shape: sh.name };
+    }
+  }
+  return best ? `🎸 Capo เฟรต ${best.capo} (จับทรง ${best.shape})` : '';
+}
+
+// ฐานข้อมูลตำแหน่งจับคอร์ดกีตาร์มาตรฐาน [สาย 6 E, สาย 5 A, สาย 4 D, สาย 3 G, สาย 2 B, สาย 1 e] (-1 = ไม่ดีด, 0 = สายเปิด)
+const GUITAR_VOICINGS = {
+  'C': [-1, 3, 2, 0, 1, 0], 'Cm': [-1, 3, 5, 5, 4, 3], 'C7': [-1, 3, 2, 3, 1, 0], 'Cmaj7': [-1, 3, 2, 0, 0, 0],
+  'C#': [-1, 4, 6, 6, 6, 4], 'Db': [-1, 4, 6, 6, 6, 4], 'C#m': [-1, 4, 6, 6, 5, 4], 'C#m7': [-1, 4, 6, 4, 5, 4],
+  'D': [-1, -1, 0, 2, 3, 2], 'Dm': [-1, -1, 0, 2, 3, 1], 'D7': [-1, -1, 0, 2, 1, 2], 'Dmaj7': [-1, -1, 0, 2, 2, 2], 'Dm7': [-1, -1, 0, 2, 1, 1], 'Dsus4': [-1, -1, 0, 2, 3, 3],
+  'D#': [-1, 6, 8, 8, 8, 6], 'Eb': [-1, 6, 8, 8, 8, 6], 'D#m': [-1, 6, 8, 8, 7, 6], 'Ebm': [-1, 6, 8, 8, 7, 6],
+  'E': [0, 2, 2, 1, 0, 0], 'Em': [0, 2, 2, 0, 0, 0], 'E7': [0, 2, 0, 1, 0, 0], 'Emaj7': [0, 2, 1, 1, 0, 0], 'Em7': [0, 2, 0, 0, 0, 0], 'Esus4': [0, 2, 2, 2, 0, 0],
+  'F': [1, 3, 3, 2, 1, 1], 'Fm': [1, 3, 3, 1, 1, 1], 'F7': [1, 3, 1, 2, 1, 1], 'Fmaj7': [-1, -1, 3, 2, 1, 0], 'Fm7': [1, 3, 1, 1, 1, 1],
+  'F#': [2, 4, 4, 3, 2, 2], 'Gb': [2, 4, 4, 3, 2, 2], 'F#m': [2, 4, 4, 2, 2, 2], 'F#m7': [2, 4, 2, 2, 2, 2], 'F#7': [2, 4, 2, 3, 2, 2],
+  'G': [3, 2, 0, 0, 0, 3], 'Gm': [3, 5, 5, 3, 3, 3], 'G7': [3, 2, 0, 0, 0, 1], 'Gmaj7': [3, 2, 0, 0, 0, 2], 'Gm7': [3, 5, 3, 3, 3, 3], 'Gsus4': [3, 3, 0, 0, 1, 3],
+  'G#': [4, 6, 6, 5, 4, 4], 'Ab': [4, 6, 6, 5, 4, 4], 'G#m': [4, 6, 6, 4, 4, 4], 'Abm': [4, 6, 6, 4, 4, 4],
+  'A': [-1, 0, 2, 2, 2, 0], 'Am': [-1, 0, 2, 2, 1, 0], 'A7': [-1, 0, 2, 0, 2, 0], 'Amaj7': [-1, 0, 2, 1, 2, 0], 'Am7': [-1, 0, 2, 0, 1, 0], 'Asus2': [-1, 0, 2, 2, 0, 0], 'Asus4': [-1, 0, 2, 2, 3, 0],
+  'A#': [-1, 1, 3, 3, 3, 1], 'Bb': [-1, 1, 3, 3, 3, 1], 'A#m': [-1, 1, 3, 3, 2, 1], 'Bbm': [-1, 1, 3, 3, 2, 1], 'Bb7': [-1, 1, 3, 1, 3, 1],
+  'B': [-1, 2, 4, 4, 4, 2], 'Bm': [-1, 2, 4, 4, 3, 2], 'B7': [-1, 2, 1, 2, 0, 2], 'Bm7': [-1, 2, 4, 2, 3, 2]
+};
+
+function buildChordDiagramSVG(chordName) {
+  const baseName = chordName.replace(/\/.*$/, '');
+  const frets = GUITAR_VOICINGS[baseName] || GUITAR_VOICINGS[baseName.replace(/add9|9|11|13/g, '')];
+  if (!frets) return null;
+
+  const activeFrets = frets.filter(f => f > 0);
+  const minFret = activeFrets.length ? Math.min(...activeFrets) : 1;
+  const maxFret = activeFrets.length ? Math.max(...activeFrets) : 4;
+  const startFret = maxFret <= 4 ? 1 : minFret;
+
+  let svg = `<svg viewBox="0 0 180 210" xmlns="http://www.w3.org/2000/svg">`;
+  // Nut or starting fret indicator
+  if (startFret === 1) {
+    svg += `<rect x="30" y="34" width="120" height="5" fill="#f4f4f6" rx="2"/>`;
+  } else {
+    svg += `<text x="20" y="55" fill="#f59e0b" font-size="13" font-weight="bold" text-anchor="end">${startFret}fr</text>`;
+  }
+
+  // Fret lines (5 frets)
+  for (let f = 0; f <= 5; f++) {
+    const y = 38 + f * 30;
+    svg += `<line x1="30" y1="${y}" x2="150" y2="${y}" stroke="#3a3a46" stroke-width="1.5"/>`;
+  }
+
+  // 6 Strings
+  for (let s = 0; s < 6; s++) {
+    const x = 30 + s * 24;
+    svg += `<line x1="${x}" y1="38" x2="${x}" y2="188" stroke="#71717a" stroke-width="${s < 3 ? 2 : 1.3}"/>`;
+    const fret = frets[s];
+    if (fret === -1) {
+      svg += `<text x="${x}" y="26" fill="#ef4444" font-size="14" font-weight="bold" text-anchor="middle">✕</text>`;
+    } else if (fret === 0) {
+      svg += `<circle cx="${x}" cy="21" r="5" fill="none" stroke="#22c55e" stroke-width="2"/>`;
+    } else {
+      const relFret = fret - startFret + 1;
+      const cy = 38 + (relFret - 0.5) * 30;
+      svg += `<circle cx="${x}" cy="${cy}" r="9" fill="#f59e0b"/>`;
+      svg += `<text x="${x}" y="${cy + 4}" fill="#09090b" font-size="11" font-weight="bold" text-anchor="middle">${fret}</text>`;
+    }
+  }
+  svg += `</svg>`;
+  return svg;
+}
+
+function showChordPopup(chordName) {
+  modal(`🎸 คอร์ด ${chordName}`, (box) => {
+    const wrap = mk('div', 'chordDiagWrap');
+    const svg = buildChordDiagramSVG(chordName);
+    if (svg) {
+      wrap.innerHTML = svg;
+      const hint = mk('p', 'muted small', 'สาย 6 (ซ้าย) → สาย 1 (ขวา) · แตะคอร์ดใดก็ได้ในเพลงเพื่อดูวิธีจับ');
+      hint.style.textAlign = 'center';
+      wrap.appendChild(hint);
+    } else {
+      wrap.appendChild(mk('p', 'muted', `คอร์ด ${chordName} (คอร์ดประยุกต์ / Slash Chord)`));
+    }
+    box.appendChild(wrap);
+  });
+}
 
 /* ==============================================================================
  * 3) Smart Parser & Section Detector (จัดท่อนเพลง & เรนเดอร์คอร์ด)
@@ -138,7 +224,6 @@ function parseSong(text) {
       continue;
     }
 
-    // Two-line format: chord line on top, lyric line below
     if (isChordLine(line)) {
       const toks = [...line.matchAll(/\S+/g)].map(m => ({ t: m[0], i: m.index }));
       const next = L[i + 1];
@@ -156,7 +241,6 @@ function parseSong(text) {
       continue;
     }
 
-    // Inline bracket format: [G]ค่ำคืนนี้[Em]
     const re = /\[([^\]]+)\]/g;
     if ([...line.matchAll(re)].some(m => isChord(m[1]))) {
       const segs = [];
@@ -177,7 +261,6 @@ function parseSong(text) {
       continue;
     }
 
-    // Section header check (e.g. [Intro], [Chorus], Verse 1:, Solo:)
     const isSection = line.length < 50 && (
       /^\s*\[[^\]]+\]\s*$/.test(line) ||
       /^\s*(intro|verse|chorus|hook|bridge|solo|outro|interlude|pre-?chorus|ท่อน|อินโทร|ฮุก|ท่อนฮุก|โซโล่|ท่อนจบ)/i.test(line)
@@ -223,7 +306,16 @@ function renderSheet(box, text, shift, flat) {
     for (const s of item.segs) {
       const seg = mk('span', 'seg');
       if (hasChord) {
-        seg.appendChild(mk('span', 'ch', s.chord ? transposeChord(s.chord, shift, flat) : ''));
+        const trChord = s.chord ? transposeChord(s.chord, shift, flat) : '';
+        const chSpan = mk('span', 'ch', trChord);
+        if (trChord && isChord(trChord)) {
+          chSpan.title = `แตะเพื่อดูตารางคอร์ด ${trChord}`;
+          chSpan.onclick = (e) => {
+            e.stopPropagation();
+            showChordPopup(trChord);
+          };
+        }
+        seg.appendChild(chSpan);
       }
       seg.appendChild(mk('span', 'ly', s.text));
       row.appendChild(seg);
@@ -243,7 +335,6 @@ function smartFormatChordSheet(rawText, convertToBracket = false) {
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i].trimEnd();
 
-    // Normalize Section names
     const secMatch = line.match(/^\s*[\[(]?\s*(intro|verse\s*\d*|chorus|hook|bridge|solo|outro|pre-?chorus|อินโทร|ฮุก|ท่อนฮุก|โซโล่|ท่อนแยก|ท่อนจบ)\s*[:\])]?\s*$/i);
     if (secMatch) {
       let name = secMatch[1].trim();
@@ -254,12 +345,11 @@ function smartFormatChordSheet(rawText, convertToBracket = false) {
       else if (/bridge|ท่อนแยก/i.test(lower)) name = 'Bridge';
       else if (/outro|ท่อนจบ/i.test(lower)) name = 'Outro';
       else if (/verse/i.test(lower)) name = name.charAt(0).toUpperCase() + name.slice(1);
-      
+
       formatted.push(`\n[${name}]`);
       continue;
     }
 
-    // Convert two-line format into inline bracket format if requested
     if (convertToBracket && isChordLine(line) && i + 1 < lines.length && lines[i + 1].trim() && !isChordLine(lines[i + 1])) {
       const next = lines[i + 1].trimEnd();
       const toks = [...line.matchAll(/\S+/g)].map(m => ({ t: m[0], i: m.index }));
@@ -271,19 +361,18 @@ function smartFormatChordSheet(rawText, convertToBracket = false) {
         result += `[${k.t}]` + next.slice(cuts[idx], cuts[idx + 1] || next.length);
       });
       formatted.push(result);
-      i++; // Skip the lyric line since we combined it
+      i++;
       continue;
     }
 
     formatted.push(line);
   }
 
-  // Deduplicate excessive empty lines (max 2 consecutive empty lines)
   return formatted.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /* ==============================================================================
- * 5) Smart Web Scraper & Multi-Proxy Fetcher (ดึงคอร์ดจากเว็บ)
+ * 5) Smart Web Scraper & Multi-Proxy Fetcher
  * ============================================================================== */
 function cleanTitle(t) {
   return (t || '')
@@ -324,15 +413,12 @@ function parseTitleAndArtist(rawTitle, url = '') {
 function extractChordTextFromHtml(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
 
-  // Title extraction
   const ogTitle = doc.querySelector('meta[property="og:title"]');
   const h1 = doc.querySelector('h1');
   const rawTitle = ((ogTitle && ogTitle.content) || (h1 && h1.textContent) || doc.title || '').trim();
 
-  // Strip noise elements
   doc.querySelectorAll('script, style, nav, header, footer, noscript, svg, iframe, form, button, .ads, .ad, .advertisement, .banner, .social-share, .comments, .related-posts, #sidebar, .sidebar').forEach(n => n.remove());
 
-  // Convert inline chord tags (<span class="chord">G</span>, <font color="..."> etc.) to [G] before stripping
   doc.querySelectorAll('[class*="chord"], [id*="chord"], font[color]').forEach(el => {
     const txt = el.textContent.trim();
     if (isChord(txt)) {
@@ -340,7 +426,6 @@ function extractChordTextFromHtml(html) {
     }
   });
 
-  // Target specific chord containers if present
   const chordRoot = doc.querySelector('#chord_text') ||
                     doc.querySelector('.chord_text') ||
                     doc.querySelector('.chord-content') ||
@@ -362,7 +447,6 @@ function extractChordTextFromHtml(html) {
 }
 
 async function fetchPageWithFallbacks(url) {
-  // 1. Supabase Edge Function (if authenticated and available)
   if (sb && user) {
     try {
       const { data, error } = await sb.functions.invoke('fetch-page', { body: { url } });
@@ -370,14 +454,12 @@ async function fetchPageWithFallbacks(url) {
     } catch {}
   }
 
-  // 2. Custom User Proxy (if specified in settings)
   const userProxy = (LS.get(PROXY, '') || '').trim();
   if (userProxy) {
     const r = await fetch(userProxy.replace('{url}', encodeURIComponent(url)));
     if (r.ok) return r.text();
   }
 
-  // 3. Multi-Proxy Automatic Fallbacks (CORS bypass for web)
   const proxyEndpoints = [
     `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     `https://corsproxy.io/?url=${encodeURIComponent(url)}`
@@ -393,21 +475,16 @@ async function fetchPageWithFallbacks(url) {
     } catch {}
   }
 
-  // 4. Direct Fetch as final attempt
   const direct = await fetch(url);
   if (!direct.ok) throw new Error(`HTTP ${direct.status}`);
   return direct.text();
 }
 
 /* ==============================================================================
- * 6) Image OCR / AI Chord Scanner (สแกนคอร์ดจากภาพด้วย Tesseract.js)
+ * 6) Image OCR / AI Chord Scanner
  * ============================================================================== */
-let tesseractWorker = null;
-
 async function scanImageWithOCR(imageFileOrBlob, progressCb) {
-  // Dynamically import Tesseract.js v5 ESM
   if (progressCb) progressCb('กำลังโหลดโมดูล AI/OCR...', 5);
-  
   const { createWorker } = await import('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js');
 
   const worker = await createWorker(['tha', 'eng'], 1, {
@@ -416,7 +493,7 @@ async function scanImageWithOCR(imageFileOrBlob, progressCb) {
         const pct = m.progress != null ? Math.round(m.progress * 100) : 0;
         let msg = 'กำลังประมวลผล...';
         if (m.status.includes('loading')) msg = 'กำลังโหลดชุดภาษา Thai/Eng...';
-        else if (m.status.includes('recognizing')) msg = `กำลังตรวจจับคอร์ดและเนื้อเพลง... (${pct}%)`;
+        else if (m.status.includes('recognizing')) msg = `กำลังสแกนคอร์ดและเนื้อเพลง... (${pct}%)`;
         progressCb(msg, pct);
       }
     }
@@ -428,9 +505,10 @@ async function scanImageWithOCR(imageFileOrBlob, progressCb) {
 }
 
 /* ==============================================================================
- * 7) Storage & IndexedDB (จัดเก็บข้อมูลภาพและเพลง)
+ * 7) Storage & IndexedDB
  * ============================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 function mk(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -463,7 +541,7 @@ const LS = {
   }
 };
 
-const BOOK = 'nightChordbook.v1', SITES = 'nightChordbook.sites', FSK = 'nightChordbook.fs', PROXY = 'nightChordbook.proxy';
+const BOOK = 'nightChordbook.v1', SITES = 'nightChordbook.sites', FSK = 'nightChordbook.fs', PROXY = 'nightChordbook.proxy', COLS = 'nightChordbook.cols';
 const K = { cfg: 'nightChordbook.sbcfg', favs: 'nightChordbook.favs', pls: 'nightChordbook.playlists', meta: 'nightChordbook.syncmeta' };
 
 const loadBook = () => {
@@ -479,7 +557,7 @@ function toast(m, isErr = false) {
   t.classList.toggle('err', isErr);
   t.hidden = false;
   clearTimeout(toastT);
-  toastT = setTimeout(() => (t.hidden = true), 3400);
+  toastT = setTimeout(() => (t.hidden = true), 3200);
 }
 
 let _db;
@@ -537,9 +615,10 @@ const blobToDataURL = b =>
   });
 
 /* ==============================================================================
- * 8) สลับหน้าจอ & การควบคุม (Navigation & Wake Lock)
+ * 8) ระบบนำทางแบบ Native PWA (Bottom Navigation & Views) & Wake Lock
  * ============================================================================== */
-let current = null, curPl = null, favOnly = false, wakeLock = null;
+let current = null, curPl = null, filterMode = 'all', wakeLock = null;
+let activeSetlistContext = null; // { plId, name, songs, index }
 
 async function requestWakeLock() {
   if ('wakeLock' in navigator) {
@@ -562,12 +641,24 @@ function releaseWakeLock() {
   }
 }
 
+function updateBottomNav(viewName) {
+  $$('#bottomNav .navTab').forEach(tab => {
+    const nav = tab.dataset.nav;
+    const isActive = (nav === viewName) ||
+                     (nav === 'home' && viewName === 'song' && !activeSetlistContext) ||
+                     (nav === 'playlists' && (viewName === 'playlist' || (viewName === 'song' && activeSetlistContext)));
+    tab.classList.toggle('active', isActive);
+  });
+}
+
 function show(name, push = true) {
   document.body.dataset.view = name;
-  $('#placeholder').hidden = name !== 'home';
+  $('#placeholder').hidden = !(name === 'home' || name === 'playlists');
   $('#editorView').hidden = name !== 'editor';
   $('#songView').hidden = name !== 'song';
   $('#plView').hidden = name !== 'playlist';
+
+  updateBottomNav(name);
 
   if (name !== 'song') {
     setFocus(false);
@@ -582,6 +673,12 @@ function show(name, push = true) {
 }
 
 const goBack = () => {
+  if (activeSetlistContext && document.body.dataset.view === 'song') {
+    const plId = activeSetlistContext.plId;
+    activeSetlistContext = null;
+    openPlaylist(plId);
+    return;
+  }
   history.state && history.state.v ? history.back() : show('home', false);
 };
 
@@ -589,82 +686,90 @@ addEventListener('popstate', e => {
   const v = e.state && e.state.v;
   show((v === 'song' && !current) || (v === 'playlist' && !curPl) ? 'home' : (v || 'home'), false);
 });
-document.querySelectorAll('.backBtn').forEach(b => (b.onclick = goBack));
+
+$$('.backBtn').forEach(b => (b.onclick = goBack));
 $('#plBack').onclick = () => {
   if (location.hash.startsWith('#/p/')) history.replaceState(null, '', location.pathname);
-  goBack();
+  show('playlists', false);
 };
+
+$('#brandHome').onclick = () => {
+  activeSetlistContext = null;
+  show('home', false);
+};
+
+// Bottom Nav Bar Click Handlers
+$$('#bottomNav .navTab').forEach(tab => {
+  tab.onclick = () => {
+    const target = tab.dataset.nav;
+    if (target === 'home') {
+      activeSetlistContext = null;
+      show('home', false);
+    } else if (target === 'playlists') {
+      activeSetlistContext = null;
+      show('playlists', false);
+    } else if (target === 'editor') {
+      openEditor(null, $('#q').value.trim());
+    } else if (target === 'settings') {
+      openAcct();
+    }
+  };
+});
 
 /* ==============================================================================
- * 9) ค้นหาเพลง & คลังเพลงของฉัน (Search & Songbook)
+ * 9) ค้นหาเพลง & คลังเพลงของฉัน (Search, Filter Pills & Songbook)
  * ============================================================================== */
-let sites = LS.get(SITES, [{ d: 'busk.town', on: false }, { d: 'chordtabs.in.th', on: false }]);
-function renderSites() {
-  const box = $('#sites');
-  box.replaceChildren();
-  sites.forEach((s, i) => {
-    const c = mk('span', 'chip' + (s.on ? ' on' : ''));
-    c.append(
-      btn((s.on ? '✓ ' : '') + s.d, () => {
-        s.on = !s.on;
-        LS.set(SITES, sites);
-        renderSites();
-      }, 'lbl'),
-      btn('✕', () => {
-        sites.splice(i, 1);
-        LS.set(SITES, sites);
-        renderSites();
-      }, 'x')
-    );
-    box.appendChild(c);
-  });
-}
-
-$('#addSite').onclick = () => {
-  const v = $('#newSite').value.trim().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].toLowerCase();
-  if (!v || !v.includes('.')) {
-    toast('ใส่ชื่อเว็บให้ถูกต้อง เช่น chordtabs.in.th', true);
-    return;
-  }
-  if (!sites.some(s => s.d === v)) sites.push({ d: v, on: true });
-  LS.set(SITES, sites);
-  $('#newSite').value = '';
-  renderSites();
-};
+let sites = LS.get(SITES, [{ d: 'chordtabs.in.th', on: false }, { d: 'busk.town', on: false }]);
 
 function webSearch() {
   const q = $('#q').value.trim();
   if (!q) {
-    toast('พิมพ์ชื่อเพลงหรือศิลปินก่อน');
+    toast('พิมพ์ชื่อเพลงหรือศิลปินในช่องค้นหาก่อน');
     $('#q').focus();
     return;
   }
   const on = sites.filter(s => s.on).map(s => 'site:' + s.d);
   window.open('https://www.google.com/search?q=' + encodeURIComponent(q + ' คอร์ด' + (on.length ? ' (' + on.join(' OR ') + ')' : '')), '_blank', 'noopener');
 }
+
 $('#searchForm').onsubmit = e => {
   e.preventDefault();
   webSearch();
 };
 
-let sTok = 0, deb;
-async function doSearch() {
-  const q = $('#q').value.trim(), tok = ++sTok, box = $('#resultsBox'), list = $('#results');
+$('#clearSearchBtn').onclick = () => {
+  $('#q').value = '';
+  $('#clearSearchBtn').hidden = true;
+  doSearch();
+  $('#q').focus();
+};
+
+let deb;
+function doSearch() {
+  const q = $('#q').value.trim();
+  $('#clearSearchBtn').hidden = !q;
   renderSongbook();
+
+  const box = $('#resultsBox'), list = $('#results');
   if (!q) {
     box.hidden = true;
     return;
   }
-  if (matchMedia('(max-width:899px)').matches && document.body.dataset.view !== 'home') show('home', false);
-  const items = await searchSongs(q);
-  if (tok !== sTok) return;
+
+  const t = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const items = MOCK_DB.filter(s => {
+    const h = (s.title + ' ' + s.artist).toLowerCase();
+    return t.every(x => h.includes(x));
+  });
+
   box.hidden = !items.length;
   list.replaceChildren();
   for (const it of items) {
-    const row = mk('div', 'item'), b = mk('button', 'open'), t = mk('div', 't', it.title);
-    t.appendChild(mk('span', 'badge', it.key));
-    b.append(t, mk('div', 'a', it.artist));
+    const row = mk('div', 'item'), b = mk('button', 'open'), titleEl = mk('div', 't', it.title);
+    titleEl.appendChild(mk('span', 'badge', it.key));
+    b.append(titleEl, mk('div', 'a', it.artist));
     b.onclick = () => {
+      activeSetlistContext = null;
       const sv = loadBook().find(s => s.id === it.id);
       sv ? openSong(sv, sv.shift || 0) : openSong({ ...it }, 0);
     };
@@ -672,10 +777,20 @@ async function doSearch() {
     list.appendChild(row);
   }
 }
+
 $('#q').oninput = () => {
   clearTimeout(deb);
-  deb = setTimeout(doSearch, 300);
+  deb = setTimeout(doSearch, 120);
 };
+
+// Filter Tabs (ทั้งหมด / รายการโปรด / ล่าสุด)
+$$('.filterTabs .pillTab').forEach(pill => {
+  pill.onclick = () => {
+    filterMode = pill.dataset.filter;
+    $$('.filterTabs .pillTab').forEach(p => p.classList.toggle('active', p === pill));
+    renderSongbook();
+  };
+});
 
 const favs = () => new Set(LS.get(K.favs, [])), setFavs = s => LS.set(K.favs, [...s]);
 function toggleFav(id) {
@@ -686,13 +801,12 @@ function toggleFav(id) {
   paintFav();
 }
 function paintFav() {
-  if (current) $('#favBtn').textContent = favs().has(current.song.id) ? '★ รายการโปรด' : '☆ รายการโปรด';
+  if (current) {
+    const isFav = favs().has(current.song.id);
+    $('#favBtn').textContent = isFav ? '★' : '☆';
+    $('#favBtn').style.color = isFav ? 'var(--accent)' : '';
+  }
 }
-$('#favFilter').onclick = () => {
-  favOnly = !favOnly;
-  $('#favFilter').textContent = '⭐ เฉพาะรายการโปรด: ' + (favOnly ? 'เปิด' : 'ปิด');
-  renderSongbook();
-};
 $('#favBtn').onclick = () => {
   const id = current.song.id;
   if (!loadBook().some(s => s.id === id)) $('#saveBtn').click();
@@ -701,28 +815,79 @@ $('#favBtn').onclick = () => {
 
 function renderSongbook() {
   const q = $('#q').value.trim().toLowerCase(), F = favs();
-  const all = loadBook().sort((a, b) => a.title.localeCompare(b.title, 'th'));
-  let book = q ? all.filter(s => (s.title + ' ' + (s.artist || '')).toLowerCase().includes(q)) : all;
-  if (favOnly) book = book.filter(s => F.has(s.id));
+  let all = loadBook();
+
+  // If user has 0 songs, show built-in songs automatically so the app never feels empty
+  const isDefaultSeed = all.length === 0;
+  const sourceList = isDefaultSeed ? MOCK_DB : all;
+
+  let book = [...sourceList];
+  if (filterMode === 'recent') {
+    book.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  } else {
+    book.sort((a, b) => a.title.localeCompare(b.title, 'th'));
+  }
+
+  if (q) {
+    book = book.filter(s => (s.title + ' ' + (s.artist || '') + ' ' + (s.text || '')).toLowerCase().includes(q));
+  }
+  if (filterMode === 'fav') {
+    book = book.filter(s => F.has(s.id));
+  }
+
   $('#count').textContent = all.length;
   const list = $('#songbook');
   list.replaceChildren();
-  if (!book.length) list.appendChild(mk('div', 'empty', all.length ? 'ไม่พบเพลง' : 'ยังไม่มีเพลงที่บันทึกไว้'));
+
+  if (!book.length) {
+    const emptyBox = mk('div', 'empty');
+    emptyBox.innerHTML = `<b>🎶</b>${q ? 'ไม่พบเพลงที่ค้นหา — กดปุ่ม “🌐 ค้นเว็บ” ด้านบนเพื่อหาคอร์ดจาก Google' : (filterMode === 'fav' ? 'ยังไม่มีเพลงรายการโปรด (กด ☆ บนเพลงที่ชอบ)' : 'ยังไม่มีเพลงในคลัง')}`;
+    list.appendChild(emptyBox);
+    return;
+  }
+
   for (const s of book) {
-    const row = mk('div', 'item'), open = mk('button', 'open'), t = mk('div', 't', (F.has(s.id) ? '⭐ ' : '') + s.title);
+    const isCurrent = current && current.song.id === s.id;
+    const row = mk('div', 'item' + (isCurrent ? ' active' : ''));
+    const open = mk('button', 'open');
+    const t = mk('div', 't', s.title);
+
     if (s.key) t.appendChild(mk('span', 'badge', s.key));
-    if (s.shift) t.appendChild(mk('span', 'badge dim', fmtShift(s.shift)));
+    if (s.shift) t.appendChild(mk('span', 'badge dim', (s.shift > 0 ? '+' : '') + s.shift));
     if (s.images && s.images.length) t.appendChild(mk('span', 'badge dim', '🖼 ' + s.images.length));
-    open.append(t, mk('div', 'a', s.artist || '—'));
-    open.onclick = () => openSong(s, s.shift || 0);
-    row.append(open, btn(F.has(s.id) ? '★' : '☆', () => toggleFav(s.id), 'del'), btn('🗑', () => removeSong(s.id, s.title), 'del danger'));
+    if (isDefaultSeed) t.appendChild(mk('span', 'badge dim', 'ตัวอย่าง'));
+
+    open.append(t, mk('div', 'a', s.artist || 'ไม่ระบุศิลปิน'));
+    open.onclick = () => {
+      activeSetlistContext = null;
+      openSong(s, s.shift || 0);
+    };
+
+    const actions = mk('div', 'itemActions');
+    const favButton = btn(F.has(s.id) ? '★' : '☆', (e) => {
+      e.stopPropagation();
+      toggleFav(s.id);
+    }, F.has(s.id) ? 'favOn' : '');
+    favButton.title = 'รายการโปรด';
+    actions.appendChild(favButton);
+
+    if (!isDefaultSeed) {
+      const delButton = btn('🗑', (e) => {
+        e.stopPropagation();
+        removeSong(s.id, s.title);
+      });
+      delButton.title = 'ลบเพลง';
+      actions.appendChild(delButton);
+    }
+
+    row.append(open, actions);
     list.appendChild(row);
   }
   schedSync();
 }
 
 async function removeSong(id, title) {
-  if (!confirm(`ลบ “${title}” ออกจากคลังเพลง?`)) return;
+  if (!confirm(`ลบเพลง “${title}” ออกจากคลังเพลง?`)) return;
   const s = loadBook().find(x => x.id === id);
   if (s && s.images) {
     for (const i of s.images) await idbDel(i).catch(() => {});
@@ -730,8 +895,11 @@ async function removeSong(id, title) {
   }
   saveBook(loadBook().filter(x => x.id !== id));
   renderSongbook();
-  if (current && current.song.id === id) renderSong(false);
-  toast('ลบแล้ว');
+  if (current && current.song.id === id) {
+    current = null;
+    show('home', false);
+  }
+  toast('ลบเพลงแล้ว');
 }
 
 $('#exportBtn').onclick = async () => {
@@ -748,8 +916,9 @@ $('#exportBtn').onclick = async () => {
       }
       out.push(o);
     }
-    const name = 'my-songbook-' + new Date().toISOString().slice(0, 10) + '.json';
-    const blob = new Blob([JSON.stringify(out)], { type: 'application/json' }), file = new File([blob], name, { type: 'application/json' });
+    const name = 'mellowchords-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+    const file = new File([blob], name, { type: 'application/json' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title: name });
@@ -763,6 +932,7 @@ $('#exportBtn').onclick = async () => {
     a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('ดาวน์โหลดไฟล์สำรองข้อมูลแล้ว ✔');
   } catch {
     toast('สำรองข้อมูลไม่สำเร็จ', true);
   }
@@ -787,41 +957,98 @@ $('#importFile').onchange = async e => {
     }
     saveBook([...map.values()]);
     renderSongbook();
-    toast(`นำเข้า ${n} เพลงแล้ว ✔`);
+    toast(`นำเข้า ${n} เพลงเรียบร้อยแล้ว ✔`);
   } catch {
-    toast('ไฟล์ไม่ถูกต้อง', true);
+    toast('ไฟล์สำรองข้อมูลไม่ถูกต้อง', true);
   }
 };
 
 /* ==============================================================================
- * 10) การ์ดเพลง & โหมดเวที (Song View & Stage Mode)
+ * 10) หน้าแสดงคอร์ดเพลง, โหมดเวที & แถบเลื่อนเพลงใน Setlist
  * ============================================================================== */
+let twoCols = LS.get(COLS, false);
+function applyCols() {
+  $('#sheet').classList.toggle('cols2', twoCols);
+  $('#colToggleBtn').textContent = twoCols ? '📖 2 คอลัมน์' : '📄 1 คอลัมน์';
+}
+$('#colToggleBtn').onclick = () => {
+  twoCols = !twoCols;
+  LS.set(COLS, twoCols);
+  applyCols();
+};
+applyCols();
+
 function openSong(song, shift = 0) {
   current = { song: { ...song }, shift: normShift(shift) };
   renderSong(true);
+  renderSongbook(); // Update active highlight
   show('song');
 }
+
+function updateSetlistQueueBar() {
+  const nav = $('#setlistNav');
+  if (!activeSetlistContext || !activeSetlistContext.songs.length) {
+    nav.hidden = true;
+    return;
+  }
+  nav.hidden = false;
+  const { name, songs, index } = activeSetlistContext;
+  $('#setlistName').textContent = `🎼 เซ็ต: ${name}`;
+  $('#setlistPos').textContent = `เพลงที่ ${index + 1} / ${songs.length} · ${songs[index].title}`;
+  $('#prevSongBtn').disabled = index <= 0;
+  $('#nextSongBtn').disabled = index >= songs.length - 1;
+}
+
+$('#prevSongBtn').onclick = () => {
+  if (!activeSetlistContext || activeSetlistContext.index <= 0) return;
+  activeSetlistContext.index--;
+  const prev = activeSetlistContext.songs[activeSetlistContext.index];
+  openSong(prev, prev.shift || 0);
+};
+
+$('#nextSongBtn').onclick = () => {
+  if (!activeSetlistContext || activeSetlistContext.index >= activeSetlistContext.songs.length - 1) return;
+  activeSetlistContext.index++;
+  const next = activeSetlistContext.songs[activeSetlistContext.index];
+  openSong(next, next.shift || 0);
+};
 
 let galTok = 0, galUrls = [];
 function renderSong(reload = true) {
   if (!current) return;
   const { song, shift } = current, hasText = !!(song.text && song.text.trim());
   const key = song.key || detectKey(song.text), flat = preferFlat(key, shift), now = key ? transposeChord(key, shift, flat) : '-';
+
   $('#cTitle').textContent = song.title;
   $('#cArtist').textContent = song.artist || 'ไม่ระบุศิลปิน';
   $('#cKeyOrig').textContent = key || '-';
   $('#cKeyNow').textContent = now;
   $('#dockKey').textContent = now;
   $('#shiftLabel').textContent = fmtShift(shift);
+
+  // Capo Recommendation
+  const capoStr = getCapoRecommendation(key, now);
+  const capoEl = $('#capoHint');
+  if (capoStr) {
+    capoEl.textContent = capoStr;
+    capoEl.hidden = false;
+  } else {
+    capoEl.hidden = true;
+  }
+
   $('#sheet').hidden = !hasText;
   $('#tpGrp').hidden = !hasText;
   if (hasText) renderSheet($('#sheet'), song.text, shift, flat);
   if (reload) loadGallery(song);
+
   const saved = loadBook().some(s => s.id === song.id);
   $('#savedTag').hidden = !saved;
   $('#deleteBtn').hidden = !saved;
-  $('#saveBtn').textContent = saved ? '💾 อัปเดตเพลงที่บันทึกไว้' : '💾 บันทึกเข้าคลังเพลงของฉัน';
+  $('#saveBtn').textContent = saved ? '💾 อัปเดตคีย์' : '💾 บันทึกเข้าคลัง';
+  $('#saveBtn').hidden = saved && (loadBook().find(s => s.id === song.id)?.shift || 0) === shift;
+
   paintFav();
+  updateSetlistQueueBar();
 }
 
 async function loadGallery(song) {
@@ -838,7 +1065,7 @@ async function loadGallery(song) {
     const b = await getImg(id);
     if (tok !== galTok) return;
     if (!b) {
-      g.appendChild(mk('div', 'empty', 'ไม่พบภาพ (ล็อกอินและซิงก์เพื่อดึงภาพจากคลาวด์)'));
+      g.appendChild(mk('div', 'empty', 'ไม่พบภาพในเครื่อง (ล็อกอินเพื่อดึงภาพจากคลาวด์)'));
       continue;
     }
     const url = URL.createObjectURL(b);
@@ -877,7 +1104,7 @@ $('#saveBtn').onclick = () => {
   if (!saveBook(book)) return;
   renderSongbook();
   renderSong(false);
-  toast(existed ? 'อัปเดตแล้ว ✔' : 'บันทึกเข้าคลังเพลงแล้ว ✔');
+  toast(existed ? 'บันทึกคีย์ปัจจุบันแล้ว ✔' : 'บันทึกเข้าคลังเพลงแล้ว ✔');
 };
 
 $('#deleteBtn').onclick = () => removeSong(current.song.id, current.song.title);
@@ -891,10 +1118,10 @@ function openLightbox(url) {
 $('#lbClose').onclick = () => ($('#lightbox').hidden = true);
 $('#lbZoom').onclick = () => $('#lbBody').classList.toggle('zoom');
 
-let fs = LS.get(FSK, 1.7);
+let fs = LS.get(FSK, 1.65);
 const applyFs = () => document.documentElement.style.setProperty('--fs', fs + 'rem');
 const bumpFs = d => {
-  fs = Math.min(3.6, Math.max(1, +(fs + d).toFixed(2)));
+  fs = Math.min(3.5, Math.max(0.95, +(fs + d).toFixed(2)));
   applyFs();
   LS.set(FSK, fs);
 };
@@ -913,8 +1140,10 @@ function setFocus(on) {
 $('#focusBtn').onclick = () => setFocus(true);
 $('#exitFocus').onclick = () => setFocus(false);
 
-const SPEEDS = [['ช้า', 18], ['กลาง', 32], ['เร็ว', 55], ['เร็วมาก', 90]];
+const SPEEDS = [['1x (ช้า)', 18, '1x'], ['2x (กลาง)', 32, '2x'], ['3x (เร็ว)', 55, '3x'], ['4x (ไว)', 85, '4x']];
 let spIdx = 1, scrolling = false, lastT = 0, acc = 0;
+$('#speedBtn').textContent = SPEEDS[spIdx][2];
+
 function tick(t) {
   if (!scrolling) return;
   acc += SPEEDS[spIdx][1] * (t - lastT) / 1000;
@@ -930,9 +1159,10 @@ function tick(t) {
   }
   requestAnimationFrame(tick);
 }
+
 function setScroll(on) {
   scrolling = on;
-  $('#scrollBtn').textContent = on ? '⏸ หยุดเลื่อน' : '⏬ เลื่อนอัตโนมัติ';
+  $('#scrollBtn').textContent = on ? '⏸ หยุด' : '⏬ เลื่อน';
   if (on) {
     lastT = performance.now();
     acc = 0;
@@ -942,8 +1172,10 @@ function setScroll(on) {
 $('#scrollBtn').onclick = () => setScroll(!scrolling);
 $('#speedBtn').onclick = () => {
   spIdx = (spIdx + 1) % SPEEDS.length;
-  $('#speedBtn').textContent = SPEEDS[spIdx][0];
+  $('#speedBtn').textContent = SPEEDS[spIdx][2];
+  toast(`ความเร็วเลื่อนอัตโนมัติ: ${SPEEDS[spIdx][0]}`);
 };
+
 ['touchstart', 'wheel'].forEach(ev =>
   addEventListener(
     ev,
@@ -954,21 +1186,58 @@ $('#speedBtn').onclick = () => {
   )
 );
 
+// Keyboard shortcuts for Bluetooth Pedals & Desktop (Space = Toggle scroll, Left/Right = Prev/Next song)
+addEventListener('keydown', e => {
+  if (document.body.dataset.view !== 'song') return;
+  if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    setScroll(!scrolling);
+  } else if (e.code === 'ArrowRight' && activeSetlistContext) {
+    $('#nextSongBtn').click();
+  } else if (e.code === 'ArrowLeft' && activeSetlistContext) {
+    $('#prevSongBtn').click();
+  }
+});
+
 /* ==============================================================================
- * 11) เพิ่ม / แก้ไขเพลง & OCR สแกนภาพคอร์ด
+ * 11) เพิ่ม / แก้ไขเพลง, ดูตัวอย่างคอร์ดสด (Live Preview) & OCR
  * ============================================================================== */
 let editingId = null, edImgs = [], edRemoved = [];
+
+function switchEditorMode(mode) {
+  const isPreview = mode === 'preview';
+  $('#tabEditBtn').classList.toggle('active', !isPreview);
+  $('#tabPreviewBtn').classList.toggle('active', isPreview);
+  $('#fText').hidden = isPreview;
+  $('#livePreviewBox').hidden = !isPreview;
+  if (isPreview) {
+    const text = $('#fText').value.trim();
+    const key = $('#fKey').value.trim() || detectKey(text);
+    if (text) {
+      renderSheet($('#livePreviewBox'), text, 0, preferFlat(key, 0));
+    } else {
+      $('#livePreviewBox').innerHTML = `<div class="muted" style="text-align:center; padding:40px 10px">ยังไม่มีข้อความคอร์ด — พิมพ์หรือวางคอร์ดในแท็บแก้ไขข้อความ</div>`;
+    }
+  }
+}
+
+$('#tabEditBtn').onclick = () => switchEditorMode('edit');
+$('#tabPreviewBtn').onclick = () => switchEditorMode('preview');
+$('#topSaveEditorBtn').onclick = () => $('#editorForm').requestSubmit();
+
 async function openEditor(song, prefill = '') {
   const keep = song && (song.id.startsWith('u-') || song.id.startsWith('sh-') || loadBook().some(s => s.id === song.id));
   editingId = keep ? song.id : null;
   edImgs = [];
   edRemoved = [];
-  $('#editorTitle').textContent = song ? 'แก้ไขเพลง' : 'เพิ่มเพลงเอง';
+  $('#editorTitle').textContent = song ? 'แก้ไขเพลง' : 'เพิ่มเพลงใหม่';
   $('#fTitle').value = song ? song.title : prefill;
   $('#fArtist').value = song ? song.artist || '' : '';
   $('#fKey').value = song ? song.key || '' : '';
   $('#fText').value = song ? song.text || '' : '';
   $('#fUrl').value = song ? song.src || '' : '';
+  switchEditorMode('edit');
   show('editor');
   renderThumbs();
   if (keep && song.images && song.images.length) {
@@ -992,9 +1261,9 @@ function renderThumbs() {
       if (!im.isNew) edRemoved.push(im.id);
       edImgs.splice(i, 1);
       renderThumbs();
-    });
+    }, 'delImgBtn');
 
-    const ocrBtn = btn('🔍 สแกน', async () => {
+    const ocrBtn = btn('🔍 สแกน', () => {
       runOcrOnImage(im.blob);
     }, 'ocrThisBtn');
 
@@ -1016,7 +1285,7 @@ async function addImageFiles(files) {
     }
   }
   renderThumbs();
-  if (n) toast(`เพิ่ม ${n} ภาพแล้ว`);
+  if (n) toast(`แนบ ${n} ภาพแล้ว (กด “🔍 สแกน” บนภาพเพื่อแปลงเป็นข้อความได้)`);
 }
 
 $('#fImgs').onchange = async e => {
@@ -1027,7 +1296,7 @@ $('#fImgs').onchange = async e => {
 
 $('#pasteImgBtn').onclick = async () => {
   if (!navigator.clipboard || !navigator.clipboard.read) {
-    toast('ไม่รองรับปุ่มนี้ — กดค้างที่ช่องข้อความแล้วเลือก “วาง”');
+    toast('กดค้างที่ช่องข้อความแล้วเลือก “วาง” หรือเลือกรูปจากเครื่อง');
     return;
   }
   try {
@@ -1042,7 +1311,7 @@ $('#pasteImgBtn').onclick = async () => {
     }
     addImageFiles(files);
   } catch {
-    toast('อ่านคลิปบอร์ดไม่ได้ — ลองกดค้างที่ช่องข้อความแล้วเลือก “วาง”');
+    toast('อ่านคลิปบอร์ดไม่ได้ — ลองเลือกรูปจากปุ่ม “📁 เลือกรูปภาพ”');
   }
 };
 
@@ -1064,33 +1333,30 @@ edView.addEventListener('drop', e => {
   addImageFiles(files);
 });
 
-// Smart Format Button handler
 $('#formatTextBtn').onclick = () => {
   const currentText = $('#fText').value;
   if (!currentText.trim()) {
     toast('ยังไม่มีข้อความคอร์ดในช่อง');
     return;
   }
-  const formatted = smartFormatChordSheet(currentText, false);
-  $('#fText').value = formatted;
-  toast('✨ จัดระเบียบท่อนเพลงและคอร์ดเรียบร้อยแล้ว ✔');
+  $('#fText').value = smartFormatChordSheet(currentText, false);
+  if (!$('#livePreviewBox').hidden) switchEditorMode('preview');
+  toast('✨ จัดระเบียบชื่อท่อนเพลงและคอร์ดเรียบร้อย ✔');
 };
 
-// Convert to Bracket Format Button handler
 $('#convertBracketBtn').onclick = () => {
   const currentText = $('#fText').value;
   if (!currentText.trim()) {
     toast('ยังไม่มีข้อความคอร์ดในช่อง');
     return;
   }
-  const converted = smartFormatChordSheet(currentText, true);
-  $('#fText').value = converted;
-  toast('✨ แปลงคอร์ดเป็นรูปแบบ [G]เนื้อเพลง เรียบร้อยแล้ว (ไม่หลุดบรรทัดบนมือถือ) ✔');
+  $('#fText').value = smartFormatChordSheet(currentText, true);
+  if (!$('#livePreviewBox').hidden) switchEditorMode('preview');
+  toast('🔤 แปลงคอร์ดเป็น [G]เนื้อเพลง เรียบร้อย (คอร์ดไม่เพี้ยนบนมือถือ) ✔');
 };
 
-// OCR Modal and Execution
 async function runOcrOnImage(blob) {
-  modal('🔍 AI / OCR สแกนคอร์ดจากภาพ', (box, close) => {
+  modal('🔍 AI สแกนคอร์ดจากภาพ', (box, close) => {
     const statusText = mk('p', 'muted', 'กำลังเตรียมโมดูลสแกน...');
     const progressBar = mk('div', 'progressBar');
     const progressFill = mk('div', 'progressFill');
@@ -1112,14 +1378,12 @@ async function runOcrOnImage(blob) {
       const existing = $('#fText').value.trim();
       $('#fText').value = existing ? existing + '\n\n' + formatted : formatted;
 
-      // Guess key if not set
       if (!$('#fKey').value.trim()) {
         const detected = detectKey(formatted);
         if (detected) $('#fKey').value = detected;
       }
-      toast('สแกนเสร็จสิ้น — นำเข้าข้อความและคอร์ดแล้ว ✔');
+      toast('สแกนเสร็จสิ้น — นำเข้าเนื้อเพลงและคอร์ดแล้ว ✔');
     }).catch(err => {
-      console.error(err);
       statusText.textContent = 'เกิดข้อผิดพลาดในการสแกน: ' + (err.message || err);
       statusText.className = 'err';
     });
@@ -1128,7 +1392,8 @@ async function runOcrOnImage(blob) {
 
 $('#ocrScanBtn').onclick = () => {
   if (!edImgs.length) {
-    toast('แนบภาพคอร์ดอย่างน้อย 1 ภาพก่อน แล้วกดสแกน');
+    $('#fImgs').click();
+    toast('เลือกรูปภาพคอร์ดที่ต้องการสแกน');
     return;
   }
   runOcrOnImage(edImgs[0].blob);
@@ -1138,7 +1403,7 @@ $('#editorForm').onsubmit = async e => {
   e.preventDefault();
   const text = $('#fText').value.replace(/\s+$/, '');
   if (!text.trim() && !edImgs.length) {
-    toast('ใส่ข้อความคอร์ด หรือแนบภาพอย่างน้อยหนึ่งอย่าง', true);
+    toast('ใส่ข้อความคอร์ด หรือแนบรูปคอร์ดอย่างน้อย 1 อย่าง', true);
     return;
   }
   const keyRaw = $('#fKey').value.trim(), badKey = keyRaw && !isChord(keyRaw);
@@ -1166,7 +1431,7 @@ $('#editorForm').onsubmit = async e => {
   if (!saveBook(book)) return;
   renderSongbook();
   openSong(song, 0);
-  toast(badKey ? 'บันทึกแล้ว (คีย์ไม่ถูกต้อง ใช้คีย์จากคอร์ดแรกแทน)' : 'บันทึกแล้ว ✔');
+  toast(badKey ? 'บันทึกแล้ว (ตรวจพบคีย์อัตโนมัติ)' : 'บันทึกเพลงเรียบร้อย ✔');
 };
 
 $('#addBtn').onclick = () => openEditor(null, $('#q').value.trim());
@@ -1176,18 +1441,26 @@ $('#pasteBtn').onclick = async () => {
   try {
     const t = (await clip).trim();
     if (!t) {
-      toast('ไม่มีข้อความในคลิปบอร์ด — ถ้าเป็นรูป กดปุ่ม “วางรูปจากคลิปบอร์ด”');
+      toast('คลิปบอร์ดว่างเปล่า — วางข้อความหรือเลือกรูปคอร์ดได้เลย');
       return;
     }
     if (/^https?:\/\/\S+$/.test(t)) {
       $('#fUrl').value = t;
       importFromUrl();
     } else {
-      $('#fText').value = t;
-      toast('วางแล้ว — ตรวจชื่อเพลงและคอร์ดก่อนบันทึก');
+      const lines = t.split('\n').map(l => l.trim()).filter(Boolean);
+      if (!$('#fTitle').value && lines.length && !isChordLine(lines[0]) && lines[0].length < 45) {
+        const { title, artist } = parseTitleAndArtist(lines[0]);
+        if (title) $('#fTitle').value = title;
+        if (artist) $('#fArtist').value = artist;
+      }
+      $('#fText').value = smartFormatChordSheet(t, false);
+      const guessedKey = detectKey(t);
+      if (guessedKey && !$('#fKey').value) $('#fKey').value = guessedKey;
+      toast('วางและจัดระเบียบคอร์ดแล้ว — ตรวจสอบชื่อเพลงแล้วกดบันทึกได้เลย ✔');
     }
   } catch {
-    toast('อ่านคลิปบอร์ดไม่ได้ — กดค้างที่ช่องข้อความแล้วเลือก “วาง”');
+    toast('กดค้างในช่องข้อความแล้วเลือก “วาง” ได้เลย');
     $('#fText').focus();
   }
 };
@@ -1195,7 +1468,7 @@ $('#pasteBtn').onclick = async () => {
 async function importFromUrl() {
   const url = $('#fUrl').value.trim(), b = $('#fetchUrlBtn');
   if (!/^https?:\/\//.test(url)) {
-    toast('ลิงก์ไม่ถูกต้อง (ต้องขึ้นต้นด้วย http:// หรือ https://)', true);
+    toast('วางลิงก์ที่ขึ้นต้นด้วย https:// ก่อนครับ', true);
     return;
   }
   b.disabled = true;
@@ -1215,28 +1488,22 @@ async function importFromUrl() {
       if (k) $('#fKey').value = k;
     }
 
-    toast(text.length < 80 ? 'ได้ข้อความน้อยมาก — หน้านี้อาจเป็นภาพ ให้แคปหน้าจอแล้วแนบภาพ' : 'ดึงแล้ว — จัดระเบียบเนื้อเพลงและคอร์ดให้เรียบร้อยแล้ว ✔');
-  } catch (err) {
-    console.warn(err);
-    toast('ดึงไม่ได้ (เว็บบล็อกการเข้าถึง) — คัดลอกมาวางในช่องแทนได้', true);
+    toast(text.length < 80 ? 'เว็บนี้แสดงคอร์ดเป็นรูปภาพ — แนะนำให้แคปหน้าจอแล้วใช้ปุ่มสแกน OCR' : 'ดึงคอร์ดและจัดท่อนเพลงเรียบร้อยแล้ว ✔');
+  } catch {
+    toast('เว็บปลายทางบล็อกการดึงอัตโนมัติ — คัดลอกเนื้อเพลงมาวางแทนได้ครับ', true);
   } finally {
     b.disabled = false;
     b.textContent = old;
   }
 }
+
 $('#fetchUrlBtn').onclick = importFromUrl;
 $('#fUrl').addEventListener('paste', () => setTimeout(() => {
   if (/^https?:\/\//.test($('#fUrl').value.trim())) importFromUrl();
 }, 60));
 
-$('#proxy').value = LS.get(PROXY, '') || '';
-$('#proxy').onchange = e => {
-  LS.set(PROXY, e.target.value.trim());
-  toast('บันทึกการตั้งค่า Proxy แล้ว');
-};
-
 /* ==============================================================================
- * 12) Supabase ซิงก์ข้อมูล & บัญชีผู้ใช้ (Cloud Sync)
+ * 12) Supabase ซิงก์ข้อมูล & หน้าต่างตั้งค่ารวม (Settings & Cloud Sync)
  * ============================================================================== */
 let sb = null, user = null, syncing = false, status = '', sbErr = '';
 const conf = () => {
@@ -1287,7 +1554,8 @@ const fromP = r => ({
 
 function modal(title, build) {
   const ov = mk('div', 'modal'), box = mk('div', 'box'), bar = mk('div', 'row between');
-  bar.append(mk('h2', null, title), btn('✕', () => ov.remove()));
+  bar.style.marginBottom = '10px';
+  bar.append(mk('h2', null, title), btn('✕', () => ov.remove(), 'small iconBtn'));
   box.appendChild(bar);
   ov.onclick = e => { if (e.target === ov) ov.remove(); };
   ov.appendChild(box);
@@ -1300,7 +1568,7 @@ function initClient() {
   sb = null;
   sbErr = '';
   if (!window.supabase) {
-    sbErr = 'โหลดไลบรารี Supabase ไม่ได้ — กำลังทำงานในโหมดออฟไลน์';
+    sbErr = 'ทำงานในโหมดออฟไลน์';
     return;
   }
   if (!c.url || !c.key) {
@@ -1326,7 +1594,7 @@ const setStatus = s => {
 };
 
 function paintAcct() {
-  let t = '⚠️ เชื่อมต่อไม่ได้';
+  let t = '⚙️ ตั้งค่า';
   if (sb) {
     t = user ? '☁️ ' + (user.email || '').split('@')[0] + ' ' + ({ ok: '✓', sync: '⟳', err: '⚠', off: '⚡' }[status] || '') : '👤 เข้าสู่ระบบ';
   }
@@ -1341,45 +1609,55 @@ const authMsg = m => {
   if (/not authorized/i.test(m)) return 'ส่งอีเมลยืนยันไม่ได้ — ปิด “Confirm email” ใน Supabase';
   if (/invalid login/i.test(m)) return 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
   if (/already (been )?registered/i.test(m)) return 'อีเมลนี้สมัครแล้ว — กด “เข้าสู่ระบบ”';
-  if (/password/i.test(m) && /(least|short|weak)/i.test(m)) return 'รหัสผ่านสั้นหรืออ่อนเกินไป (อย่างน้อย 6 ตัว)';
+  if (/password/i.test(m) && /(least|short|weak)/i.test(m)) return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัว';
   if (/email/i.test(m) && /invalid/i.test(m)) return 'รูปแบบอีเมลไม่ถูกต้อง';
-  if (/failed to fetch|network|load failed/i.test(m)) return 'เชื่อมต่อ Supabase ไม่ได้ — กำลังทำงานในโหมดออฟไลน์';
+  if (/failed to fetch|network|load failed/i.test(m)) return 'เชื่อมต่อคลาวด์ไม่ได้ — กำลังทำงานในโหมดออฟไลน์';
   return m;
 };
 
 function openAcct() {
-  modal('บัญชี & ซิงก์', box => {
+  modal('⚙️ ตั้งค่า & ซิงก์คลาวด์', box => {
     const body = mk('div');
     box.appendChild(body);
     const draw = () => {
       body.replaceChildren();
 
-      // PWA Install Prompt in Account Modal
-      if (deferredPrompt) {
-        const pwaBox = mk('div', 'installBanner');
-        pwaBox.append(
-          mk('div', null, '📲 ติดตั้ง mellowchords เป็นแอปบนเครื่อง'),
-          btn('ติดตั้งทันที', installPWA, 'primary small')
-        );
-        body.appendChild(pwaBox);
-      }
+      // 1. PWA App Installation Card
+      const pwaBox = mk('div', 'installBanner');
+      pwaBox.append(
+        mk('div', null, '📲 ติดตั้งแอปลงจอมือถือ/แท็บเล็ต (ใช้งานออฟไลน์ 100%)'),
+        btn('วิธีติดตั้ง', installPWA, 'primary small')
+      );
+      body.appendChild(pwaBox);
+
+      // 2. Cloud Account & Sync
+      const accTitle = mk('label', null, '☁️ บัญชีซิงก์ข้อมูลข้ามเครื่อง (Supabase)');
+      accTitle.style.marginTop = '4px';
+      body.appendChild(accTitle);
 
       if (sb && user) {
-        body.append(
-          mk('p', null, 'เข้าสู่ระบบเป็น ' + user.email),
-          btn('🔄 ซิงก์ตอนนี้', async () => {
+        const userCard = mk('div', 'card');
+        userCard.style.padding = '12px';
+        userCard.append(
+          mk('div', null, 'เข้าสู่ระบบเป็น: ' + user.email),
+          mk('div', 'row', '')
+        );
+        const btnRow = userCard.lastChild;
+        btnRow.style.marginTop = '10px';
+        btnRow.append(
+          btn('🔄 ซิงก์ข้อมูลตอนนี้', async () => {
             await syncAll();
-            toast('ซิงก์แล้ว ✔');
-          }, 'primary'),
-          ' ',
+            toast('ซิงก์ข้อมูลเรียบร้อย ✔');
+          }, 'primary small'),
           btn('ออกจากระบบ', async () => {
             await sb.auth.signOut();
             LS.set(K.meta, { songs: {}, pls: {} });
             user = null;
             paintAcct();
             draw();
-          }, 'danger')
+          }, 'danger small')
         );
+        body.appendChild(userCard);
       } else if (sb) {
         const em = mk('input');
         em.type = 'email';
@@ -1391,7 +1669,7 @@ function openAcct() {
         pw.placeholder = 'รหัสผ่าน (อย่างน้อย 6 ตัว)';
         pw.autocomplete = 'current-password';
         const msg = mk('div', 'err');
-        const b1 = btn('เข้าสู่ระบบ', () => go(false), 'primary'), b2 = btn('สมัครสมาชิก', () => go(true));
+        const b1 = btn('เข้าสู่ระบบ', () => go(false), 'primary small'), b2 = btn('สมัครสมาชิก', () => go(true), 'small');
         const go = async up => {
           msg.style.color = '';
           msg.textContent = '';
@@ -1419,7 +1697,7 @@ function openAcct() {
               return;
             }
             if (!data.session) {
-              msg.textContent = 'สมัครแล้ว แต่ยังเข้าไม่ได้: ยืนยันอีเมลก่อน หรือปิด Confirm email';
+              msg.textContent = 'สมัครแล้ว — กรุณายืนยันลิงก์ในอีเมลก่อนเข้าสู่ระบบ';
               return;
             }
             user = data.session.user;
@@ -1433,28 +1711,88 @@ function openAcct() {
             b1.disabled = b2.disabled = false;
           }
         };
-        body.append(em, pw, msg, b1, ' ', b2);
+        const btnWrap = mk('div', 'row');
+        btnWrap.append(b1, b2);
+        body.append(em, pw, msg, btnWrap);
       } else {
-        body.appendChild(mk('div', 'err', 'เชื่อมต่อ Supabase ไม่ได้: ' + sbErr));
+        body.appendChild(mk('div', 'err', sbErr));
       }
 
-      const d = mk('details'), u = mk('input'), k = mk('input');
-      u.placeholder = 'Project URL (https://xxxx.supabase.co)';
+      // 3. Web Search Filter Sites (Moved cleanly into Settings Modal)
+      const siteDetails = mk('details');
+      const siteChips = mk('div', 'chips');
+      const renderModalSites = () => {
+        siteChips.replaceChildren();
+        sites.forEach((s, i) => {
+          const c = mk('span', 'chip' + (s.on ? ' on' : ''));
+          c.append(
+            btn((s.on ? '✓ ' : '') + s.d, () => {
+              s.on = !s.on;
+              LS.set(SITES, sites);
+              renderModalSites();
+            }, 'lbl'),
+            btn('✕', () => {
+              sites.splice(i, 1);
+              LS.set(SITES, sites);
+              renderModalSites();
+            }, 'x')
+          );
+          siteChips.appendChild(c);
+        });
+      };
+      renderModalSites();
+
+      const siteInput = mk('input');
+      siteInput.placeholder = 'เพิ่มเว็บคอร์ด เช่น chordtabs.in.th';
+      const siteAddBtn = btn('เพิ่มเว็บ', () => {
+        const v = siteInput.value.trim().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].toLowerCase();
+        if (!v || !v.includes('.')) {
+          toast('ใส่ชื่อเว็บให้ถูกต้อง เช่น chordtabs.in.th', true);
+          return;
+        }
+        if (!sites.some(s => s.d === v)) sites.push({ d: v, on: true });
+        LS.set(SITES, sites);
+        siteInput.value = '';
+        renderModalSites();
+      }, 'small');
+      const siteRow = mk('div', 'row');
+      siteInput.className = 'grow';
+      siteRow.append(siteInput, siteAddBtn);
+      siteDetails.append(mk('summary', null, '🌐 ตั้งค่าเว็บที่ใช้ค้นหาคอร์ด (Google)'), siteChips, siteRow);
+      body.appendChild(siteDetails);
+
+      // 4. Advanced Proxy & Custom Supabase Config
+      const advDetails = mk('details');
+      const proxyInput = mk('input');
+      proxyInput.placeholder = 'Custom Proxy URL เช่น https://xxx.workers.dev/?url={url}';
+      proxyInput.value = LS.get(PROXY, '') || '';
+      proxyInput.onchange = e => {
+        LS.set(PROXY, e.target.value.trim());
+        toast('บันทึก Proxy แล้ว');
+      };
+
+      const u = mk('input'), k = mk('input');
+      u.placeholder = 'Supabase Project URL';
       u.value = conf().url;
-      k.placeholder = 'anon public key';
+      k.placeholder = 'Supabase anon public key';
       k.value = conf().key;
-      d.append(
-        mk('summary', null, '⚙️ ตั้งค่า Supabase ด้วยตัวเอง'),
+
+      advDetails.append(
+        mk('summary', null, '🛠️ ขั้นสูง: ตั้งค่า Proxy & Supabase Server'),
+        mk('label', null, 'Custom CORS Proxy'),
+        proxyInput,
+        mk('label', null, 'Supabase Project URL & Key'),
         u,
         k,
-        btn('บันทึกการตั้งค่า', () => {
+        btn('บันทึกการตั้งค่าเซิร์ฟเวอร์', () => {
           LS.set(K.cfg, { url: u.value.trim(), key: k.value.trim() });
           initClient();
           paintAcct();
           draw();
-        })
+          toast('บันทึกการตั้งค่าแล้ว ✔');
+        }, 'small')
       );
-      body.appendChild(d);
+      body.appendChild(advDetails);
     };
     draw();
   });
@@ -1642,7 +1980,7 @@ async function syncAll() {
 }
 
 /* ==============================================================================
- * 13) Playlist & การแชร์เซ็ตเพลง (Setlist & Sharing)
+ * 13) เซ็ตเพลง / Playlist & โหมดเล่นเรียงตามคิว (Setlist Live Runner)
  * ============================================================================== */
 function createPlaylist(name, songIds = []) {
   const p = { id: crypto.randomUUID(), name, songIds, shared: false, token: null, updatedAt: Date.now() };
@@ -1664,7 +2002,7 @@ function mutPl(id, fn) {
 }
 
 $('#plNew').onclick = () => {
-  const n = (prompt('ชื่อ Playlist (เช่น เซ็ตคืนวันศุกร์)') || '').trim();
+  const n = (prompt('ตั้งชื่อเซ็ตเพลง / Playlist (เช่น เซ็ตคืนวันศุกร์, เพลงเร็ว)') || '').trim();
   if (n) createPlaylist(n);
 };
 
@@ -1672,11 +2010,16 @@ function renderPlaylists() {
   const P = getPls(), box = $('#plList');
   $('#plCount').textContent = P.length;
   box.replaceChildren();
-  if (!P.length) box.appendChild(mk('div', 'empty', 'ยังไม่มี Playlist'));
+  if (!P.length) {
+    const empty = mk('div', 'empty');
+    empty.innerHTML = `<b>🎼</b>ยังไม่มีเซ็ตเพลง — กด <b>“＋ สร้างเซ็ตใหม่”</b> เพื่อจัดลำดับเพลงขึ้นเล่นสด`;
+    box.appendChild(empty);
+    return;
+  }
   for (const p of P) {
     const row = mk('div', 'item'), b = mk('button', 'open'), t = mk('div', 't', p.name);
     t.appendChild(mk('span', 'badge dim', p.songIds.length + ' เพลง'));
-    if (p.shared) t.appendChild(mk('span', 'badge', 'แชร์'));
+    if (p.shared) t.appendChild(mk('span', 'badge', 'แชร์ลิงก์'));
     b.appendChild(t);
     b.onclick = () => openPlaylist(p.id);
     row.appendChild(b);
@@ -1706,7 +2049,7 @@ function renderPlView() {
       text: s.text,
       shift: s.shift || 0
     }));
-    bar.append(btn('💾 บันทึกทั้ง Playlist เข้าคลังของฉัน', importShared, 'primary'));
+    bar.append(btn('💾 บันทึกทั้งเซ็ตเข้าคลังของฉัน', importShared, 'primary small'));
   } else {
     p = getPls().find(x => x.id === curPl.id);
     if (!p) {
@@ -1715,18 +2058,30 @@ function renderPlView() {
     }
     $('#plTitle').textContent = '🎼 ' + p.name;
     const book = loadBook();
-    songs = p.songIds.map(id => book.find(s => s.id === id)).filter(Boolean);
+    const allLookup = [...book, ...MOCK_DB];
+    songs = p.songIds.map(id => allLookup.find(s => s.id === id)).filter(Boolean);
+
+    if (songs.length) {
+      bar.append(
+        btn('▶️ เริ่มเล่นเซ็ตนี้', () => {
+          activeSetlistContext = { plId: p.id, name: p.name, songs, index: 0 };
+          openSong(songs[0], songs[0].shift || 0);
+        }, 'primary small')
+      );
+    }
+
     bar.append(
       btn('✏️ เปลี่ยนชื่อ', () => {
-        const n = (prompt('ชื่อใหม่', p.name) || '').trim();
+        const n = (prompt('ชื่อเซ็ตใหม่', p.name) || '').trim();
         if (n) {
           mutPl(p.id, x => { x.name = n; });
           renderPlView();
         }
-      }),
-      btn(p.shared ? '🔗 แชร์อยู่' : '🔗 เปิดแชร์', () => sharePlaylist(p.id), p.shared ? '' : 'primary'),
-      btn('🗑 ลบ', () => delPlaylist(p.id), 'danger')
+      }, 'small'),
+      btn(p.shared ? '🔗 แชร์อยู่' : '🔗 แชร์ให้เพื่อนในวง', () => sharePlaylist(p.id), 'small'),
+      btn('🗑 ลบเซ็ต', () => delPlaylist(p.id), 'danger small')
     );
+
     if (p.shared && p.token) {
       const link = location.origin + location.pathname + '#/p/' + p.token, inp = mk('input');
       inp.readOnly = true;
@@ -1735,23 +2090,34 @@ function renderPlView() {
       lk.className = 'plLink';
       lk.append(
         inp,
-        btn('📤 ส่งลิงก์', () => shareLink(p, link), 'primary'),
-        btn('🚫 เลิกแชร์', () => {
+        btn('📤 คัดลอก/ส่งลิงก์', () => shareLink(p, link), 'primary small'),
+        btn('🚫 ปิดแชร์', () => {
           mutPl(p.id, x => { x.shared = false; });
           renderPlView();
           syncAll();
-        })
+        }, 'small')
       );
     }
   }
-  if (!songs.length) box.appendChild(mk('div', 'empty', 'ยังไม่มีเพลง — เปิดเพลงแล้วกด “➕ Playlist”'));
-  songs.forEach(s => {
-    const row = mk('div', 'item'), o = mk('button', 'open'), t = mk('div', 't', s.title);
+
+  if (!songs.length) {
+    box.appendChild(mk('div', 'empty', 'ยังไม่มีเพลงในเซ็ตนี้ — เปิดเพลงแล้วกดปุ่ม “➕ เซ็ตเพลง”'));
+    return;
+  }
+
+  songs.forEach((s, idx) => {
+    const row = mk('div', 'item'), o = mk('button', 'open');
+    const t = mk('div', 't', `${idx + 1}. ${s.title}`);
     if (s.key) t.appendChild(mk('span', 'badge', s.key));
-    o.append(t, mk('div', 'a', s.artist || '—'));
-    o.onclick = () => openSong(s, s.shift || 0);
+    o.append(t, mk('div', 'a', s.artist || 'ไม่ระบุศิลปิน'));
+    o.onclick = () => {
+      activeSetlistContext = { plId: p ? p.id : 'shared', name: p ? p.name : curPl.data.name, songs, index: idx };
+      openSong(s, s.shift || 0);
+    };
     row.appendChild(o);
+
     if (p) {
+      const actions = mk('div', 'itemActions');
       const mv = d => {
         mutPl(p.id, x => {
           const i = x.songIds.indexOf(s.id), j = i + d;
@@ -1759,55 +2125,62 @@ function renderPlView() {
         });
         renderPlView();
       };
-      row.append(
-        btn('↑', () => mv(-1), 'del'),
-        btn('↓', () => mv(1), 'del'),
+      actions.append(
+        btn('↑', () => mv(-1)),
+        btn('↓', () => mv(1)),
         btn('✕', () => {
           mutPl(p.id, x => { x.songIds = x.songIds.filter(i => i !== s.id); });
           renderPlView();
-        }, 'del danger')
+        })
       );
+      row.appendChild(actions);
     }
     box.appendChild(row);
   });
 }
 
 function delPlaylist(id) {
-  if (!confirm('ลบ Playlist นี้? (เพลงในคลังไม่ถูกลบ)')) return;
+  if (!confirm('ลบเซ็ตเพลงนี้? (เพลงในคลังหลักจะไม่ถูกลบ)')) return;
   setPls(getPls().filter(p => p.id !== id));
   renderPlaylists();
   schedSync();
-  goBack();
+  show('playlists', false);
 }
 
 $('#plBtn').onclick = () => {
   const song = current.song;
   if (!loadBook().some(s => s.id === song.id)) $('#saveBtn').click();
-  modal('เพิ่มเข้า Playlist', box => {
+  modal('➕ เพิ่มเพลงเข้าเซ็ต (Playlist)', box => {
     const body = mk('div');
     box.appendChild(body);
     const draw = () => {
       body.replaceChildren();
-      for (const p of getPls()) {
+      const pls = getPls();
+      if (!pls.length) {
+        body.appendChild(mk('p', 'muted small', 'ยังไม่มีเซ็ตเพลง กดปุ่มด้านล่างเพื่อสร้างเซ็ตแรกได้เลย'));
+      }
+      for (const p of pls) {
         const inn = p.songIds.includes(song.id);
-        const b = btn((inn ? '✅ ' : '⬜ ') + p.name, () => {
+        const b = btn((inn ? '✅ ' : '⬜ ') + p.name + ` (${p.songIds.length})`, () => {
           mutPl(p.id, x => {
             x.songIds = inn ? x.songIds.filter(i => i !== song.id) : [...x.songIds, song.id];
           });
           draw();
         });
-        b.style.cssText = 'display:block;width:100%;text-align:left;margin:6px 0';
+        b.style.cssText = 'display:flex;justify-content:flex-start;width:100%;margin:6px 0';
         body.appendChild(b);
       }
-      body.appendChild(
-        btn('＋ สร้าง Playlist ใหม่', () => {
-          const n = (prompt('ชื่อ Playlist') || '').trim();
-          if (n) {
-            createPlaylist(n, [song.id]);
-            draw();
-          }
-        }, 'primary')
-      );
+      const newBtn = btn('＋ สร้างเซ็ตเพลงใหม่พร้อมเพิ่มเพลงนี้', () => {
+        const n = (prompt('ชื่อเซ็ตเพลงใหม่') || '').trim();
+        if (n) {
+          createPlaylist(n, [song.id]);
+          draw();
+          toast(`เพิ่มเข้าเซ็ต “${n}” แล้ว ✔`);
+        }
+      }, 'primary');
+      newBtn.style.width = '100%';
+      newBtn.style.marginTop = '10px';
+      body.appendChild(newBtn);
     };
     draw();
   });
@@ -1815,7 +2188,7 @@ $('#plBtn').onclick = () => {
 
 async function sharePlaylist(id) {
   if (!sb || !user) {
-    toast(sb ? 'ต้องเข้าสู่ระบบก่อนจึงจะแชร์ได้' : 'ยังไม่ได้เชื่อมต่อ Supabase', true);
+    toast('เข้าสู่ระบบก่อนแชร์ลิงก์เซ็ตเพลงให้เพื่อนในวง', true);
     openAcct();
     return;
   }
@@ -1824,9 +2197,9 @@ async function sharePlaylist(id) {
     p.token = p.token || (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, '');
   });
   renderPlView();
-  toast('กำลังซิงก์…');
+  toast('กำลังสร้างลิงก์แชร์…');
   await syncAll();
-  toast('พร้อมแชร์ ✔ กด “ส่งลิงก์”');
+  toast('พร้อมแชร์แล้ว ✔');
   renderPlView();
 }
 
@@ -1841,7 +2214,7 @@ async function shareLink(p, link) {
   }
   try {
     await navigator.clipboard.writeText(link);
-    toast('คัดลอกลิงก์แล้ว ✔');
+    toast('คัดลอกลิงก์แชร์แล้ว ✔');
   } catch {
     prompt('คัดลอกลิงก์นี้', link);
   }
@@ -1849,12 +2222,12 @@ async function shareLink(p, link) {
 
 async function openShared(token) {
   if (!sb) {
-    toast('ลิงก์นี้ต้องใช้แอปที่เชื่อมต่อ Supabase ได้', true);
+    toast('ต้องเชื่อมต่ออินเทอร์เน็ตเพื่อเปิดเซ็ตเพลงที่แชร์มา', true);
     return;
   }
   const { data, error } = await sb.rpc('get_shared_playlist', { p_token: token });
   if (error || !data) {
-    toast('ไม่พบ Playlist นี้ หรือเจ้าของปิดการแชร์แล้ว', true);
+    toast('ไม่พบเซ็ตเพลงนี้ หรือเจ้าของปิดการแชร์แล้ว', true);
     return;
   }
   curPl = { shared: true, data, token };
@@ -1884,7 +2257,7 @@ function importShared() {
   saveBook(book);
   const p = createPlaylist(data.name, ids);
   renderSongbook();
-  toast('บันทึกทั้ง Playlist เข้าคลังแล้ว ✔');
+  toast('บันทึกทั้งเซ็ตเพลงเข้าคลังแล้ว ✔');
   if (location.hash.startsWith('#/p/')) history.replaceState(history.state, '', location.pathname);
   curPl = { id: p.id };
   renderPlView();
@@ -1896,7 +2269,7 @@ function route() {
 }
 
 /* ==============================================================================
- * 14) PWA Controller & Service Worker (รองรับออฟไลน์และติดตั้ง)
+ * 14) PWA Controller & Service Worker
  * ============================================================================== */
 let deferredPrompt = null;
 
@@ -1908,15 +2281,14 @@ function registerPWA() {
           const newWorker = reg.installing;
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              toast('💡 มีการอัปเดตรุ่นใหม่ — รีเฟรชเพื่อใช้งานฟีเจอร์ล่าสุด');
+              toast('💡 อัปเดตแอปเป็นเวอร์ชันใหม่แล้ว');
             }
           });
         });
-      }).catch(err => console.warn('[PWA] ServiceWorker registration failed:', err));
+      }).catch(() => {});
     });
   }
 
-  // Capture Install Prompt
   window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
     deferredPrompt = e;
@@ -1928,7 +2300,7 @@ function registerPWA() {
     deferredPrompt = null;
     const btn = $('#pwaInstallHeaderBtn');
     if (btn) btn.hidden = true;
-    toast('🎉 ติดตั้ง mellowchords เป็นแอปเรียบร้อยแล้ว!');
+    toast('🎉 ติดตั้งแอปลงเครื่องเรียบร้อยแล้ว!');
   });
 }
 
@@ -1942,18 +2314,29 @@ async function installPWA() {
     }
     deferredPrompt = null;
   } else {
-    // Helpful guide for iOS Safari
-    modal('📲 วิธีติดตั้งบน iPhone / iPad', box => {
-      box.append(
-        mk('p', null, 'สำหรับ iOS (Safari):'),
-        mk('ol', null, ''),
-        btn('เข้าใจแล้ว', () => box.closest('.modal').remove(), 'primary')
-      );
-      const ol = box.querySelector('ol');
-      const step1 = mk('li', null, 'แตะปุ่มแชร์ (Share ⎙) ด้านล่างของจอ');
-      const step2 = mk('li', null, 'เลื่อนลงมาแล้วเลือก “เพิ่มไปยังหน้าจอโฮม” (Add to Home Screen)');
-      const step3 = mk('li', null, 'แตะ “เพิ่ม” (Add) มุมขวาบน จะมีไอคอน mellowchords ให้เปิดใช้แบบแอปเต็มจอ!');
-      ol.append(step1, step2, step3);
+    modal('📲 วิธีติดตั้งแอปลงมือถือ / แท็บเล็ต', (box, close) => {
+      const info = mk('div');
+      info.innerHTML = `
+        <p style="margin-top:0">เมื่อติดตั้งแล้ว แอปจะเปิดแบบ<b>เต็มจอไร้แถบเบราว์เซอร์</b> และ<b>เปิดดูคอร์ดออฟไลน์ได้ 100%</b>:</p>
+        <div class="card" style="padding:12px; margin-bottom:10px">
+          <b style="color:var(--accent)">🍎 สำหรับ iPhone / iPad (Safari)</b>
+          <ol style="margin:6px 0 0; padding-left:20px; font-size:0.92rem">
+            <li>แตะปุ่ม <b>แชร์ (Share ⎙)</b> ที่แถบด้านล่างหรือมุมบนของ Safari</li>
+            <li>เลื่อนลงมาแล้วเลือก <b>“เพิ่มไปยังหน้าจอโฮม” (Add to Home Screen)</b></li>
+            <li>กด <b>“เพิ่ม” (Add)</b> แล้วเปิดแอปจากไอคอนบนหน้าจอโฮมได้เลย</li>
+          </ol>
+        </div>
+        <div class="card" style="padding:12px; margin-bottom:14px">
+          <b style="color:var(--ok)">🤖 สำหรับ Android / Chrome</b>
+          <ol style="margin:6px 0 0; padding-left:20px; font-size:0.92rem">
+            <li>แตะเมนู <b>⋮ (มุมขวาบน)</b> ของเบราว์เซอร์ Chrome</li>
+            <li>เลือก <b>“ติดตั้งแอป” (Install app)</b> หรือ <b>“เพิ่มลงในหน้าจอหลัก”</b></li>
+          </ol>
+        </div>
+      `;
+      const okBtn = btn('เข้าใจแล้ว', close, 'primary');
+      okBtn.style.width = '100%';
+      box.append(info, okBtn);
     });
   }
 }
@@ -1972,27 +2355,34 @@ if (navigator.storage && navigator.storage.persist) {
   navigator.storage.persist().catch(() => {});
 }
 
-// Online/Offline listener
 window.addEventListener('online', () => {
-  toast('⚡ กลับมาออนไลน์แล้ว — กำลังตรวจสอบการซิงก์');
+  toast('⚡ ออนไลน์แล้ว — กำลังซิงก์ข้อมูล');
   syncAll();
 });
 window.addEventListener('offline', () => {
-  toast('⚡ คุณกำลังอยู่ในโหมดออฟไลน์ (ใช้งานคลังเพลงในเครื่องได้ 100%)');
+  toast('⚡ โหมดออฟไลน์ (เปิดคอร์ดในเครื่องได้ตามปกติ 100%)');
   setStatus('off');
 });
 
 initClient();
 paintAcct();
-renderSites();
 renderPlaylists();
 renderSongbook();
 route();
 registerPWA();
 
+// On desktop (>920px), automatically open the first song in the right pane so the screen is immediately ready
+if (matchMedia('(min-width: 920px)').matches && !current && !location.hash.startsWith('#/p/')) {
+  const firstSong = loadBook()[0] || MOCK_DB[0];
+  if (firstSong) openSong(firstSong, firstSong.shift || 0);
+}
+
 addEventListener('hashchange', route);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') syncAll();
+  if (document.visibilityState === 'visible') {
+    syncAll();
+    if (document.body.dataset.view === 'song') requestWakeLock();
+  }
 });
 setInterval(() => {
   if (document.visibilityState === 'visible') syncAll();
