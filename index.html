@@ -60,6 +60,15 @@
     <button id="onlineSearchBtn" class="primary small" type="submit" title="ค้นหาเพลงและเนื้อร้องออนไลน์ภายในแอป">🌐 ค้นออนไลน์</button>
   </form>
 
+  <!-- Popular Trending Night-Gig Searches Bar (เพลงฮิตเล่นสดกลางคืนที่นิยมค้นหา) -->
+  <div id="popularChipsBar" class="popularChipsBar">
+    <div class="chipsHeader">
+      <span class="chipsLabel">🔥 เพลงฮิตเล่นสด:</span>
+      <small class="muted">แตะเพื่อค้นหาทันที</small>
+    </div>
+    <div id="popularChipsTrack" class="popularChipsTrack"></div>
+  </div>
+
   <!-- Quick 1-Tap Action Cards -->
   <div id="quickAddBar" class="quickActions">
     <button type="button" id="pasteBtn" class="quickCard accent">
@@ -101,6 +110,7 @@
     <!-- Filter Pills -->
     <div class="filterTabs" role="tablist">
       <button type="button" class="pillTab active" data-filter="all">ทั้งหมด</button>
+      <button type="button" class="pillTab" data-filter="popular">🔥 เพลงฮิตยอดนิยม</button>
       <button type="button" class="pillTab" data-filter="fav">⭐ รายการโปรด</button>
       <button type="button" class="pillTab" data-filter="recent">🕒 ล่าสุด</button>
     </div>

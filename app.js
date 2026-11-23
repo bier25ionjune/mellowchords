@@ -15,7 +15,7 @@ const CFG = {
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im90YmZ6eHlwcXl6b2JnbGJkcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI5NzA2MTksImV4cCI6MjEwODU0NjYxOX0.GouGscQsPmLRrHZwSz9W71IY-sgDo_nmOZs55Eciqf4'
 };
 
-const MOCK_DB = [
+const POPULAR_SONGS = [
   {
     id: 'cat-somsan',
     title: 'ซมซาน',
@@ -71,12 +71,432 @@ Em                                Bm
 ในค่ำคืนที่ ฟ้านั้นไม่มีดาวอยู่ตรงนี้ ฉันยังคงก้าวไป
           C                D            Bm   Em
 ยังคงมีรักแท้ เป็นแสงนำไปในคืนที่หลงทาง
-
-[Chorus 2]
                    C                     D    Bm         Em
 กับที่ๆความฝัน นั้นพร้อมเป็นเพื่อนตาย เส้นทางนี้ ฉันยังมีจุดหมาย
                      C            D            Bm    Em
 ตราบใดที่ปลายท้องฟ้ามีแสงรำไร จะไปจนถึงแสงสุดท้าย`
+  },
+  {
+    id: 'cat-chueak',
+    title: 'เชือกวิเศษ',
+    artist: 'Labanoon (ลาบานูน)',
+    key: 'G',
+    text: `[Intro]
+G   Em   C   D
+
+[Verse 1]
+G                      Em
+พยายามกี่ครั้ง เพื่อรั้งเธอเอาไว้
+      C                          D
+ยิ่งกอดแน่นเท่าไร ยิ่งเหมือนเธอไกลออกไป
+G                     Em
+ความรักที่เคยหวาน วันนี้จืดจางหาย
+        C                         D
+หมดแล้วความเข้าใจ ไม่เหลืออะไรอีกเลย
+
+[Chorus]
+            C                 D            Bm               Em
+ต่อให้มีเชือกวิเศษ ผูกเราไว้ ก็ดึงไม่อยู่ เมื่อใจเธอพร้อมจะไป
+            C                  D          G
+ให้รั้งอย่างไร เมื่อคนหมดใจ ก็ต้องยอม
+              C               D           Bm           Em
+ปล่อยมือเธอไป ให้เจอคนที่เธอฝัน ยอมเจ็บเพียงลำพัง
+      C           D             G
+เมื่อรักเรานั้น มันถึงทางตันไปต่อไม่ไหว`
+  },
+  {
+    id: 'cat-khukkhao',
+    title: 'คุกเข่า',
+    artist: 'Cocktail (ค็อกเทล)',
+    key: 'G',
+    text: `[Intro]
+Em   C   G   D
+
+[Verse 1]
+Em               C
+กี่ครั้งที่เธอต้องร้องไห้
+G                   D
+กับคนอย่างฉันที่ไม่เอาไหน
+Em                 C
+กี่แผลในใจที่ฉันทำไว้
+G                   D
+วันนี้เข้าใจเมื่อสายเกินไป
+
+[Chorus]
+           Em                C
+ต้องคุกเข่า อ้อนวอนเธอสักเท่าไร
+        G                   D
+เพื่อให้เธอ ให้อภัยกับฉันคนนี้
+          Em                  C
+ยอมทำทุกอย่าง ให้เธอกลับคืนมาหา
+      G                     D
+ก่อนน้ำตา จะล้นจนทนไม่ไหว
+         Em   C   G   D
+ได้โปรดเถิดเธอ`
+  },
+  {
+    id: 'cat-fontok',
+    title: 'ฝนตกไหม',
+    artist: 'Three Man Down',
+    key: 'G',
+    text: `[Intro]
+G   Bm   C   D
+
+[Verse 1]
+G                 Bm
+ฝนตกไหม ที่ตรงนั้นเป็นอย่างไร
+C                 D
+สบายดีไหม มีใครดูแลหรือยัง
+G                    Bm
+ส่วนฉันตรงนี้ มองดูฝนโปรยปราย
+C                 D
+คิดถึงวันวาน ที่เคยมีเธอเคียงข้าง
+
+[Chorus]
+            C               D
+เวลาที่ฝนโปรยลงมา ยิ่งคิดถึงเธอ
+          Bm                Em
+จำได้เสมอ วันที่เราร่มคันเดียวกัน
+          C                   D
+แต่ในวันนี้ เหลือเพียงฉันลำพัง
+          G
+กับหยดน้ำตาที่ไหลปนสายฝน`
+  },
+  {
+    id: 'cat-kidtae',
+    title: 'คิด(แต่ไม่)ถึง',
+    artist: 'Tilly Birds',
+    key: 'C',
+    text: `[Intro]
+C   Am   F   G
+
+[Verse 1]
+C                     Am
+อยู่คนเดียวในคืนที่เงียบงัน
+F                       G
+ภาพความทรงจำยังวนเวียนในนั้น
+C                     Am
+ยังคงคิดถึง เรื่องราวของเรา
+F                     G
+แต่รู้ว่าเธอ คงไม่คิดเหมือนเก่า
+
+[Chorus]
+          F            G
+คิดแต่ไม่ถึง คิด คิด แต่ไม่ถึงเธอ
+          Em           Am
+คิดถึงเสมอ แม้รู้เธอไม่กลับมา
+        F               G
+ได้แต่เฝ้ารอ อยู่กับรอยน้ำตา
+          C
+คิดถึงเธอคนดี`
+  },
+  {
+    id: 'cat-tharao',
+    title: 'ถ้าเราเจอกันอีก (Until Then)',
+    artist: 'Tilly Birds',
+    key: 'G',
+    text: `[Intro]
+G   Em   C   D
+
+[Verse 1]
+G                     Em
+จากกันไปเนิ่นนานแสนไกล
+C                     D
+เหลือเพียงความทรงจำในใจ
+G                   Em
+ภาพรอยยิ้มและแววตานั้น
+C                     D
+ยังติดตรึงไม่เคยจางหาย
+
+[Chorus]
+        C              D
+ถ้าหากเรา ได้พบกันอีกครั้ง
+        Bm             Em
+จะขอกอดเธอไว้ให้นานเท่านาน
+      C               D
+บอกคำที่เคยเก็บไว้ข้างใน
+          G
+ว่ารักเธอเสมอ`
+  },
+  {
+    id: 'cat-daekhadern',
+    title: 'ได้แค่เดินมาส่ง (The Last Walk)',
+    artist: 'Three Man Down feat. UrboyTJ',
+    key: 'A',
+    text: `[Intro]
+A   F#m   D   E
+
+[Verse 1]
+A                       F#m
+สิ้นสุดแล้วการเดินทางของเรา
+D                       E
+มองดูเธอเดินไปกับเขาคนใหม่
+A                      F#m
+ฉันคนนี้คงทำได้เพียงส่งใจ
+D                       E
+แม้เจ็บปวดสักเท่าไรก็ต้องยอม
+
+[Chorus]
+          D               E
+ได้แค่เดินมาส่ง ให้ถึงปลายทาง
+          C#m             F#m
+ปล่อยให้เธอไปเริ่มต้นใหม่กับเขา
+          Bm              E
+หมดหน้าที่ฉัน ที่คอยดูแลเธอเบาๆ
+          A
+ขอให้เธอโชคดี`
+  },
+  {
+    id: 'cat-jaisang',
+    title: 'ใจสั่งมา',
+    artist: 'Loso (โลโซ)',
+    key: 'G',
+    text: `[Intro]
+G   Em   C   D
+
+[Verse 1]
+G                   Em
+หากถามว่าทำไม ฉันถึงมารอเธอ
+C                     D
+ทั้งที่รู้ว่าเธอ มีใครอยู่ข้างกาย
+G                   Em
+ก็เพราะหัวใจ มันเรียกร้องแต่เธอ
+C                     D
+ไม่อาจห้ามใจ ไม่ให้รักได้เลย
+
+[Chorus]
+          C              D
+ก็ใจมันสั่งมา ให้รักเธอคนนี้
+          Bm             Em
+แม้ไม่มีหวัง ก็ยังยอมทุ่มเทใจ
+          C              D
+เจ็บก็ยอม เพื่อได้มองเห็นเธอไกลๆ
+          G
+แค่นี้ก็สุขใจพอ`
+  },
+  {
+    id: 'cat-jija',
+    title: 'จิ๊จ๊ะ',
+    artist: 'Silly Fools (ซิลลี่ ฟูลส์)',
+    key: 'Em',
+    text: `[Intro]
+Em   G   A   C  D (4 รอบ)
+
+[Verse 1]
+Em                     G
+อย่ามาทำเป็นจิ๊จ๊ะ ให้มันมากไป
+A                      C        D
+ฉันไม่ได้ง่ายดาย อย่างที่เธอเข้าใจ
+Em                     G
+คิดว่าน่ารักนักเหรอ ทำตัวแบบนี้
+A                      C        D
+เดี๋ยวเหอะจะโดนดี ไม่รู้ตัว
+
+[Chorus]
+Em             G
+ไม่ต้องมาจิ๊จ๊ะ ไม่ต้องมางอแง
+A              C       D
+ฉันไม่สนใจ ไม่ต้องมาแคร์
+Em             G
+ถ้าจะพูดไม่รู้เรื่อง ก็ไม่ต้องคุยกัน
+A              C       D   Em
+จบกันแค่นี้ พอแล้วใจ`
+  },
+  {
+    id: 'cat-lenkhongsoong',
+    title: 'เล่นของสูง',
+    artist: 'Big Ass (บิ๊กแอส)',
+    key: 'E',
+    text: `[Intro]
+E   G#m   A   B
+
+[Verse 1]
+E                     G#m
+รู้ว่าเธออยู่สูง เกินจะเอื้อมถึง
+A                     B
+เหมือนดวงดาวบนฟ้า ที่ไกลเกินคว้า
+E                     G#m
+แต่หัวใจดวงนี้ มันดื้อดึงนัก
+A                     B
+อยากลองเสี่ยงรัก กับเธอสักครั้ง
+
+[Chorus]
+          A              B
+ก็รู้ว่าเล่นของสูง แต่ใจมันรัก
+          G#m           C#m
+จะตกหรือเจ็บ ก็ไม่เคยหวั่นไหว
+          A              B
+ขอแค่ได้ลอง ยื่นมือออกไป
+          E
+แม้ดาวดวงนั้น จะสูงเกินเอื้อมถึง`
+  },
+  {
+    id: 'cat-rueduron',
+    title: 'ฤดูร้อน',
+    artist: 'Paradox (พาราด็อกซ์)',
+    key: 'C',
+    text: `[Intro]
+C   Am   F   G
+
+[Verse 1]
+C                     Am
+ยินเสียงคลื่นซัดสาด ท้องทะเลกว้างใหญ่
+F                     G
+แสงแดดส่องสดใส ในวันฤดูร้อน
+C                     Am
+ลมพัดพาความรัก ลอยมาตามสายลม
+F                     G
+หัวใจสุขสม เมื่อได้อยู่ข้างเธอ
+
+[Chorus]
+          F              G
+ในฤดูร้อนที่มีเธอเคียงข้างกาย
+          Em             Am
+โลกทั้งใบ สดใสด้วยรอยยิ้มเธอ
+          F              G
+จะเก็บความทรงจำ นี้ไว้เสมอ
+          C
+ไม่ลืมเลือน`
+  },
+  {
+    id: 'cat-sonklin',
+    title: 'ซ่อนกลิ่น',
+    artist: 'Palmy (ปาล์มมี่)',
+    key: 'C',
+    text: `[Intro]
+C   Em   Am   F
+
+[Verse 1]
+C                     Em
+คงได้แต่ซ่อนความรัก ไว้ในกลิ่นหอม
+Am                    F
+กลิ่นดอกไม้ที่เธอมอบให้ในวันวาน
+C                     Em
+แม้เวลาผ่านไป เนิ่นนานเท่าไร
+Am                    F
+กลิ่นแห่งรัก ยังคงอบอวลในใจ
+
+[Chorus]
+          F              G
+ซ่อนกลิ่นความหลัง ที่เคยงดงาม
+          Em             Am
+แม้ความรักเรา จะเป็นเพียงอดีต
+          F              G
+แต่ในความฝัน ยังมีเธอเคียงกาย
+          C
+ไม่เคยจางหาย`
+  },
+  {
+    id: 'cat-thingwai',
+    title: 'ทิ้งไว้กลางทาง',
+    artist: 'Potato (โปเตโต้)',
+    key: 'G',
+    text: `[Intro]
+G   D/F#   Em   D   C   D
+
+[Verse 1]
+G                 D/F#
+ขอบคุณที่ร่วมทางกันมา
+Em                D
+แม้สุดท้าย ต้องร้างราจากไป
+C                 Bm
+อย่าโทษตัวเอง เลยคนดี
+Am                D
+ฉันเข้าใจทุกอย่างดี
+
+[Chorus]
+          C              D
+ถ้าการทิ้งฉัน ไว้ตรงกลางทาง
+          Bm             Em
+จะทำให้เธอ ได้พบวันที่สดใส
+          C              D
+ปล่อยฉันไว้ตรงนี้ แล้วเดินต่อไป
+          G
+ไม่ต้องห่วงฉันเลย`
+  },
+  {
+    id: 'cat-wind',
+    title: 'ลม (Wind)',
+    artist: 'Num Kala (หนุ่ม กะลา)',
+    key: 'G',
+    text: `[Intro]
+G   Bm   C   D
+
+[Verse 1]
+G                    Bm
+ฝากสายลม พัดพาความคิดถึง
+C                    D
+ส่งไปถึง คนไกลที่ปลายฟ้า
+G                    Bm
+บอกเขาที ว่าคนที่รอคอย
+C                    D
+ยังเฝ้าคอย ด้วยใจที่เหมือนเดิม
+
+[Chorus]
+          G                  Bm
+แม้เป็นได้แค่สายลม ที่พัดผ่าน
+          C                  D
+ไม่อาจยืนเคียงข้างเธอ เหมือนใครเขา
+          G                  Bm
+ขอแค่ได้ดูแล อยู่เบาๆ
+          C        D         G
+บรรเทาความเหงา ให้ใจเธอ`
+  },
+  {
+    id: 'cat-kidtueng',
+    title: 'คิดถึง',
+    artist: 'Silly Fools (ซิลลี่ ฟูลส์)',
+    key: 'C',
+    text: `[Intro]
+C   Am   F   G
+
+[Verse 1]
+C                 Am
+เป็นเพราะอะไร ทำไมต้องเป็นเธอ
+F                 G
+ที่ฉันละเมอ คิดถึงอยู่ทุกวัน
+C                 Am
+แม้เวลาผ่าน เนิ่นนานสักเท่าไร
+F                 G
+ในหัวใจ ยังคงมีแต่เธอ
+
+[Chorus]
+          C            Am
+อยากบอกให้รู้ ว่าฉันคิดถึง
+        F              G
+คิดถึงเธอ จนหมดหัวใจ
+          C            Am
+อยากกอดเธอไว้ เหมือนวันเก่าๆ
+        F      G       C
+วันที่เรา ยังรักกัน`
+  },
+  {
+    id: 'cat-hellomama',
+    title: 'Hello Mama',
+    artist: 'TaitosmitH (ไททศมิตร)',
+    key: 'C',
+    text: `[Intro]
+C   Em   Am   F
+
+[Verse 1]
+C                     Em
+ฮัลโหลแม่ ลูกอยู่สบายดี
+Am                    F
+ถึงเหนื่อยกาย แต่ใจยังมีแรงสู้
+C                     Em
+เมืองหลวงวุ่นวาย ผู้คนมากมาย
+Am                    F
+ยังคิดถึง กับข้าวฝีมือแม่เสมอ
+
+[Chorus]
+          F              G
+บอกพ่อด้วยนะ ว่าลูกยังไหว
+          Em             Am
+อีกไม่นาน จะหอบเงินกลับไปกอด
+          F              G
+กอดแม่ให้หายคิดถึง ให้หัวใจอิ่มอุ่น
+          C
+Hello Mama`
   },
   {
     id: 'cat-khuenkham',
@@ -96,10 +516,6 @@ G            D/F#   Em   D
        C         Bm   Am        D
 สวยเพียงไหน   หัวใจก็จำได้เลือนราง
 
-[Pre-Chorus]
-Em                 A                 C            D
-มีเพลงเปิดดัง มีผู้คนรอบกาย หัวใจก็ยังเงียบงัน
-
 [Chorus]
               C                 Bm
 อยากมีคนพิเศษ อยู่ในคืนพิเศษ
@@ -111,68 +527,234 @@ Em          Am                 D            G
 คืนสำคัญอีกคืน ที่ความเหงาคืบคลาน หัวใจ`
   },
   {
-    id: 'cat-kidtueng',
-    title: 'คิดถึง',
+    id: 'cat-watjai',
+    title: 'วัดใจ',
+    artist: 'Silly Fools (ซิลลี่ ฟูลส์)',
+    key: 'E',
+    text: `[Intro]
+E   G   A   C  D (4 รอบ)
+
+[Verse 1]
+E                     G
+มีคนมากมาย บอกให้ฉันหยุด
+A                     C        D
+แต่ฉันไม่เคย คิดจะยอมแพ้
+E                     G
+ทางข้างหน้า แม้จะยากเย็น
+A                     C        D
+ฉันพร้อมก้าวไป วัดใจให้รู้
+
+[Chorus]
+E             G
+มาวัดใจกันดู สักครั้งในชีวิต
+A              C       D
+ไม่มีถอยหลัง ให้ใครมาชี้หน้า
+E             G
+จะสู้ให้สุดใจ เพื่อสิ่งที่ศรัทธา
+A              C       D   E
+วัดใจกันไปเลย`
+  },
+  {
+    id: 'cat-songrak',
+    title: 'สองรัก',
+    artist: 'Zeal (ซีล)',
+    key: 'G',
+    text: `[Intro]
+Em   C   G   D
+
+[Verse 1]
+Em                     C
+คนหนึ่งก็ดี คนหนึ่งก็รัก
+G                      D
+ใจมันชัก จะไปกันใหญ่
+Em                     C
+ไม่อยากหลอกใคร ให้เสียน้ำตา
+G                      D
+แต่ก็เลือกไม่ได้ สักคนเดียว
+
+[Chorus]
+          Em             C
+สองรัก ฉันรับมันไม่ไหว
+          G              D
+ต้องเลือกใคร สักคนให้จบลง
+          Em             C
+ไม่อยากเป็นคนเห็นแก่ตัว
+          G              D
+ที่ดึงทุกคน มาร่วมเจ็บปวด
+          Em
+กับสองรักนี้`
+  },
+  {
+    id: 'cat-kho-pen-tua-lueak',
+    title: 'ขอเป็นตัวเลือก',
+    artist: 'Kala (กะลา)',
+    key: 'G',
+    text: `[Intro]
+G   Em   C   D
+
+[Verse 1]
+G                      Em
+รู้ดีว่าเธอ ยังมีเขาในใจ
+C                      D
+แต่ฉันพร้อมจะรอ ไม่ไปไหน
+G                      Em
+หากวันใด เขาทำให้เธอเสียใจ
+C                      D
+หันมามองฉัน คนนี้ที่ยืนรอ
+
+[Chorus]
+          C              D
+ขอเป็นตัวเลือก เผื่อเธอไม่มีใคร
+          Bm             Em
+ในวันที่เธอ ต้องร้องไห้ลำพัง
+          C              D
+พร้อมจะปลอบใจ ให้รอยยิ้มกลับคืน
+          G
+ขอเพียงเท่านี้พอ`
+  },
+  {
+    id: 'cat-tasawang',
+    title: 'ตาสว่าง',
+    artist: 'Moderndog (โมเดิร์นด็อก)',
+    key: 'A',
+    text: `[Intro]
+A   C#m   D   E
+
+[Verse 1]
+A                     C#m
+อยู่ในความมืดมิด มาเนิ่นนาน
+D                     E
+คิดว่าสิ่งที่เห็น คือความจริง
+A                     C#m
+จนเมื่อแสงสว่าง ส่องเข้ามา
+D                     E
+ความจริงปรากฏ ชัดเจนในใจ
+
+[Chorus]
+          D              E
+ตาสว่างแล้ว เมื่อได้เห็นความจริง
+          C#m            F#m
+ที่ซ่อนอยู่ ใต้ภาพลวงตา
+          Bm             E
+ไม่หลงงมงาย อีกต่อไป
+          A
+ตาสว่างเสียที`
+  },
+  {
+    id: 'cat-kheeheung',
+    title: 'ขี้หึง',
     artist: 'Silly Fools (ซิลลี่ ฟูลส์)',
     key: 'C',
     text: `[Intro]
-[C] [Am] [F] [G]
+C   Am   F   G
 
 [Verse 1]
-[C]เป็นเพราะอะไร [Am]ทำไมต้องเป็นเธอ
-[F]ที่ฉันละเมอ [G]คิดถึงอยู่ทุกวัน
-[C]แม้เวลาผ่าน [Am]เนิ่นนานสักเท่าไร
-[F]ในหัวใจ [G]ยังคงมีแต่เธอ
+C                     Am
+อย่ามองใครแบบนั้น ฉันไม่ชอบใจ
+F                     G
+รอยยิ้มของเธอ ฉันอยากเก็บไว้คนเดียว
+C                     Am
+ไม่ได้ตั้งใจ จะทำตัวน่ารำคาญ
+F                     G
+แต่มันห้ามไม่ไหวจริงๆ
 
 [Chorus]
-อยากบอกให้[C]รู้ ว่าฉันคิด[Am]ถึง
-คิดถึง[F]เธอ จนหมดหัว[G]ใจ
-อยากกอดเธอ[C]ไว้ เหมือนวันเก่า[Am]ๆ
-วันที่[F]เรา ยังรัก[G]กัน [C]`
+          C              Am
+ก็คนมันขี้หึง เพราะรักเธอมากไป
+          F              G
+กลัวใครมาแย่งเธอ ไปจากฉัน
+          C              Am
+ขอโทษทีนะ ที่คอยตามหวง
+          F       G       C
+ก็ใจมันรักเธอ เกินกว่าใคร`
   },
   {
-    id: 'cat-wind',
-    title: 'ลม (Wind)',
-    artist: 'Num Kala (หนุ่ม กะลา)',
+    id: 'cat-wela',
+    title: 'เวลาเธอยิ้ม',
+    artist: 'Polycat (โพลีแคต)',
+    key: 'Bb',
+    text: `[Intro]
+Bb   Gm   Eb   F
+
+[Verse 1]
+Bb                    Gm
+ในวันที่ฟ้าดูมืดมน ไร้เรี่ยวแรง
+Eb                    F
+แค่เพียงเห็นเธอยิ้ม โลกก็เปลี่ยนไป
+Bb                    Gm
+ความสดใสของเธอ เหมือนเวทมนตร์
+Eb                    F
+ชุบชีวิตหัวใจ ให้กลับมาเต้นแรง
+
+[Chorus]
+          Eb             F
+เวลาเธอยิ้ม โลกหยุดหมุนทันที
+          Dm             Gm
+ทุกสิ่งรอบกาย ดูสวยงามสดใส
+          Eb             F
+อยากหยุดเวลานี้ ไว้ตลอดไป
+          Bb
+เวลาเธอยิ้มให้ฉัน`
+  },
+  {
+    id: 'cat-deknoi',
+    title: 'เจ้าเด็กน้อย',
+    artist: 'TaitosmitH (ไททศมิตร)',
     key: 'G',
     text: `[Intro]
-[G] [Bm] [C] [D]
+G   Em   C   D
 
 [Verse 1]
-[G]ฝากสายลม พัด[Bm]พาความคิดถึง
-[C]ส่งไปถึง คน[D]ไกลที่ปลายฟ้า
-[G]บอกเขาที ว่า[Bm]คนที่รอคอย
-[C]ยังเฝ้าคอย ด้วย[D]ใจที่เหมือนเดิม
+G                     Em
+เจ้าเด็กน้อยเอย วิ่งเล่นใต้ดวงตะวัน
+C                     D
+ฝันถึงอนาคต ที่สดใสงดงาม
+G                     Em
+ไม่รู้เลยว่า โลกของผู้ใหญ่
+C                     D
+มีขวากหนาม และความยากเย็น
 
 [Chorus]
-แม้เป็นได้[G]แค่สายลม ที่พัด[Bm]ผ่าน
-ไม่อาจยืน[C]เคียงข้างเธอ เหมือนใคร[D]เขา
-ขอแค่ได้[G]ดูแล อยู่เบา[Bm]ๆ
-บรรเทาความ[C]เหงา ให้ใจ[D]เธอ [G]`
+          C              D
+จงเติบโต ด้วยรอยยิ้มและพลัง
+          Bm             Em
+อย่าให้ความจริง พรากความฝันเจ้าไป
+          C              D
+สู้ต่อไปนะ เจ้าเด็กน้อยคนเก่ง
+          G
+โลกใบนี้รอเจ้าอยู่`
   },
   {
-    id: 'mock-amazing',
-    title: 'Amazing Grace',
-    artist: 'Traditional',
-    key: 'G',
-    text: `[Verse 1]
-[G]Amazing [G7]grace, how [C]sweet the [G]sound
-That [G]saved a [Em]wretch like [D]me
-I [G]once was [G7]lost, but [C]now am [G]found
-Was [Em]blind but [D]now I [G]see`
-  },
-  {
-    id: 'mock-rising',
-    title: 'The House of the Rising Sun',
-    artist: 'Traditional',
-    key: 'Am',
-    text: `[Verse 1]
-Am    C    D        F
-There is a house in New Orleans
-Am   C        E7
-They call the Rising Sun`
+    id: 'cat-phaethang',
+    title: 'แพ้ทาง',
+    artist: 'Labanoon (ลาบานูน)',
+    key: 'A',
+    text: `[Intro]
+A   F#m   D   E
+
+[Verse 1]
+A                     F#m
+ปกติใจแข็ง ไม่เคยยอมใคร
+D                     E
+เจอใครน่ารัก ก็เฉยๆ ไป
+A                     F#m
+แต่พอเจอเธอ หัวใจละลาย
+D                     E
+แพ้รอยยิ้มเธอ เข้าอย่างจัง
+
+[Chorus]
+          D              E
+แพ้ทางเธอจริงจัง ยอมแพ้หมดใจ
+          C#m            F#m
+แค่เธอสบตา ก็แทบยืนไม่ไหว
+          Bm             E
+ตกหลุมรักเธอ ตั้งแต่วันแรกเจอ
+          A
+แพ้ทางเธอคนเดียว`
   }
-];
+];;
+
+const MOCK_DB = POPULAR_SONGS;
 
 /* ==============================================================================
  * 2) ทฤษฎีดนตรี, การวิเคราะห์คีย์จริงจากคอร์ดในเนื้อเพลง, เสียงดีดคอร์ดกีตาร์ & Capo
@@ -184,7 +766,13 @@ const FLAT_KEYS = [5, 10, 3, 8, 1]; // F, Bb, Eb, Ab, Db
 
 const CHORD_RE = /^[A-G][#b]?(?:maj|min|dim|aug|sus|add|m|M|\d+|[#b+\-°()])*(?:\/[A-G][#b]?)?$/;
 const isChord = t => CHORD_RE.test(t);
-const noteIndex = n => (BASE[n[0]] + (n[1] === '#' ? 1 : n[1] === 'b' ? -1 : 0) + 12) % 12;
+const noteIndex = n => {
+  if (!n || typeof n !== 'string') return 0;
+  const ch0 = n[0] ? n[0].toUpperCase() : '';
+  const root = BASE[ch0];
+  if (root === undefined) return 0;
+  return (root + (n[1] === '#' ? 1 : n[1] === 'b' ? -1 : 0) + 12) % 12;
+};
 
 function transposeChord(ch, shift, flat) {
   if (!shift) return ch;
@@ -202,9 +790,22 @@ function preferFlat(key, shift) {
 }
 
 const normShift = s => {
-  s = ((s % 12) + 12) % 12;
-  return s > 6 ? s - 12 : s;
+  const n = parseInt(s, 10);
+  if (isNaN(n)) return 0;
+  let v = ((n % 12) + 12) % 12;
+  return v > 6 ? v - 12 : v;
 };
+
+function calcKeyShift(fromKey, toKey) {
+  if (!fromKey || !toKey) return 0;
+  const m1 = String(fromKey).match(/([A-G][#b]?)/i);
+  const m2 = String(toKey).match(/([A-G][#b]?)/i);
+  if (!m1 || !m2) return 0;
+  const r1 = noteIndex(m1[1].toUpperCase());
+  const r2 = noteIndex(m2[1].toUpperCase());
+  if (isNaN(r1) || isNaN(r2)) return 0;
+  return normShift(r2 - r1);
+}
 
 const fmtShift = s => (s === 0 ? 'คีย์เดิม' : (s > 0 ? '+' : '') + s + ' คีย์');
 
@@ -1205,7 +1806,9 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 function mk(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
-  if (text != null) e.textContent = text;
+  if (typeof text === 'string' || typeof text === 'number') {
+    e.textContent = text;
+  }
   return e;
 }
 const btn = (t, fn, cls) => {
@@ -1618,6 +2221,33 @@ $('#clearSearchBtn').onclick = () => {
   $('#q').focus();
 };
 
+
+const POPULAR_SEARCH_CHIPS = [
+  'ซมซาน', 'แสงสุดท้าย', 'เชือกวิเศษ', 'คุกเข่า', 'ฝนตกไหม',
+  'คิด(แต่ไม่)ถึง', 'ถ้าเราเจอกันอีก', 'ได้แค่เดินมาส่ง', 'ใจสั่งมา',
+  'จิ๊จ๊ะ', 'เล่นของสูง', 'ฤดูร้อน', 'ซ่อนกลิ่น', 'ทิ้งไว้กลางทาง',
+  'Hello Mama', 'ลม', 'คิดถึง', 'วัดใจ', 'สองรัก', 'ขี้หึง'
+];
+
+function renderPopularChips() {
+  const track = $('#popularChipsTrack');
+  if (!track) return;
+  track.replaceChildren();
+  for (const name of POPULAR_SEARCH_CHIPS) {
+    const chip = mk('button', 'popularChip', name);
+    chip.type = 'button';
+    chip.onclick = () => {
+      $('#q').value = name;
+      $('#clearSearchBtn').hidden = false;
+      renderSongbook();
+      doInstantLocalFilter();
+      if (document.body.dataset.view === 'song') show('home');
+      $('#librarySection')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+    track.appendChild(chip);
+  }
+}
+
 let deb;
 function doInstantLocalFilter() {
   const q = $('#q').value.trim();
@@ -1630,20 +2260,26 @@ function doInstantLocalFilter() {
   }
 
   const t = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const localMatches = MOCK_DB.filter(s => {
-    const h = (s.title + ' ' + s.artist).toLowerCase();
-    return t.every(x => h.includes(x));
+  const allLookup = [...loadBook(), ...POPULAR_SONGS];
+  const seenIds = new Set();
+  const localMatches = allLookup.filter(s => {
+    if (seenIds.has(s.id)) return false;
+    const h = (s.title + ' ' + (s.artist || '')).toLowerCase();
+    const match = t.every(x => h.includes(x));
+    if (match) seenIds.add(s.id);
+    return match;
   });
 
   const box = $('#resultsBox'), list = $('#results');
   if (localMatches.length) {
     box.hidden = false;
-    $('#resultsTitle').textContent = `🎵 พบในคลังแอป (${localMatches.length}) · กด “🌐 ค้นออนไลน์” เพื่อดึงจากเว็บคอร์ด`;
+    $('#resultsTitle').textContent = `🎵 พบในคลังและเพลงฮิต (${localMatches.length}) · กด “🌐 ค้นออนไลน์” เพื่อดึงจากเว็บคอร์ด`;
     list.replaceChildren();
     for (const it of localMatches) {
       const row = mk('div', 'item'), b = mk('button', 'open'), titleEl = mk('div', 't', it.title);
       titleEl.appendChild(mk('span', 'badge', `Key ${it.key}`));
-      titleEl.appendChild(mk('span', 'badge green', 'คอร์ดจริงพร้อมเล่น'));
+      const isSaved = loadBook().some(s => s.id === it.id);
+      titleEl.appendChild(mk('span', 'badge ' + (isSaved ? 'green' : 'dim'), isSaved ? '💾 ในคลัง' : '🔥 เพลงฮิต'));
       b.append(titleEl, mk('div', 'a', it.artist));
       b.onclick = () => {
         activeSetlistContext = null;
@@ -1692,32 +2328,61 @@ $('#favBtn').onclick = () => {
 
 function renderSongbook() {
   const q = $('#q').value.trim().toLowerCase(), F = favs();
-  let all = loadBook();
+  const savedBook = loadBook();
 
-  const isDefaultSeed = all.length === 0;
-  const sourceList = isDefaultSeed ? MOCK_DB : all;
-
-  let book = [...sourceList];
-  if (filterMode === 'recent') {
-    book.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  let book = [];
+  if (filterMode === 'popular') {
+    book = [...POPULAR_SONGS];
+  } else if (filterMode === 'fav') {
+    const allKnown = [...savedBook, ...POPULAR_SONGS.filter(p => !savedBook.some(s => s.id === p.id))];
+    book = allKnown.filter(s => F.has(s.id));
+  } else if (filterMode === 'recent') {
+    book = [...savedBook].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
   } else {
-    book.sort((a, b) => a.title.localeCompare(b.title, 'th'));
+    // filterMode === 'all'
+    if (savedBook.length === 0) {
+      book = [...POPULAR_SONGS];
+    } else {
+      const popularNotInSaved = POPULAR_SONGS.filter(p =>
+        !savedBook.some(s => s.id === p.id || s.title.toLowerCase() === p.title.toLowerCase())
+      );
+      book = [...savedBook, ...popularNotInSaved];
+    }
+  }
+
+  if (filterMode === 'recent') {
+    // already sorted
+  } else if (filterMode === 'popular') {
+    // keep popularity order
+  } else if (q) {
+    book.sort((a, b) => {
+      const aTitleMatch = a.title.toLowerCase().includes(q);
+      const bTitleMatch = b.title.toLowerCase().includes(q);
+      if (aTitleMatch && !bTitleMatch) return -1;
+      if (!aTitleMatch && bTitleMatch) return 1;
+      return a.title.localeCompare(b.title, 'th');
+    });
+  } else {
+    book.sort((a, b) => {
+      const aSaved = savedBook.some(s => s.id === a.id);
+      const bSaved = savedBook.some(s => s.id === b.id);
+      if (aSaved && !bSaved) return -1;
+      if (!aSaved && bSaved) return 1;
+      return a.title.localeCompare(b.title, 'th');
+    });
   }
 
   if (q) {
     book = book.filter(s => (s.title + ' ' + (s.artist || '') + ' ' + (s.text || '')).toLowerCase().includes(q));
   }
-  if (filterMode === 'fav') {
-    book = book.filter(s => F.has(s.id));
-  }
 
-  $('#count').textContent = all.length || MOCK_DB.length;
+  $('#count').textContent = savedBook.length || POPULAR_SONGS.length;
   const list = $('#songbook');
   list.replaceChildren();
 
   if (!book.length) {
     const emptyBox = mk('div', 'empty');
-    emptyBox.innerHTML = `<b>🎶</b>${q ? `ไม่พบเพลง “${q}” ในคลังเครื่อง` : (filterMode === 'fav' ? 'ยังไม่มีเพลงรายการโปรด (กด ☆ บนเพลงที่ชอบ)' : 'ยังไม่มีเพลงในคลัง')}`;
+    emptyBox.innerHTML = `<b>🎶</b>${q ? `ไม่พบเพลง “${q}” ในคลังเครื่อง` : (filterMode === 'fav' ? 'ยังไม่มีเพลงรายการโปรด (กด ☆ บนเพลงที่ชอบ)' : (filterMode === 'popular' ? 'ยังไม่มีเพลงในหมวดนี้' : 'ยังไม่มีเพลงในคลัง'))}`;
     if (q) {
       const searchOnlineNowBtn = btn(`🌐 ค้นหาคอร์ดจริง “${q}” จากเว็บ`, runInAppOnlineSearch, 'primary small');
       searchOnlineNowBtn.style.marginTop = '10px';
@@ -1728,16 +2393,22 @@ function renderSongbook() {
   }
 
   for (const s of book) {
+    const isSaved = savedBook.some(x => x.id === s.id);
     const isCurrent = current && current.song.id === s.id;
     const row = mk('div', 'item' + (isCurrent ? ' active' : ''));
     const open = mk('button', 'open');
+    open.type = 'button';
     const t = mk('div', 't', s.title);
 
-    const actualKey = detectKey(s.text) || s.key;
-    if (actualKey) t.appendChild(mk('span', 'badge', actualKey));
+    const actualKey = (s.text ? detectKey(s.text) : '') || s.key || '';
+    if (actualKey) t.appendChild(mk('span', 'badge', `Key ${actualKey}`));
     if (s.shift) t.appendChild(mk('span', 'badge dim', (s.shift > 0 ? '+' : '') + s.shift));
     if (s.images && s.images.length) t.appendChild(mk('span', 'badge dim', '🖼 ' + s.images.length));
-    if (isDefaultSeed) t.appendChild(mk('span', 'badge dim', 'คอร์ดจริงเริ่มต้น'));
+    if (isSaved) {
+      t.appendChild(mk('span', 'badge green', '💾 ในคลัง'));
+    } else {
+      t.appendChild(mk('span', 'badge dim', '🔥 ฮิต'));
+    }
 
     open.append(t, mk('div', 'a', s.artist || 'ไม่ระบุศิลปิน'));
     open.onclick = () => {
@@ -1753,12 +2424,12 @@ function renderSongbook() {
     favButton.title = 'รายการโปรด';
     actions.appendChild(favButton);
 
-    if (!isDefaultSeed) {
+    if (isSaved) {
       const delButton = btn('🗑', (e) => {
         e.stopPropagation();
         removeSong(s.id, s.title);
       });
-      delButton.title = 'ลบเพลง';
+      delButton.title = 'ลบเพลงออกจากคลัง';
       actions.appendChild(delButton);
     }
 
@@ -1973,13 +2644,13 @@ function updateSetlistQueueBar() {
 
   nav.hidden = false;
   const { name, songs, index } = activeSetlistContext;
-  const curSong = songs[index];
+  const curSong = songs[index] || current.song;
   $('#setlistName').textContent = `🎼 สคริปต์สด: ${name}`;
-  $('#setlistPos').textContent = `เพลงที่ ${index + 1} / ${songs.length} · ${curSong.title}`;
+  $('#setlistPos').textContent = `เพลงที่ ${index + 1} / ${songs.length} · ${curSong ? curSong.title : ''}`;
   $('#prevSongBtn').disabled = index <= 0;
   $('#nextSongBtn').disabled = index >= songs.length - 1;
 
-  if (cueBanner) {
+  if (cueBanner && curSong) {
     cueBanner.hidden = false;
     const itemCue = curSong.cue || (curSong.sections && curSong.sections.find(s => s.cue)?.cue) || 'คิวพร้อมเล่นสด — โฟกัสท่อนเพลง';
     $('#liveCueText').textContent = itemCue;
@@ -2150,9 +2821,18 @@ async function loadGallery(song) {
   g.hidden = false;
 
   for (const id of song.images) {
-    const b = await getImg(id);
+    let b = await getImg(id);
     if (tok !== galTok) return;
     if (!b) {
+      if (typeof id === 'string' && (id.startsWith('http://') || id.startsWith('https://') || id.startsWith('data:'))) {
+        const im = mk('img', 'sheetImg');
+        if (stageInvertImg) im.classList.add('invertFilter');
+        im.src = id;
+        im.alt = 'ภาพคอร์ด';
+        im.onclick = () => openLightbox(id);
+        g.appendChild(im);
+        continue;
+      }
       g.appendChild(mk('div', 'empty', 'ไม่พบภาพในเครื่อง (อาจลบไปแล้ว)'));
       continue;
     }
@@ -3411,7 +4091,7 @@ function renderPlView() {
     }
     $('#plTitle').textContent = '🎼 ' + p.name;
     const book = loadBook();
-    const allLookup = [...book, ...MOCK_DB];
+    const allLookup = [...book, ...POPULAR_SONGS];
     items = (p.songIds || []).map(normalizePlItem);
 
     // Build playable songs list
@@ -3426,12 +4106,13 @@ function renderPlView() {
         });
         return;
       }
-      const found = allLookup.find(s => s.id === it.songId);
+      let found = allLookup.find(s => s.id === it.songId);
+      if (!found && it.title) found = it;
       if (found) {
         songs.push({
           ...found,
-          targetKey: it.targetKey || '',
-          singer: it.singer || '',
+          targetKey: it.targetKey || found.targetKey || '',
+          singer: it.singer || found.singer || '',
           bpm: it.bpm || found.bpm || '',
           cue: it.cue || found.cue || '',
           itemId: it.id
@@ -3501,22 +4182,28 @@ function renderPlView() {
   songs.forEach((s, idx) => {
     if (s.type === 'break') {
       const breakCard = mk('div', 'plBreakCard');
-      const left = mk('div', 'row', style => (left.style.gap = '8px'));
+      const left = mk('div', 'row');
       left.style.gap = '10px';
       left.style.alignItems = 'center';
-      left.append(
-        mk('span', 'plBreakIcon', '🎙️'),
-        mk('div', null, [
-          mk('b', null, s.title),
-          s.cue ? mk('div', 'small muted', `📢 ${s.cue}`) : ''
-        ].filter(Boolean))
-      );
+      const bTitleWrap = mk('div');
+      bTitleWrap.appendChild(mk('b', null, s.title));
+      if (s.cue) {
+        bTitleWrap.appendChild(mk('div', 'small muted', `📢 ${s.cue}`));
+      }
+      left.append(mk('span', 'plBreakIcon', '🎙️'), bTitleWrap);
 
       const actions = mk('div', 'itemActions');
+      const curPlIndex = p ? p.songIds.findIndex(x => {
+        const norm = normalizePlItem(x);
+        return norm.id === s.id;
+      }) : -1;
+      const targetPlIdx = curPlIndex >= 0 ? curPlIndex : idx;
+
       const mv = d => {
+        if (!p) return;
         mutPl(p.id, x => {
-          const j = idx + d;
-          if (j >= 0 && j < x.songIds.length) [x.songIds[idx], x.songIds[j]] = [x.songIds[j], x.songIds[idx]];
+          const j = targetPlIdx + d;
+          if (j >= 0 && j < x.songIds.length) [x.songIds[targetPlIdx], x.songIds[j]] = [x.songIds[j], x.songIds[targetPlIdx]];
         });
         renderPlView();
       };
@@ -3524,7 +4211,8 @@ function renderPlView() {
         btn('↑', () => mv(-1)),
         btn('↓', () => mv(1)),
         btn('✕', () => {
-          mutPl(p.id, x => { x.songIds.splice(idx, 1); });
+          if (!p) return;
+          mutPl(p.id, x => { x.songIds.splice(targetPlIdx, 1); });
           renderPlView();
         })
       );
@@ -3539,12 +4227,13 @@ function renderPlView() {
     const topRow = mk('div', 'plItemTop');
 
     const mainBtn = mk('button', 'plItemMainBtn');
-    const titleWrap = mk('div', 'row', style => (titleWrap.style.gap = '8px'));
+    mainBtn.type = 'button';
+    const titleWrap = mk('div', 'row');
     titleWrap.style.gap = '8px';
     titleWrap.style.alignItems = 'center';
 
     const t = mk('b', null, `${songIndex}. ${s.title}`);
-    const origK = detectKey(s.text) || s.key;
+    const origK = (s.text ? detectKey(s.text) : '') || s.key || '';
     titleWrap.append(t);
 
     if (origK) titleWrap.appendChild(mk('span', 'badge', `Key ${origK}`));
@@ -3556,37 +4245,59 @@ function renderPlView() {
     }
 
     mainBtn.append(titleWrap, mk('div', 'small muted', s.artist || 'ไม่ระบุศิลปิน'));
-    mainBtn.onclick = () => {
-      const playableOnly = songs.filter(x => x.type !== 'break');
-      const playIdx = playableOnly.findIndex(x => x.id === s.id);
-      activeSetlistContext = { plId: p ? p.id : 'shared', name: p ? p.name : curPl.data.name, songs: playableOnly, index: playIdx >= 0 ? playIdx : 0 };
 
-      let startShift = s.shift || 0;
+    const openThisSong = () => {
+      const playableOnly = songs.filter(x => x.type !== 'break');
+      const playIdx = playableOnly.findIndex(x => (x.itemId && s.itemId ? x.itemId === s.itemId : x.id === s.id));
+      activeSetlistContext = {
+        plId: p ? p.id : 'shared',
+        name: p ? p.name : curPl.data.name,
+        songs: playableOnly,
+        index: playIdx >= 0 ? playIdx : 0
+      };
+
+      let startShift = typeof s.shift === 'number' && !isNaN(s.shift) ? s.shift : 0;
       if (s.targetKey && origK) {
-        const diff = noteIndex(s.targetKey.replace(/m$/, '')) - noteIndex(origK.replace(/m$/, ''));
-        startShift = normShift(diff);
+        startShift = calcKeyShift(origK, s.targetKey);
       }
       openSong(s, startShift);
+    };
+
+    mainBtn.onclick = (e) => {
+      e.stopPropagation();
+      openThisSong();
+    };
+
+    row.onclick = (e) => {
+      if (e.target.closest('.itemActions') || e.target.closest('button')) return;
+      openThisSong();
     };
 
     topRow.appendChild(mainBtn);
 
     if (p) {
       const actions = mk('div', 'itemActions');
+      const curPlItem = items.find(it => (it.id && s.itemId ? it.id === s.itemId : it.songId === s.id)) || items[idx] || {};
+      const curPlIndex = p.songIds.findIndex(x => {
+        const norm = normalizePlItem(x);
+        return (norm.id && s.itemId ? norm.id === s.itemId : norm.songId === s.id);
+      });
+      const targetPlIdx = curPlIndex >= 0 ? curPlIndex : idx;
+
       const mv = d => {
         mutPl(p.id, x => {
-          const j = idx + d;
-          if (j >= 0 && j < x.songIds.length) [x.songIds[idx], x.songIds[j]] = [x.songIds[j], x.songIds[idx]];
+          const j = targetPlIdx + d;
+          if (j >= 0 && j < x.songIds.length) [x.songIds[targetPlIdx], x.songIds[j]] = [x.songIds[j], x.songIds[targetPlIdx]];
         });
         renderPlView();
       };
-      const editCueBtn = btn('✏️ สคริปต์/คีย์', () => openEditPlaylistItemModal(p.id, items[idx], s), 'small secondary');
+      const editCueBtn = btn('✏️ สคริปต์/คีย์', () => openEditPlaylistItemModal(p.id, curPlItem, s), 'small secondary');
       actions.append(
         editCueBtn,
         btn('↑', () => mv(-1)),
         btn('↓', () => mv(1)),
         btn('✕', () => {
-          mutPl(p.id, x => { x.songIds.splice(idx, 1); });
+          mutPl(p.id, x => { x.songIds.splice(targetPlIdx, 1); });
           renderPlView();
         })
       );
@@ -4045,6 +4756,7 @@ window.addEventListener('offline', () => {
 initClient();
 paintAcct();
 renderPlaylists();
+renderPopularChips();
 renderSongbook();
 route();
 registerPWA();
