@@ -38,6 +38,7 @@
     </div>
     <div class="row" style="gap:6px">
       <button id="hdrSearchBtn" class="small ghost" type="button" title="ค้นหาเพลงด่วน (ทุกหน้า)">🔍 ค้นเพลง</button>
+      <button id="adminNavBtn" class="small secondary adminOnly" type="button" title="จัดการผู้ใช้งาน (เฉพาะ Admin)" hidden>🛡️ จัดการผู้ใช้</button>
       <button id="pwaInstallHeaderBtn" class="small primary" hidden>📲 ติดตั้งแอป</button>
       <button id="acct" class="small" type="button" aria-label="บัญชีและการซิงก์">👤 เข้าสู่ระบบ</button>
     </div>
@@ -362,6 +363,40 @@
       <div class="list" id="plSongs"></div>
     </div>
   </div>
+
+  <!-- ==================== VIEW: ADMIN USER MANAGEMENT ==================== -->
+  <div id="adminView" hidden>
+    <div class="songTopBar">
+      <button type="button" class="topBack small" id="adminBackBtn">← กลับ</button>
+      <h2 class="grow">🛡️ จัดการผู้ใช้งาน (Admin)</h2>
+      <div class="row" style="gap:6px">
+        <button type="button" id="adminRefreshBtn" class="small">🔄 รีเฟรช</button>
+      </div>
+    </div>
+
+    <div class="card adminCard">
+      <div id="adminStatsBar" class="adminStatsGrid" aria-label="สถิติผู้ใช้งาน"></div>
+
+      <div class="adminToolbar">
+        <div class="searchWrap grow">
+          <span class="sIcon">🔍</span>
+          <input id="adminSearchInput" type="search" placeholder="ค้นหาชื่อผู้ใช้ หรือ อีเมล…" autocomplete="off" autocapitalize="none" aria-label="ค้นหาผู้ใช้">
+          <button type="button" id="adminSearchClearBtn" class="clearBtn" hidden aria-label="ล้างคำค้นหา">✕</button>
+        </div>
+      </div>
+
+      <div id="adminFilterBar" class="filterTabs" role="tablist" aria-label="กรองรายชื่อผู้ใช้">
+        <button type="button" class="pillTab active" data-admin-filter="all">ทั้งหมด</button>
+        <button type="button" class="pillTab" data-admin-filter="admin">🛡️ Admin</button>
+        <button type="button" class="pillTab" data-admin-filter="user">👤 User</button>
+        <button type="button" class="pillTab" data-admin-filter="active">🟢 เปิดใช้งาน</button>
+        <button type="button" class="pillTab" data-admin-filter="inactive">🔴 ปิดใช้งาน</button>
+        <button type="button" class="pillTab" data-admin-filter="pending">⏳ รออนุมัติ</button>
+      </div>
+
+      <div id="adminUserList" class="adminUserList"></div>
+    </div>
+  </div>
 </section>
 </div>
 
@@ -378,6 +413,10 @@
   <button type="button" class="navTab" data-nav="editor">
     <span class="nIcon">➕</span>
     <span>เพิ่มเพลง</span>
+  </button>
+  <button type="button" class="navTab adminOnly" id="bottomAdminTab" data-nav="admin" hidden>
+    <span class="nIcon">🛡️</span>
+    <span>จัดการผู้ใช้</span>
   </button>
   <button type="button" class="navTab" data-nav="settings">
     <span class="nIcon">⚙️</span>

@@ -1577,6 +1577,10 @@ function updateBottomNav(viewName) {
 }
 
 function show(name, push = true) {
+  if (name === 'admin' && !isAdminUser()) {
+    redirectUnauthorizedAdmin(true);
+    return;
+  }
   const prevView = document.body.dataset.view;
   if (prevView === 'editor' && name !== 'editor' && typeof revokeEdImgUrls === 'function') {
     revokeEdImgUrls();
@@ -1589,6 +1593,8 @@ function show(name, push = true) {
   $('#editorView').hidden = name !== 'editor';
   $('#songView').hidden = name !== 'song';
   $('#plView').hidden = name !== 'playlist';
+  const adminViewEl = $('#adminView');
+  if (adminViewEl) adminViewEl.hidden = name !== 'admin';
 
   updateBottomNav(name);
 
@@ -1602,7 +1608,17 @@ function show(name, push = true) {
   }
 
   scrollTo(0, 0);
-  if (push && name !== 'home') history.pushState({ v: name }, '');
+  if (name === 'admin') {
+    if (push && location.hash !== '#/admin') {
+      history.pushState({ v: 'admin' }, '', '#/admin');
+    }
+  } else {
+    if (isAdminRouteUrl()) {
+      history.replaceState(name !== 'home' ? { v: name } : null, '', cleanNonAdminUrl());
+    } else if (push && name !== 'home') {
+      history.pushState({ v: name }, '', '');
+    }
+  }
 }
 
 const goBack = () => {
@@ -1612,15 +1628,28 @@ const goBack = () => {
     openPlaylist(plId);
     return;
   }
+  if (document.body.dataset.view === 'admin') {
+    show('home', false);
+    return;
+  }
   history.state && history.state.v ? history.back() : show('home', false);
 };
 
 addEventListener('popstate', e => {
   const v = e.state && e.state.v;
+  if (v === 'admin' || isAdminRouteUrl()) {
+    if (!isAdminUser()) {
+      redirectUnauthorizedAdmin(true);
+      return;
+    }
+    openAdminUsersView({ push: false });
+    return;
+  }
   show((v === 'song' && !current) || (v === 'playlist' && !curPl) ? 'home' : (v || 'home'), false);
 });
 
 $$('.backBtn').forEach(b => (b.onclick = goBack));
+if ($('#adminBackBtn')) $('#adminBackBtn').onclick = () => show('home', false);
 $('#plBack').onclick = () => {
   if (location.hash.startsWith('#/p/') || location.hash.startsWith('#/s/')) {
     history.replaceState(null, '', location.pathname);
@@ -1644,6 +1673,8 @@ $$('#bottomNav .navTab').forEach(tab => {
       show('playlists', false);
     } else if (target === 'editor') {
       openEditor(null, $('#q').value.trim());
+    } else if (target === 'admin') {
+      openAdminUsersView();
     } else if (target === 'settings') {
       openAcct();
     }
@@ -3297,9 +3328,93 @@ $('#fUrl').addEventListener('paste', () => setTimeout(() => {
 let sb = null, user = null, syncing = false, status = '', sbErr = '';
 /* Approval state: 'none' = not applicable (local profile / profiles table missing / unknown),
  * 'checking' | 'approved' | 'pending' | 'rejected'. Server RLS is the real gate; this just drives the UI. */
-let profile = null, approval = 'none', pendingCount = 0, profPromise = null;
-const cloudOn = () => !!(sb && user && !user.isLocal && (approval === 'approved' || approval === 'none'));
-const isAdminUser = () => !!(profile && profile.is_admin && approval === 'approved');
+let profile = null, approval = 'none', pendingCount = 0, profPromise = null, authReadyPromise = null;
+let adminUsersCache = [], adminFilter = 'all', adminSearchQuery = '', adminLoading = false;
+
+function getUserRole(p = profile) {
+  if (!p) return 'user';
+  if (p.role === 'admin' || p.role === 'user') return p.role;
+  return p.is_admin ? 'admin' : 'user';
+}
+
+function isUserActive(p = profile) {
+  return !p || p.is_active !== false;
+}
+
+function cloudOn() {
+  return !!(sb && user && !user.isLocal && isUserActive(profile) && (approval === 'approved' || approval === 'none'));
+}
+
+function isAdminUser() {
+  if (user && user.isLocal) {
+    return user.role === 'admin' || user.is_admin === true || /^(admin|bierbebad)(@|$)/i.test(user.email || '');
+  }
+  return !!(user && !user.isLocal && profile && getUserRole(profile) === 'admin' && isUserActive(profile) && approval === 'approved');
+}
+
+function isAdminRouteUrl() {
+  const h = location.hash || '';
+  const s = location.search || '';
+  const p = location.pathname || '';
+  return /^#\/?admin(?:\/|$|\?)/i.test(h) ||
+    /(?:^|[?&])(?:view|page)=admin(?:&|$)/i.test(s) ||
+    /\/admin\/?$/i.test(p);
+}
+
+function cleanNonAdminUrl() {
+  let p = (location.pathname || '/').replace(/\/admin\/?$/i, '/');
+  if (!p) p = '/';
+  const params = new URLSearchParams(location.search || '');
+  params.delete('view');
+  params.delete('page');
+  const q = params.toString();
+  const keepHash = /^#\/(?:p|s)\//.test(location.hash || '') ? location.hash : '';
+  return p + (q ? '?' + q : '') + keepHash;
+}
+
+function redirectUnauthorizedAdmin(notify = true) {
+  const adminEl = $('#adminView');
+  if (adminEl) adminEl.hidden = true;
+  if (isAdminRouteUrl()) {
+    history.replaceState(null, '', cleanNonAdminUrl());
+  }
+  if (document.body.dataset.view === 'admin') {
+    document.body.dataset.view = 'home';
+  }
+  show('home', false);
+  if (matchMedia('(min-width: 920px)').matches && !current) {
+    const firstSong = loadBook()[0] || MOCK_DB[0];
+    if (firstSong) openSong(firstSong, firstSong.shift || 0);
+  }
+  if (notify) {
+    toast('⛔ เฉพาะผู้ดูแลระบบ (Admin) เท่านั้น ระบบพากลับหน้าหลักแล้ว', true);
+  }
+}
+
+function requireAdmin(notify = true) {
+  if (isAdminUser()) return true;
+  redirectUnauthorizedAdmin(notify);
+  return false;
+}
+
+function syncAdminUI() {
+  const admin = isAdminUser();
+  document.body.classList.toggle('is-admin', admin);
+  $$('.adminOnly').forEach(el => { el.hidden = !admin; });
+  const hdrBtn = $('#adminNavBtn');
+  if (hdrBtn) {
+    hdrBtn.hidden = !admin;
+    hdrBtn.textContent = pendingCount > 0 ? `🛡️ จัดการผู้ใช้ (${pendingCount})` : '🛡️ จัดการผู้ใช้';
+  }
+  const bottomTab = $('#bottomAdminTab');
+  if (bottomTab) bottomTab.hidden = !admin;
+  const adminViewEl = $('#adminView');
+  if (!admin && adminViewEl) adminViewEl.hidden = true;
+  if (!admin && document.body.dataset.view === 'admin') {
+    redirectUnauthorizedAdmin(false);
+  }
+}
+
 const isMissingTable = e => !!e && (e.code === 'PGRST205' || e.code === '42P01' || e.status === 404 || /does not exist|schema cache|Could not find the table/i.test(e.message || ''));
 const conf = () => {
   const s = LS.get(K.cfg, {});
@@ -3357,10 +3472,13 @@ function initClient() {
   const c = conf();
   sb = null;
   sbErr = '';
+  authReadyPromise = null;
 
   const savedLocal = LS.get(K.localUser, null);
   if (savedLocal) {
     user = savedLocal;
+    profile = savedLocal;
+    approval = 'approved';
   }
 
   if (!window.supabase) {
@@ -3375,6 +3493,17 @@ function initClient() {
   }
   try {
     sb = window.supabase.createClient(c.url, c.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
+    authReadyPromise = Promise.race([
+      sb.auth.getSession().then(async ({ data }) => {
+        if (data && data.session && data.session.user) {
+          user = data.session.user;
+          LS.set(K.localUser, null);
+          paintAcct();
+          await loadProfile();
+        }
+      }).catch(() => {}),
+      new Promise(res => setTimeout(res, 3500))
+    ]);
     sb.auth.onAuthStateChange((_e, s) => {
       if (s && s.user) {
         user = s.user;
@@ -3385,6 +3514,8 @@ function initClient() {
         user = null;
         profile = null;
         approval = 'none';
+        pendingCount = 0;
+        adminUsersCache = [];
         closePendingGate();
         paintAcct();
       }
@@ -3406,19 +3537,24 @@ function paintAcct() {
   if (user) {
     const name = (user.email || 'นักดนตรี').split('@')[0];
     let badge = user.isLocal ? '📱' : ({ ok: '☁️✓', sync: '☁️⟳', err: '📱', off: '⚡' }[status] || '☁️');
-    if (!user.isLocal && approval === 'pending') badge = '⏳';
+    if (!user.isLocal && !isUserActive(profile)) badge = '🚫';
+    else if (!user.isLocal && approval === 'pending') badge = '⏳';
     else if (!user.isLocal && approval === 'rejected') badge = '⛔';
     t = `${badge} ${name}`;
     if (isAdminUser() && pendingCount > 0) t += ` 🛡️${pendingCount}`;
   }
   const a = $('#acct');
-  a.textContent = t;
-  a.classList.toggle('hasBadge', isAdminUser() && pendingCount > 0);
-  a.title = user && !user.isLocal && approval === 'pending' ? 'รอแอดมินอนุมัติ'
-    : isAdminUser() && pendingCount > 0 ? `มีผู้สมัครรออนุมัติ ${pendingCount} คน` : '';
+  if (a) {
+    a.textContent = t;
+    a.classList.toggle('hasBadge', isAdminUser() && pendingCount > 0);
+    a.title = user && !user.isLocal && !isUserActive(profile) ? 'บัญชีถูกระงับการใช้งาน'
+      : user && !user.isLocal && approval === 'pending' ? 'รอแอดมินอนุมัติ'
+      : isAdminUser() && pendingCount > 0 ? `มีผู้สมัครรออนุมัติ ${pendingCount} คน` : '';
+  }
+  syncAdminUI();
 }
 
-/* ---- Approval: own profile, pending screen, admin approvals ---- */
+/* ---- Approval & RBAC Gate: own profile, pending/inactive screen, admin management ---- */
 function closePendingGate() {
   const g = document.getElementById('pendingGate');
   if (g) g.remove();
@@ -3426,18 +3562,29 @@ function closePendingGate() {
 
 function showPendingGate() {
   closePendingGate();
-  const rejected = approval === 'rejected';
+  const inactive = profile && !isUserActive(profile);
+  const rejected = !inactive && approval === 'rejected';
   const ov = mk('div', 'modal');
   ov.id = 'pendingGate';
   ov.style.zIndex = '95';
   ov.setAttribute('role', 'alertdialog');
   const box = mk('div', 'box pendingBox');
+  const icon = inactive ? '🚫' : rejected ? '⛔' : '⏳';
+  const heading = inactive
+    ? 'บัญชีของคุณถูกระงับการใช้งาน'
+    : rejected
+    ? 'บัญชีของคุณไม่ได้รับการอนุมัติ'
+    : 'รอแอดมินอนุมัติบัญชี';
+  const desc = inactive
+    ? 'ผู้ดูแลระบบได้ปิดการใช้งานบัญชีนี้ชั่วคราว ระบบซิงก์คลาวด์ถูกปิดไว้ หากต้องการเปิดใช้งานอีกครั้ง โปรดติดต่อแอดมิน (bierbebad)'
+    : rejected
+    ? 'แอดมินปฏิเสธคำขอสมัครของบัญชีนี้ ระบบซิงก์คลาวด์ถูกปิดไว้ หากคิดว่าผิดพลาด โปรดติดต่อแอดมิน (bierbebad)'
+    : 'สมัครสมาชิกเรียบร้อยแล้ว ตอนนี้กำลังรอแอดมิน (bierbebad) อนุมัติ ระหว่างนี้ยังไม่ซิงก์ข้อมูลกับคลาวด์ แต่ยังใช้งานแอปในเครื่องได้ตามปกติ';
+
   box.append(
-    mk('div', 'pendingIcon', rejected ? '⛔' : '⏳'),
-    mk('h2', null, rejected ? 'บัญชีของคุณไม่ได้รับการอนุมัติ' : 'รอแอดมินอนุมัติบัญชี'),
-    mk('p', 'pendingMsg', rejected
-      ? 'แอดมินปฏิเสธคำขอสมัครของบัญชีนี้ ระบบซิงก์คลาวด์ถูกปิดไว้ หากคิดว่าผิดพลาด โปรดติดต่อแอดมิน (bierbebad)'
-      : 'สมัครสมาชิกเรียบร้อยแล้ว ตอนนี้กำลังรอแอดมิน (bierbebad) อนุมัติ ระหว่างนี้ยังไม่ซิงก์ข้อมูลกับคลาวด์ แต่ยังใช้งานแอปในเครื่องได้ตามปกติ'),
+    mk('div', 'pendingIcon', icon),
+    mk('h2', null, heading),
+    mk('p', 'pendingMsg', desc),
     mk('div', 'pendingUser', user && user.email ? user.email : '')
   );
   const row = mk('div', 'col');
@@ -3445,9 +3592,12 @@ function showPendingGate() {
     chk.disabled = true;
     await loadProfile();
     chk.disabled = false;
-    if (approval === 'approved') {
-      toast('ได้รับการอนุมัติแล้ว ✔ กำลังซิงก์…');
+    if (isUserActive(profile) && approval === 'approved') {
+      toast('บัญชีพร้อมใช้งานแล้ว ✔ กำลังซิงก์…');
       syncAll();
+    } else if (!isUserActive(profile)) {
+      showPendingGate();
+      toast('บัญชียังถูกระงับการใช้งานอยู่', true);
     } else if (approval === 'pending' || approval === 'rejected') {
       showPendingGate();
       toast(approval === 'pending' ? 'ยังรออนุมัติอยู่' : 'บัญชีถูกปฏิเสธ', approval === 'rejected');
@@ -3471,6 +3621,7 @@ function loadProfile() {
       profile = null;
       approval = 'none';
       pendingCount = 0;
+      paintAcct();
       return approval;
     }
     approval = 'checking';
@@ -3491,8 +3642,11 @@ function loadProfile() {
     } catch {
       approval = ['approved', 'pending', 'rejected'].includes(prev) ? prev : 'none';
     }
-    if (approval === 'pending' || approval === 'rejected') showPendingGate();
-    else closePendingGate();
+    if ((profile && !isUserActive(profile)) || approval === 'pending' || approval === 'rejected') {
+      showPendingGate();
+    } else {
+      closePendingGate();
+    }
     if (isAdminUser()) await refreshPendingCount();
     else pendingCount = 0;
     paintAcct();
@@ -3519,6 +3673,7 @@ async function doSignOut() {
   profile = null;
   approval = 'none';
   pendingCount = 0;
+  adminUsersCache = [];
   closePendingGate();
   paintAcct();
   toast('ออกจากระบบแล้ว');
@@ -3573,24 +3728,345 @@ function openApprovals() {
     draw();
   });
 }
+
+/* ---- Admin User Management View (#adminView / #/admin) ---- */
+function renderAdminStats() {
+  const bar = $('#adminStatsBar');
+  if (!bar) return;
+  const total = adminUsersCache.length;
+  const admins = adminUsersCache.filter(u => getUserRole(u) === 'admin').length;
+  const active = adminUsersCache.filter(u => isUserActive(u)).length;
+  const inactive = total - active;
+  const pending = adminUsersCache.filter(u => u.status === 'pending').length;
+
+  bar.replaceChildren();
+  const stats = [
+    { label: '👥 ผู้ใช้ทั้งหมด', val: total },
+    { label: '🛡️ สิทธิ์ Admin', val: admins },
+    { label: '🟢 เปิดใช้งาน', val: active },
+    { label: '🔴 ปิดใช้งาน', val: inactive },
+    { label: '⏳ รออนุมัติ', val: pending }
+  ];
+  for (const st of stats) {
+    const c = mk('div', 'adminStatCard');
+    c.append(mk('b', null, String(st.val)), mk('small', null, st.label));
+    bar.appendChild(c);
+  }
+}
+
+async function updateUserProfileByAdmin(targetUser, patch, successMsg) {
+  if (!requireAdmin()) return false;
+  if (user && targetUser.id === user.id && (patch.role === 'user' || patch.is_admin === false || patch.is_active === false || (patch.status && patch.status !== 'approved'))) {
+    toast('ไม่สามารถลดสิทธิ์หรือปิดการใช้งานบัญชีของตัวเองได้', true);
+    return false;
+  }
+  if (!sb || (user && user.isLocal)) {
+    const LOCAL_USERS_KEY = 'nightChordbook.localAdminUsers.v1';
+    adminUsersCache = adminUsersCache.map(u => u.id === targetUser.id ? { ...u, ...patch } : u);
+    LS.set(LOCAL_USERS_KEY, adminUsersCache);
+    pendingCount = adminUsersCache.filter(u => u.status === 'pending').length;
+    paintAcct();
+    renderAdminStats();
+    renderAdminUserList();
+    if (successMsg) toast(successMsg);
+    return true;
+  }
+  const { error } = await sb.from('profiles').update(patch).eq('id', targetUser.id);
+  if (error) {
+    toast('อัปเดตข้อมูลไม่สำเร็จ: ' + error.message, true);
+    return false;
+  }
+  adminUsersCache = adminUsersCache.map(u => u.id === targetUser.id ? { ...u, ...patch } : u);
+  pendingCount = adminUsersCache.filter(u => u.status === 'pending').length;
+  paintAcct();
+  renderAdminStats();
+  renderAdminUserList();
+  if (successMsg) toast(successMsg);
+  return true;
+}
+
+function confirmAdminRoleChange(targetUser, nextRole, onCancel) {
+  const dispName = targetUser.username || (targetUser.email || '').split('@')[0] || targetUser.id;
+  const fromLabel = getUserRole(targetUser) === 'admin' ? 'Admin' : 'User';
+  const toLabel = nextRole === 'admin' ? 'Admin' : 'User';
+  let committed = false;
+
+  modal('🛡️ ยืนยันการเปลี่ยนสิทธิ์ผู้ใช้', (box, close) => {
+    const cleanup = () => {
+      if (!committed && typeof onCancel === 'function') onCancel();
+    };
+    const origCloseBtn = box.querySelector('.iconBtn');
+    if (origCloseBtn) {
+      origCloseBtn.onclick = () => { cleanup(); close(); };
+    }
+    if (box.parentElement) {
+      box.parentElement.onclick = e => {
+        if (e.target === box.parentElement) { cleanup(); close(); }
+      };
+    }
+
+    const p = mk('p', 'muted');
+    p.style.marginTop = '0';
+    p.textContent = `ต้องการเปลี่ยนสิทธิ์ของ "${dispName}" (${targetUser.email || ''}) จาก ${fromLabel} เป็น ${toLabel} ใช่หรือไม่?`;
+
+    const row = mk('div', 'row');
+    row.style.justifyContent = 'flex-end';
+    const cancelBtn = btn('ยกเลิก', () => { cleanup(); close(); }, 'small');
+    const confirmBtn = btn('✔ ยืนยันเปลี่ยนสิทธิ์', async () => {
+      confirmBtn.disabled = true;
+      committed = true;
+      const ok = await updateUserProfileByAdmin(
+        targetUser,
+        { role: nextRole, is_admin: nextRole === 'admin' },
+        `เปลี่ยนสิทธิ์ของ ${dispName} เป็น ${toLabel} แล้ว ✔`
+      );
+      confirmBtn.disabled = false;
+      if (!ok && typeof onCancel === 'function') onCancel();
+      close();
+    }, 'primary small confirmRoleBtn');
+
+    row.append(cancelBtn, confirmBtn);
+    box.append(p, row);
+  });
+}
+
+function renderAdminUserList() {
+  const list = $('#adminUserList');
+  if (!list) return;
+  list.replaceChildren();
+
+  $$('#adminFilterBar [data-admin-filter]').forEach(b => {
+    b.classList.toggle('active', b.dataset.adminFilter === adminFilter);
+  });
+
+  if (adminLoading && !adminUsersCache.length) {
+    list.appendChild(mk('div', 'empty', '⏳ กำลังโหลดรายชื่อผู้ใช้…'));
+    return;
+  }
+
+  const tokens = adminSearchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const filtered = adminUsersCache.filter(u => {
+    const role = getUserRole(u);
+    const active = isUserActive(u);
+    if (adminFilter === 'admin' && role !== 'admin') return false;
+    if (adminFilter === 'user' && role !== 'user') return false;
+    if (adminFilter === 'active' && !active) return false;
+    if (adminFilter === 'inactive' && active) return false;
+    if (adminFilter === 'pending' && u.status !== 'pending') return false;
+    if (tokens.length) {
+      const hay = `${u.username || ''} ${u.email || ''} ${u.id || ''} ${role}`.toLowerCase();
+      if (!tokens.every(tok => hay.includes(tok))) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    list.appendChild(mk('div', 'empty', adminUsersCache.length ? 'ไม่พบรายชื่อผู้ใช้ที่ตรงกับการค้นหา/ตัวกรอง' : 'ยังไม่มีข้อมูลผู้ใช้ในระบบ'));
+    return;
+  }
+
+  for (const r of filtered) {
+    const isSelf = !!(user && r.id === user.id);
+    const role = getUserRole(r);
+    const active = isUserActive(r);
+    const dispName = r.username || (r.email || '').split('@')[0] || 'ไม่ระบุชื่อ';
+
+    const row = mk('div', 'adminUserRow' + (active ? '' : ' isInactive'));
+    row.dataset.userId = r.id;
+    row.dataset.role = role;
+    row.dataset.active = String(active);
+
+    const info = mk('div', 'adminUserInfo');
+    const titleLine = mk('div', 'adminUserTitle');
+    titleLine.appendChild(mk('span', null, dispName));
+    if (isSelf) titleLine.appendChild(mk('span', 'badge dim', 'คุณ'));
+    titleLine.appendChild(mk('span', role === 'admin' ? 'badge adminRoleBadge' : 'badge dim adminRoleBadge', role === 'admin' ? '🛡️ Admin' : '👤 User'));
+    titleLine.appendChild(mk('span', active ? 'badge green adminActiveBadge' : 'badge red adminActiveBadge', active ? '🟢 ใช้งานปกติ' : '🔴 ปิดใช้งาน'));
+    if (r.status === 'pending') titleLine.appendChild(mk('span', 'badge', '⏳ รออนุมัติ'));
+    else if (r.status === 'rejected') titleLine.appendChild(mk('span', 'badge red', '⛔ ปฏิเสธแล้ว'));
+
+    const createdStr = r.created_at ? ' · สมัคร ' + new Date(r.created_at).toLocaleDateString('th-TH') : '';
+    const subLine = mk('div', 'adminUserSub', (r.email || '') + createdStr);
+    info.append(titleLine, subLine);
+
+    const actions = mk('div', 'adminUserActions');
+
+    // Role Switcher (admin <-> user)
+    const roleSelect = mk('select', 'adminRoleSelect');
+    roleSelect.setAttribute('aria-label', `เปลี่ยนสิทธิ์ของ ${dispName}`);
+    const optUser = mk('option', null, '👤 สิทธิ์: User');
+    optUser.value = 'user';
+    const optAdmin = mk('option', null, '🛡️ สิทธิ์: Admin');
+    optAdmin.value = 'admin';
+    roleSelect.append(optUser, optAdmin);
+    roleSelect.value = role;
+    if (isSelf) {
+      roleSelect.disabled = true;
+      roleSelect.title = 'ไม่สามารถลดสิทธิ์บัญชีของตัวเองได้';
+    } else {
+      roleSelect.onchange = () => {
+        const nextRole = roleSelect.value === 'admin' ? 'admin' : 'user';
+        if (nextRole === role) return;
+        confirmAdminRoleChange(r, nextRole, () => { roleSelect.value = role; });
+      };
+    }
+    actions.appendChild(roleSelect);
+
+    // Enable / Disable Account Toggle (is_active)
+    const toggleBtn = btn(
+      active ? '🚫 ปิดการใช้งาน' : '✅ เปิดการใช้งาน',
+      async () => {
+        toggleBtn.disabled = true;
+        await updateUserProfileByAdmin(
+          r,
+          { is_active: !active },
+          !active ? `เปิดการใช้งานบัญชี ${dispName} แล้ว ✔` : `ระงับการใช้งานบัญชี ${dispName} แล้ว`
+        );
+        toggleBtn.disabled = false;
+      },
+      (active ? 'danger small toggleActiveBtn' : 'primary small toggleActiveBtn')
+    );
+    if (isSelf) {
+      toggleBtn.disabled = true;
+      toggleBtn.title = 'ไม่สามารถปิดการใช้งานบัญชีของตัวเองได้';
+    }
+    actions.appendChild(toggleBtn);
+
+    // Quick Approve / Reject for pending or rejected accounts
+    if (!isSelf && r.status !== 'approved') {
+      actions.appendChild(btn('✔ อนุมัติ', async () => {
+        await updateUserProfileByAdmin(
+          r,
+          { status: 'approved', is_active: true, approved_at: new Date().toISOString(), approved_by: user.id },
+          `อนุมัติ ${dispName} แล้ว ✔`
+        );
+      }, 'primary small adminApproveBtn'));
+    }
+    if (!isSelf && r.status === 'pending') {
+      actions.appendChild(btn('✖ ปฏิเสธ', async () => {
+        await updateUserProfileByAdmin(
+          r,
+          { status: 'rejected', approved_at: null, approved_by: user.id },
+          `ปฏิเสธ ${dispName} แล้ว`
+        );
+      }, 'small adminRejectBtn'));
+    }
+
+    row.append(info, actions);
+    list.appendChild(row);
+  }
+}
+
+async function fetchAdminUsers(showToastOnRefresh = false) {
+  if (!requireAdmin()) return;
+  adminLoading = true;
+  renderAdminUserList();
+  if (!sb || (user && user.isLocal)) {
+    const LOCAL_USERS_KEY = 'nightChordbook.localAdminUsers.v1';
+    let localData = LS.get(LOCAL_USERS_KEY, null);
+    if (!localData || !localData.length) {
+      localData = [
+        { id: user.id, email: user.email, username: user.email.split('@')[0], role: 'admin', is_admin: true, is_active: true, status: 'approved', created_at: new Date(user.createdAt || Date.now()).toISOString() },
+        { id: 'u-alice', email: 'alice@band.com', username: 'alice', role: 'user', is_admin: false, is_active: true, status: 'approved', created_at: new Date(Date.now() - 86400000).toISOString() },
+        { id: 'u-bob', email: 'bob@band.com', username: 'bob', role: 'user', is_admin: false, is_active: false, status: 'approved', created_at: new Date(Date.now() - 172800000).toISOString() },
+        { id: 'u-rookie', email: 'rookie@band.com', username: 'rookie', role: 'user', is_admin: false, is_active: true, status: 'pending', created_at: new Date(Date.now() - 3600000).toISOString() }
+      ];
+      LS.set(LOCAL_USERS_KEY, localData);
+    }
+    adminLoading = false;
+    adminUsersCache = localData;
+    pendingCount = adminUsersCache.filter(u => u.status === 'pending').length;
+    paintAcct();
+    renderAdminStats();
+    renderAdminUserList();
+    if (showToastOnRefresh) toast('อัปเดตรายชื่อผู้ใช้แล้ว ✔');
+    return;
+  }
+  try {
+    const { data, error } = await sb.from('profiles').select('*').order('created_at', { ascending: false });
+    adminLoading = false;
+    if (error) {
+      const list = $('#adminUserList');
+      if (list) {
+        list.replaceChildren(mk('div', 'err', 'โหลดรายชื่อผู้ใช้ไม่สำเร็จ: ' + error.message));
+      }
+      return;
+    }
+    adminUsersCache = Array.isArray(data) ? data : [];
+    pendingCount = adminUsersCache.filter(u => u.status === 'pending').length;
+    paintAcct();
+    renderAdminStats();
+    renderAdminUserList();
+    if (showToastOnRefresh) toast('อัปเดตรายชื่อผู้ใช้แล้ว ✔');
+  } catch (err) {
+    adminLoading = false;
+    const list = $('#adminUserList');
+    if (list) list.replaceChildren(mk('div', 'err', 'เกิดข้อผิดพลาดในการโหลดข้อมูลผู้ใช้'));
+  }
+}
+
+function openAdminUsersView(opts = {}) {
+  if (!requireAdmin()) return false;
+  activeSetlistContext = null;
+  show('admin', opts.push !== false);
+  fetchAdminUsers(false);
+  return true;
+}
+
+if ($('#adminNavBtn')) $('#adminNavBtn').onclick = () => openAdminUsersView();
+if ($('#adminRefreshBtn')) $('#adminRefreshBtn').onclick = () => fetchAdminUsers(true);
+if ($('#adminSearchInput')) {
+  $('#adminSearchInput').oninput = e => {
+    adminSearchQuery = e.target.value || '';
+    const clr = $('#adminSearchClearBtn');
+    if (clr) clr.hidden = !adminSearchQuery.trim();
+    renderAdminUserList();
+  };
+}
+if ($('#adminSearchClearBtn')) {
+  $('#adminSearchClearBtn').onclick = () => {
+    adminSearchQuery = '';
+    const inp = $('#adminSearchInput');
+    if (inp) {
+      inp.value = '';
+      inp.focus();
+    }
+    $('#adminSearchClearBtn').hidden = true;
+    renderAdminUserList();
+  };
+}
+$$('#adminFilterBar [data-admin-filter]').forEach(b => {
+  b.onclick = () => {
+    adminFilter = b.dataset.adminFilter || 'all';
+    renderAdminUserList();
+  };
+});
+
 $('#acct').onclick = () => openAcct();
 
-function signInLocalProfile(email) {
+function signInLocalProfile(email, forceAdmin = false) {
   const cleanEmail = (email || 'musician@local').trim();
+  const isAdmin = forceAdmin || /^(admin|bierbebad)(@|$)/i.test(cleanEmail);
   const localProfile = {
     id: 'local-' + hash(cleanEmail),
     email: cleanEmail,
+    role: isAdmin ? 'admin' : 'user',
+    is_admin: isAdmin,
+    is_active: true,
+    status: 'approved',
     isLocal: true,
     createdAt: Date.now()
   };
   LS.set(K.localUser, localProfile);
   user = localProfile;
+  profile = localProfile;
+  approval = 'approved';
   setStatus('ok');
   paintAcct();
 }
 
 function openAcct() {
-  modal('👤 บัญชีผู้ใช้ & ตั้งค่า', box => {
+  modal('👤 บัญชีผู้ใช้ & ตั้งค่า', (box, close) => {
     const body = mk('div');
     box.appendChild(body);
     const draw = () => {
@@ -3611,10 +4087,11 @@ function openAcct() {
         const userCard = mk('div', 'card');
         userCard.style.padding = '14px';
         const modeBadge = user.isLocal
-          ? `<span class="badge green">📱 โหมดโปรไฟล์ในเครื่อง (พร้อมใช้งาน & แชร์เซ็ตเพลงได้ทันที)</span>`
+          ? `<span class="badge green">📱 โหมดโปรไฟล์ในเครื่อง (${isAdminUser() ? '🛡️ แอดมิน' : '👤 ผู้ใช้'})</span>`
+          : !isUserActive(profile) ? `<span class="badge red">🚫 บัญชีถูกระงับการใช้งาน — ปิดการซิงก์คลาวด์</span>`
           : approval === 'pending' ? `<span class="badge">⏳ รอแอดมินอนุมัติ — ยังไม่ซิงก์คลาวด์</span>`
           : approval === 'rejected' ? `<span class="badge">⛔ บัญชีไม่ได้รับการอนุมัติ</span>`
-          : `<span class="badge">☁️ เชื่อมต่อบัญชีคลาวด์แล้ว${isAdminUser() ? ' · 🛡️ แอดมิน' : ''}</span>`;
+          : `<span class="badge">☁️ เชื่อมต่อบัญชีคลาวด์แล้ว${isAdminUser() ? ' · 🛡️ แอดมิน' : ' · 👤 ผู้ใช้ทั่วไป'}</span>`;
 
         userCard.innerHTML = `
           <div style="font-weight:700; font-size:1.05rem; margin-bottom:6px">${escapeHtml(user.email || '')}</div>
@@ -3623,10 +4100,23 @@ function openAcct() {
 
         const btnRow = mk('div', 'row');
         if (isAdminUser()) {
-          btnRow.appendChild(btn(`🛡️ อนุมัติผู้สมัคร${pendingCount ? ' (' + pendingCount + ')' : ''}`, () => openApprovals(), 'primary small'));
+          btnRow.appendChild(btn('👥 จัดการผู้ใช้ทั้งหมด', () => {
+            close();
+            openAdminUsersView();
+          }, 'primary small adminManageUsersBtn'));
+          btnRow.appendChild(btn(`🛡️ อนุมัติผู้สมัคร${pendingCount ? ' (' + pendingCount + ')' : ''}`, () => openApprovals(), 'small'));
         }
-        if (!user.isLocal && sb && (approval === 'pending' || approval === 'rejected')) {
-          btnRow.appendChild(btn('สถานะการอนุมัติ', () => showPendingGate(), 'small'));
+        if (user.isLocal) {
+          btnRow.appendChild(
+            btn(isAdminUser() ? '👤 สลับเป็นสิทธิ์ User (ทดสอบ)' : '🛡️ สลับเป็นสิทธิ์ Admin (ทดสอบ)', () => {
+              signInLocalProfile(user.email, !isAdminUser());
+              toast(isAdminUser() ? 'สลับเป็นสิทธิ์ Admin แล้ว 🛡️' : 'สลับเป็นสิทธิ์ User แล้ว 👤');
+              draw();
+            }, 'small secondary')
+          );
+        }
+        if (!user.isLocal && sb && (!isUserActive(profile) || approval === 'pending' || approval === 'rejected')) {
+          btnRow.appendChild(btn('สถานะบัญชี', () => showPendingGate(), 'small'));
         }
         if (cloudOn()) {
           btnRow.appendChild(
@@ -3713,7 +4203,9 @@ function openAcct() {
               LS.set(K.localUser, null);
               paintAcct();
               await loadProfile();
-              if (approval === 'pending' || approval === 'rejected') {
+              if (!isUserActive(profile)) {
+                toast('เข้าสู่ระบบแล้ว — บัญชีนี้ถูกระงับการใช้งาน', true);
+              } else if (approval === 'pending' || approval === 'rejected') {
                 toast(up ? 'สมัครแล้ว ✔ รอแอดมินอนุมัติ' : 'เข้าสู่ระบบแล้ว — บัญชียังไม่ได้รับการอนุมัติ');
               } else {
                 toast(up ? 'สมัครบัญชีสำเร็จ ✔' : 'เข้าสู่ระบบสำเร็จ ✔');
@@ -3735,8 +4227,15 @@ function openAcct() {
           }
         };
 
+        const bAdmin = btn('🛡️ เข้าสู่ระบบ Admin (โหมดทดสอบ)', () => {
+          signInLocalProfile('admin@mellowchords.local', true);
+          toast('เข้าสู่ระบบสิทธิ์ Admin ในเครื่องเรียบร้อย 🛡️');
+          draw();
+        }, 'small secondary');
+
         const btnWrap = mk('div', 'row');
-        btnWrap.append(b1, b2);
+        btnWrap.style.flexWrap = 'wrap';
+        btnWrap.append(b1, b2, bAdmin);
         body.append(em, pw, msg, btnWrap);
       }
 
@@ -4696,7 +5195,29 @@ function importShared() {
   renderPlView();
 }
 
+async function handleAdminRoute() {
+  const adminEl = $('#adminView');
+  if (adminEl && !isAdminUser()) adminEl.hidden = true;
+  if (authReadyPromise) {
+    try { await authReadyPromise; } catch {}
+  }
+  if (profPromise) {
+    try { await profPromise; } catch {}
+  }
+  if (!isAdminRouteUrl()) return;
+  if (!isAdminUser()) {
+    redirectUnauthorizedAdmin(true);
+    return;
+  }
+  openAdminUsersView({ push: false });
+}
+
 function route() {
+  if (isAdminRouteUrl()) {
+    handleAdminRoute();
+    return;
+  }
+
   const selfMatch = location.hash.match(/^#\/s\/([A-Za-z0-9_-]+)/);
   if (selfMatch) {
     try {
@@ -4711,7 +5232,14 @@ function route() {
   }
 
   const m = location.hash.match(/^#\/p\/([\w-]+)/);
-  if (m) openShared(m[1]);
+  if (m) {
+    openShared(m[1]);
+    return;
+  }
+
+  if (document.body.dataset.view === 'admin') {
+    show('home', false);
+  }
 }
 
 /* ==============================================================================
@@ -5186,7 +5714,7 @@ renderSongbook();
 route();
 registerPWA();
 
-if (matchMedia('(min-width: 920px)').matches && !current && !location.hash.startsWith('#/p/') && !location.hash.startsWith('#/s/')) {
+if (matchMedia('(min-width: 920px)').matches && !current && !isAdminRouteUrl() && !location.hash.startsWith('#/p/') && !location.hash.startsWith('#/s/')) {
   const firstSong = loadBook()[0] || MOCK_DB[0];
   if (firstSong) openSong(firstSong, firstSong.shift || 0);
 }
@@ -5194,7 +5722,7 @@ if (matchMedia('(min-width: 920px)').matches && !current && !location.hash.start
 addEventListener('hashchange', route);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    if (approval === 'pending' || isAdminUser()) loadProfile().then(syncAll);
+    if (approval === 'pending' || !isUserActive(profile) || isAdminUser()) loadProfile().then(syncAll);
     else syncAll();
     if (document.body.dataset.view === 'song') requestWakeLock();
   }

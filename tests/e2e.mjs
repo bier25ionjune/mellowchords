@@ -40,6 +40,14 @@ function startStaticServer() {
       }
       fs.readFile(absPath, (err, data) => {
         if (err) {
+          if (!path.extname(safeRel)) {
+            fs.readFile(path.resolve(ROOT_DIR, 'index.html'), (err2, html) => {
+              if (err2) { res.writeHead(404); res.end('Not found'); return; }
+              res.writeHead(200, { 'Content-Type': MIME_TYPES['.html'] });
+              res.end(html);
+            });
+            return;
+          }
           res.writeHead(404);
           res.end('Not found');
           return;
@@ -139,7 +147,13 @@ async function newMockedPage(browser, url, scenario) {
           return json(404, { code: 'PGRST205', message: "Could not find the table 'public.profiles' in the schema cache" });
         }
         if (req.method() === 'PATCH') {
-          log.patches.push({ url: u.search, body: req.postDataJSON() });
+          const patchBody = req.postDataJSON();
+          log.patches.push({ url: u.search, body: patchBody });
+          const idParam = u.searchParams.get('id');
+          if (idParam && idParam.startsWith('eq.') && Array.isArray(scenario.allProfiles)) {
+            const targetId = idParam.slice(3);
+            scenario.allProfiles = scenario.allProfiles.map(r => r.id === targetId ? { ...r, ...patchBody } : r);
+          }
           return json(200, []);
         }
         const q = u.searchParams;
@@ -147,7 +161,11 @@ async function newMockedPage(browser, url, scenario) {
         if (q.get('id') && q.get('id').startsWith('eq.')) {
           return wantObj ? json(200, scenario.profile) : json(200, [scenario.profile]);
         }
-        const rows = (scenario.pendingRows || []).filter(r => q.get('status') === 'eq.' + r.status);
+        const sourceRows = scenario.allProfiles || scenario.pendingRows || [];
+        const statusParam = q.get('status');
+        const rows = statusParam && statusParam.startsWith('eq.')
+          ? sourceRows.filter(r => 'eq.' + r.status === statusParam)
+          : sourceRows;
         if (req.method() === 'HEAD') {
           return route.fulfill({ status: 200, headers: { ...CORS, 'content-range': `0-${Math.max(rows.length - 1, 0)}/${rows.length}` } });
         }
@@ -157,7 +175,7 @@ async function newMockedPage(browser, url, scenario) {
     }
     return json(200, {});
   });
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.goto(scenario.initialUrl || url, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.supabase && typeof initClient === 'function', undefined, { timeout: 15000 });
   await page.waitForSelector('#songbook', { timeout: 5000 });
   return { ctx, page, log, pageErrs };
@@ -374,10 +392,14 @@ async function run() {
     // -------------------------------------------------------------------------
     console.log('[Test 6] Repeat/cached IndexedDB open (< 500ms) & offline playback...');
     // Wait up to 7s for background wsrv.nl -> IDB cache of 69998 to complete
-    await page.waitForFunction(async () => {
-      const b = await idbGet('ct-img-69998').catch(() => null);
-      return !!b;
-    }, undefined, { timeout: 7000 });
+    const deadlineIdb = Date.now() + 7000;
+    let hasCachedIdb = false;
+    while (Date.now() < deadlineIdb) {
+      hasCachedIdb = await page.evaluate(async () => !!(await idbGet('ct-img-69998').catch(() => null)));
+      if (hasCachedIdb) break;
+      await page.waitForTimeout(150);
+    }
+    assert(hasCachedIdb, 'Expected background cache to store ct-img-69998 in IndexedDB within 7s');
 
     await context.setOffline(true);
     const t0Offline = Date.now();
@@ -543,11 +565,183 @@ async function run() {
       console.log('  PASS.');
     }
 
+    // -------------------------------------------------------------------------
+    // Test 10: RBAC Guards & Admin User Management
+    // -------------------------------------------------------------------------
+    console.log('[Test 10a] Guest & Regular user cannot see Admin menus and direct #/admin URL redirects to home...');
+    {
+      // Cold open at /#/admin as Guest
+      const g = await newMockedPage(browser, url, { initialUrl: `${url}/#/admin` });
+      await g.page.waitForFunction(() => !location.hash.includes('admin') && document.body.dataset.view === 'home', undefined, { timeout: 5000 });
+      const guestState = await g.page.evaluate(() => ({
+        hdrHidden: document.querySelector('#adminNavBtn').hidden,
+        tabHidden: document.querySelector('#bottomAdminTab').hidden,
+        viewHidden: document.querySelector('#adminView').hidden,
+        bodyIsAdmin: document.body.classList.contains('is-admin')
+      }));
+      assert(guestState.hdrHidden && guestState.tabHidden && guestState.viewHidden && !guestState.bodyIsAdmin,
+        `Guest must have all admin elements hidden: ${JSON.stringify(guestState)}`);
+      await g.ctx.close();
+
+      // Logged-in approved regular user (role: 'user', is_active: true)
+      const u = await newMockedPage(browser, url, {
+        email: 'member@mellowchords.local',
+        uid: 'u-member',
+        profile: { id: 'u-member', email: 'member@mellowchords.local', username: 'member', role: 'user', is_admin: false, is_active: true, status: 'approved' }
+      });
+      await uiLogin(u.page, 'member');
+      await u.page.waitForFunction(() => approval === 'approved', undefined, { timeout: 5000 });
+      await u.page.waitForSelector('.modal .card');
+      const userMenuCheck = await u.page.evaluate(() => ({
+        hdrHidden: document.querySelector('#adminNavBtn').hidden,
+        tabHidden: document.querySelector('#bottomAdminTab').hidden,
+        hasManageBtnInModal: [...document.querySelectorAll('.modal button')].some(b => b.textContent.includes('จัดการผู้ใช้'))
+      }));
+      assert(userMenuCheck.hdrHidden && userMenuCheck.tabHidden && !userMenuCheck.hasManageBtnInModal,
+        `Regular user must not see any admin menu/button: ${JSON.stringify(userMenuCheck)}`);
+
+      // Close modal and try direct URL hash navigation (#/admin) & direct show('admin')
+      await u.page.click('.modal .box .iconBtn');
+      await u.page.evaluate(() => { location.hash = '#/admin'; });
+      await u.page.waitForFunction(() => !location.hash.includes('admin') && document.body.dataset.view === 'home', undefined, { timeout: 5000 });
+      const afterHash = await u.page.evaluate(() => {
+        show('admin');
+        return {
+          view: document.body.dataset.view,
+          adminHidden: document.querySelector('#adminView').hidden,
+          hash: location.hash
+        };
+      });
+      assert(afterHash.view === 'home' && afterHash.adminHidden && !afterHash.hash.includes('admin'),
+        `Regular user must be redirected to home on admin access: ${JSON.stringify(afterHash)}`);
+      assert(u.pageErrs.length === 0, `Page errors (10a): ${u.pageErrs.join('; ')}`);
+      await u.ctx.close();
+      console.log('  PASS: Admin menus hidden & direct URL redirected to home.');
+    }
+
+    console.log('[Test 10b] Inactive user (is_active = false) is blocked from cloud sync and admin access...');
+    {
+      const m = await newMockedPage(browser, url, {
+        email: 'suspended@mellowchords.local',
+        uid: 'u-suspended',
+        profile: { id: 'u-suspended', email: 'suspended@mellowchords.local', username: 'suspended', role: 'admin', is_admin: true, is_active: false, status: 'approved' }
+      });
+      await uiLogin(m.page, 'suspended');
+      await m.page.waitForSelector('#pendingGate', { timeout: 5000 });
+      const gateTxt = await m.page.textContent('#pendingGate');
+      assert(gateTxt.includes('ถูกระงับการใช้งาน'), `Expected suspended account message, got: ${gateTxt}`);
+      await m.page.evaluate(() => syncAll());
+      await m.page.waitForTimeout(300);
+      assert(!m.log.rest.some(r => /songs|playlists/.test(r)), `Inactive user must not sync cloud tables, saw: ${m.log.rest.join(', ')}`);
+      const isAdm = await m.page.evaluate(() => isAdminUser());
+      assert(isAdm === false, 'Inactive user must not have admin access even if role=admin');
+      assert(m.pageErrs.length === 0, `Page errors (10b): ${m.pageErrs.join('; ')}`);
+      await m.ctx.close();
+      console.log('  PASS: Inactive user blocked from sync & admin privileges.');
+    }
+
+    console.log('[Test 10c] Admin User Management: list, search, filter, role switch (admin <-> user), activate/deactivate, self-protection & signout guard...');
+    {
+      const allUsers = [
+        { id: 'u-admin', email: 'bierbebad@mellowchords.local', username: 'bierbebad', role: 'admin', is_admin: true, is_active: true, status: 'approved', created_at: '2026-11-18T10:00:00Z' },
+        { id: 'u-alice', email: 'alice@band.com', username: 'alice', role: 'user', is_admin: false, is_active: true, status: 'approved', created_at: '2026-11-19T10:00:00Z' },
+        { id: 'u-bob', email: 'bob@band.com', username: 'bob', role: 'user', is_admin: false, is_active: false, status: 'approved', created_at: '2026-11-20T10:00:00Z' },
+        { id: 'u-new', email: 'rookie@band.com', username: 'rookie', role: 'user', is_admin: false, is_active: true, status: 'pending', created_at: '2026-11-21T10:00:00Z' }
+      ];
+      const m = await newMockedPage(browser, url, {
+        email: 'bierbebad@mellowchords.local',
+        uid: 'u-admin',
+        allProfiles: allUsers,
+        profile: allUsers[0]
+      });
+      await uiLogin(m.page, 'bierbebad');
+      await m.page.waitForFunction(() => isAdminUser() === true, undefined, { timeout: 5000 });
+
+      // Verify Admin menus are visible for Admin
+      const adminVis = await m.page.evaluate(() => ({
+        hdrHidden: document.querySelector('#adminNavBtn').hidden,
+        tabHidden: document.querySelector('#bottomAdminTab').hidden,
+        bodyIsAdmin: document.body.classList.contains('is-admin')
+      }));
+      assert(!adminVis.hdrHidden && !adminVis.tabHidden && adminVis.bodyIsAdmin, `Admin must see admin navigation controls: ${JSON.stringify(adminVis)}`);
+
+      // Open Admin User Management via account modal button
+      await m.page.click('.modal .adminManageUsersBtn');
+      await m.page.waitForFunction(() => document.body.dataset.view === 'admin' && location.hash === '#/admin', undefined, { timeout: 5000 });
+      await m.page.waitForSelector('.adminUserRow', { timeout: 5000 });
+      assert((await m.page.locator('.adminUserRow').count()) === 4, 'Expected all 4 users in #adminUserList');
+
+      // Self-protection: Admin's own controls must be disabled
+      const selfDisabled = await m.page.evaluate(() => {
+        const selfRow = document.querySelector('.adminUserRow[data-user-id="u-admin"]');
+        return {
+          roleDisabled: selfRow.querySelector('.adminRoleSelect').disabled,
+          toggleDisabled: selfRow.querySelector('.toggleActiveBtn').disabled
+        };
+      });
+      assert(selfDisabled.roleDisabled && selfDisabled.toggleDisabled, `Admin own controls must be disabled: ${JSON.stringify(selfDisabled)}`);
+
+      // Search users
+      await m.page.fill('#adminSearchInput', 'alice@band.com');
+      assert((await m.page.locator('.adminUserRow').count()) === 1, 'Search for alice@band.com should show 1 row');
+      await m.page.click('#adminSearchClearBtn');
+      assert((await m.page.locator('.adminUserRow').count()) === 4, 'Clearing search should restore 4 rows');
+
+      // Filter inactive users
+      await m.page.click('#adminFilterBar [data-admin-filter="inactive"]');
+      assert((await m.page.locator('.adminUserRow').count()) === 1, 'Inactive filter should show 1 row (bob)');
+      await m.page.click('#adminFilterBar [data-admin-filter="all"]');
+      assert((await m.page.locator('.adminUserRow').count()) === 4, 'All filter should show 4 rows');
+
+      // Change Alice's role: user -> admin (with confirmation modal)
+      await m.page.selectOption('.adminUserRow[data-user-id="u-alice"] .adminRoleSelect', 'admin');
+      await m.page.waitForSelector('.modal .confirmRoleBtn', { timeout: 5000 });
+      await m.page.click('.modal .confirmRoleBtn');
+      await m.page.waitForFunction(() => {
+        const r = document.querySelector('.adminUserRow[data-user-id="u-alice"]');
+        return r && r.dataset.role === 'admin';
+      }, undefined, { timeout: 5000 });
+      const rolePatch = m.log.patches.find(p => p.url.includes('id=eq.u-alice') && p.body.role === 'admin');
+      assert(rolePatch && rolePatch.body.is_admin === true, `Expected PATCH role=admin for u-alice, got ${JSON.stringify(m.log.patches)}`);
+
+      // Deactivate Alice's account: is_active true -> false
+      await m.page.click('.adminUserRow[data-user-id="u-alice"] .toggleActiveBtn');
+      await m.page.waitForFunction(() => {
+        const r = document.querySelector('.adminUserRow[data-user-id="u-alice"]');
+        return r && r.dataset.active === 'false';
+      }, undefined, { timeout: 5000 });
+      const deactPatch = m.log.patches.find(p => p.url.includes('id=eq.u-alice') && p.body.is_active === false);
+      assert(!!deactPatch, `Expected PATCH is_active=false for u-alice, got ${JSON.stringify(m.log.patches)}`);
+
+      // Re-activate Bob's account: is_active false -> true
+      await m.page.click('.adminUserRow[data-user-id="u-bob"] .toggleActiveBtn');
+      await m.page.waitForFunction(() => {
+        const r = document.querySelector('.adminUserRow[data-user-id="u-bob"]');
+        return r && r.dataset.active === 'true';
+      }, undefined, { timeout: 5000 });
+      const actPatch = m.log.patches.find(p => p.url.includes('id=eq.u-bob') && p.body.is_active === true);
+      assert(!!actPatch, `Expected PATCH is_active=true for u-bob, got ${JSON.stringify(m.log.patches)}`);
+
+      // Sign out while on #adminView -> must redirect home and hide admin UI
+      await m.page.evaluate(() => doSignOut());
+      await m.page.waitForFunction(() => document.body.dataset.view === 'home' && !location.hash.includes('admin'), undefined, { timeout: 5000 });
+      const afterSignOut = await m.page.evaluate(() => ({
+        hdrHidden: document.querySelector('#adminNavBtn').hidden,
+        tabHidden: document.querySelector('#bottomAdminTab').hidden,
+        adminViewHidden: document.querySelector('#adminView').hidden
+      }));
+      assert(afterSignOut.hdrHidden && afterSignOut.tabHidden && afterSignOut.adminViewHidden,
+        `Signing out must hide all admin UI and view: ${JSON.stringify(afterSignOut)}`);
+      assert(m.pageErrs.length === 0, `Page errors (10c): ${m.pageErrs.join('; ')}`);
+      await m.ctx.close();
+      console.log('  PASS: Admin User Management list, search, filter, role switch, active toggle & signout guard verified.');
+    }
+
     assert(pageErrors.length === 0, `Page errors occurred: ${pageErrors.join('; ')}`);
     assert(consoleErrors.length === 0, `Console errors occurred: ${consoleErrors.join('; ')}`);
     assert(softFailures.length === 0, `Subtest failures: ${softFailures.join('; ')}`);
 
-    console.log('\n✅ ALL 9 E2E & <5s LATENCY TESTS PASSED!');
+    console.log('\n✅ ALL 10 E2E, RBAC & <5s LATENCY TESTS PASSED!');
   } finally {
     await browser.close();
     server.close();

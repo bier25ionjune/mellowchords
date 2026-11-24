@@ -303,7 +303,8 @@ body[data-view="playlists"] #resultsBox {
 
 body[data-view="song"] #side,
 body[data-view="editor"] #side,
-body[data-view="playlist"] #side {
+body[data-view="playlist"] #side,
+body[data-view="admin"] #side {
   display: none;
 }
 
@@ -2151,3 +2152,140 @@ summary {
 }
 .approvalInfo { min-width: 0; flex: 1 1 160px; word-break: break-all; }
 .approvalItem button { min-height: 44px; }
+
+/* ==============================================================================
+ * RBAC Guards & Admin User Management (#adminView)
+ * ============================================================================== */
+body:not(.is-admin) .adminOnly,
+body:not(.is-admin) #adminView {
+  display: none !important;
+}
+
+body.is-admin #bottomNav {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.badge.red {
+  background: var(--danger-bg);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+}
+
+.adminCard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.adminStatsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.adminStatCard {
+  background: var(--bg-elev);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.adminStatCard b {
+  font-size: 1.35rem;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.adminStatCard small {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.adminToolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.adminUserList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.adminUserRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  transition: border-color 0.15s ease;
+}
+
+.adminUserRow.isInactive {
+  opacity: 0.78;
+  border-style: dashed;
+}
+
+.adminUserInfo {
+  min-width: 0;
+  flex: 1 1 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.adminUserTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.adminUserSub {
+  color: var(--muted);
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+
+.adminUserActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.adminRoleSelect {
+  width: auto;
+  min-width: 132px;
+  min-height: 44px;
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  background: var(--panel2);
+}
+
+@media (max-width: 520px) {
+  #adminNavBtn {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .adminUserActions {
+    width: 100%;
+  }
+  .adminUserActions .adminRoleSelect,
+  .adminUserActions button {
+    flex: 1 1 auto;
+  }
+}
+
