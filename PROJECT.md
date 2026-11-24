@@ -1,4 +1,4 @@
-# Project: mellowchords (คลังคอร์ดกลางคืน)
+# Project: Mellow Chords
 
 ## Architecture
 - **Type**: 100% static, zero-build vanilla HTML5/CSS3/ES6+ Progressive Web App (PWA) with offline-first Service Worker (`sw.js`), client-side `localStorage` + `IndexedDB` persistence, optional Supabase BaaS cloud sync, and client-side external web search / chord sheet image fetching (`chordtabs.in.th`, `r.jina.ai`, `wsrv.nl` / `images.weserv.nl`).

@@ -52,8 +52,8 @@ select
   coalesce(email, ''),
   split_part(coalesce(email, ''), '@', 1),
   'approved',
-  case when lower(coalesce(email, '')) = 'bierbebad@mellowchords.local' then 'admin' else 'user' end,
-  lower(coalesce(email, '')) = 'bierbebad@mellowchords.local',
+  case when split_part(lower(coalesce(email, '')), '@', 1) in ('bierbebad', 'admin') or lower(coalesce(email, '')) in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local') then 'admin' else 'user' end,
+  (split_part(lower(coalesce(email, '')), '@', 1) in ('bierbebad', 'admin') or lower(coalesce(email, '')) in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local')),
   true,
   now()
 from auth.users
@@ -65,7 +65,8 @@ update public.profiles
        is_active = true,
        status = 'approved',
        approved_at = coalesce(approved_at, now())
- where lower(email) = 'bierbebad@mellowchords.local';
+ where split_part(lower(coalesce(email, '')), '@', 1) in ('bierbebad', 'admin')
+    or lower(coalesce(email, '')) in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local');
 
 update public.profiles
    set role = case when is_admin then 'admin' else 'user' end
@@ -134,7 +135,8 @@ security definer
 set search_path = public as
 $$
 declare
-  adm boolean := lower(coalesce(new.email, '')) = 'bierbebad@mellowchords.local';
+  adm boolean := split_part(lower(coalesce(new.email, '')), '@', 1) in ('bierbebad', 'admin')
+                 or lower(coalesce(new.email, '')) in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local');
 begin
   insert into public.profiles (id, email, username, status, role, is_admin, is_active, approved_at)
   values (

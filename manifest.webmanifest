@@ -1,6 +1,6 @@
 {
-  "name": "mellowchords - คลังคอร์ดกลางคืน",
-  "short_name": "คลังคอร์ด",
+  "name": "Mellow Chords",
+  "short_name": "Mellow Chords",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

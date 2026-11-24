@@ -3331,13 +3331,22 @@ let sb = null, user = null, syncing = false, status = '', sbErr = '';
 let profile = null, approval = 'none', pendingCount = 0, profPromise = null, authReadyPromise = null;
 let adminUsersCache = [], adminFilter = 'all', adminSearchQuery = '', adminLoading = false;
 
+function isKnownSuperAdmin(u = user) {
+  if (!u || !u.email) return false;
+  const em = String(u.email).toLowerCase().trim();
+  const prefix = em.split('@')[0];
+  return prefix === 'bierbebad' || prefix === 'admin' || em === 'bierbebad@gmail.com' || em === 'bierbebad@mellowchords.local';
+}
+
 function getUserRole(p = profile) {
+  if (p && isKnownSuperAdmin(p)) return 'admin';
   if (!p) return 'user';
   if (p.role === 'admin' || p.role === 'user') return p.role;
   return p.is_admin ? 'admin' : 'user';
 }
 
 function isUserActive(p = profile) {
+  if (p && isKnownSuperAdmin(p)) return true;
   return !p || p.is_active !== false;
 }
 
@@ -3346,10 +3355,12 @@ function cloudOn() {
 }
 
 function isAdminUser() {
-  if (user && user.isLocal) {
-    return user.role === 'admin' || user.is_admin === true || /^(admin|bierbebad)(@|$)/i.test(user.email || '');
+  if (!user) return false;
+  if (isKnownSuperAdmin(user)) return true;
+  if (user.isLocal) {
+    return user.role === 'admin' || user.is_admin === true;
   }
-  return !!(user && !user.isLocal && profile && getUserRole(profile) === 'admin' && isUserActive(profile) && approval === 'approved');
+  return !!(!user.isLocal && profile && getUserRole(profile) === 'admin' && isUserActive(profile) && (approval === 'approved' || approval === 'none'));
 }
 
 function isAdminRouteUrl() {
@@ -3641,6 +3652,19 @@ function loadProfile() {
       }
     } catch {
       approval = ['approved', 'pending', 'rejected'].includes(prev) ? prev : 'none';
+    }
+    if (isKnownSuperAdmin(user)) {
+      approval = 'approved';
+      if (profile) {
+        if (profile.role !== 'admin' || !profile.is_admin || profile.status !== 'approved') {
+          profile.role = 'admin';
+          profile.is_admin = true;
+          profile.status = 'approved';
+          if (sb && !user.isLocal) {
+            sb.from('profiles').update({ role: 'admin', is_admin: true, status: 'approved', approved_at: new Date().toISOString() }).eq('id', user.id).then(() => {}).catch(() => {});
+          }
+        }
+      }
     }
     if ((profile && !isUserActive(profile)) || approval === 'pending' || approval === 'rejected') {
       showPendingGate();
