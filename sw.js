@@ -1,6 +1,8 @@
 'use strict';
 
-const CACHE_NAME = 'mellowchords-v14';
+const CACHE_NAME = 'mellowchords-v15';
+const IMG_CACHE_NAME = 'mellowchords-imgs-v1';
+const MAX_IMG_CACHE = 150;
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -30,19 +32,52 @@ self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys => {
       return Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+        keys.filter(k => k !== CACHE_NAME && k !== IMG_CACHE_NAME).map(k => caches.delete(k))
       );
     }).then(() => self.clients.claim())
   );
 });
 
-// Fetch: offline-first for app shell, complete bypass for Supabase & external APIs
+async function putImageInCache(req, res) {
+  try {
+    const cache = await caches.open(IMG_CACHE_NAME);
+    await cache.put(req, res);
+    const keys = await cache.keys();
+    if (keys.length > MAX_IMG_CACHE) {
+      const excess = keys.length - MAX_IMG_CACHE;
+      for (let i = 0; i < excess; i++) {
+        await cache.delete(keys[i]);
+      }
+    }
+  } catch {}
+}
+
+// Fetch: offline-first for app shell, capped Cache-First for image proxy, bypass for dynamic APIs
 self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
 
   // Non-GET requests (e.g. Supabase Auth/DB POST/PUT/DELETE): pass through directly to network
   if (req.method !== 'GET') return;
+
+  // Capped Cache-First image cache for wsrv.nl & images.weserv.nl (only res.ok image responses)
+  if (url.hostname === 'wsrv.nl' || url.hostname.endsWith('.wsrv.nl') || url.hostname.includes('weserv.nl')) {
+    event.respondWith(
+      caches.open(IMG_CACHE_NAME).then(cache =>
+        cache.match(req).then(cached => {
+          if (cached) return cached;
+          return fetch(req).then(networkResponse => {
+            const ct = (networkResponse.headers.get('content-type') || '').toLowerCase();
+            if (networkResponse && networkResponse.ok && ct.startsWith('image/')) {
+              putImageInCache(req, networkResponse.clone());
+            }
+            return networkResponse;
+          });
+        })
+      )
+    );
+    return;
+  }
 
   // Completely bypass Service Worker interception for Supabase, Jina Reader, LRCLIB, and CORS proxies
   if (
@@ -51,7 +86,6 @@ self.addEventListener('fetch', event => {
     url.hostname.includes('lrclib.net') ||
     url.hostname.includes('allorigins') ||
     url.hostname.includes('corsproxy') ||
-    url.hostname.includes('weserv.nl') ||
     url.hostname.includes('chordtabs.in.th') ||
     url.hostname.includes('yahoo.com') ||
     url.hostname.includes('duckduckgo.com')

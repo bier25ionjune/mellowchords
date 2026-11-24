@@ -727,31 +727,46 @@ function extractChordTextFromHtml(html) {
 async function fetchPageWithFallbacks(url) {
   const userProxy = (LS.get(PROXY, '') || '').trim();
   if (userProxy) {
-    const r = await fetch(userProxy.replace('{url}', encodeURIComponent(url)));
-    if (r.ok) return r.text();
-  }
-
-  const endpoints = [
-    `https://r.jina.ai/${url}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
-  ];
-
-  for (const endpoint of endpoints) {
     try {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 8500);
-      const res = await fetch(endpoint, { signal: ctrl.signal });
+      const timer = setTimeout(() => ctrl.abort(), 4000);
+      const r = await fetch(userProxy.replace('{url}', encodeURIComponent(url)), { signal: ctrl.signal });
       clearTimeout(timer);
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.length > 200 && !text.includes('Performing security verification')) {
-          return text;
-        }
+      if (r.ok) {
+        const text = await r.text();
+        if (text && text.length > 200) return text;
       }
     } catch {}
   }
 
-  throw new Error('ไม่สามารถดึงข้อมูลจากลิงก์นี้ได้');
+  const attempts = [
+    { endpoint: `https://r.jina.ai/${url}`, headers: { 'X-Engine': 'direct' } },
+    { endpoint: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, headers: {} }
+  ];
+
+  const fetchOne = async ({ endpoint, headers }) => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    try {
+      const res = await fetch(endpoint, { headers, signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      if (text && text.length > 200 && !text.includes('Performing security verification')) {
+        return text;
+      }
+      throw new Error('EMPTY_OR_BLOCKED');
+    } catch (err) {
+      clearTimeout(timer);
+      throw err;
+    }
+  };
+
+  try {
+    return await Promise.any(attempts.map(fetchOne));
+  } catch {
+    throw new Error('ไม่สามารถดึงข้อมูลจากลิงก์นี้ได้');
+  }
 }
 
 function extractRealChordsFromSnippet(title, snippet) {
@@ -821,8 +836,49 @@ function parseDdgLiteMarkdown(md, q) {
   return items;
 }
 
-// ค้นหาหน้าคอร์ดจริงจากเว็บ โดยอิง Chordtabs เป็นหลักตามโจทย์เล่นสด ไม่ดึงผลลัพธ์มั่วมากเกินไป
-async function searchRealWebChords(query) {
+const SEARCH_CACHE_KEY = 'nightChordbook.searchCache.v1';
+const SEARCH_CACHE_TTL_MS = 8 * 60 * 1000;
+const searchMemCache = new Map();
+const inFlightSearches = new Map();
+
+function readSearchCache(qLower) {
+  const now = Date.now();
+  const memHit = searchMemCache.get(qLower);
+  if (memHit && now - memHit.ts < SEARCH_CACHE_TTL_MS) {
+    return memHit.items;
+  }
+  try {
+    const raw = sessionStorage.getItem(SEARCH_CACHE_KEY);
+    if (raw) {
+      const store = JSON.parse(raw);
+      const entry = store && store[qLower];
+      if (entry && now - entry.ts < SEARCH_CACHE_TTL_MS && Array.isArray(entry.items)) {
+        searchMemCache.set(qLower, entry);
+        return entry.items;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+function writeSearchCache(qLower, items) {
+  const entry = { ts: Date.now(), items };
+  searchMemCache.set(qLower, entry);
+  try {
+    const raw = sessionStorage.getItem(SEARCH_CACHE_KEY);
+    const store = raw ? JSON.parse(raw) : {};
+    store[qLower] = entry;
+    const keys = Object.keys(store);
+    if (keys.length > 40) {
+      keys.sort((a, b) => (store[a].ts || 0) - (store[b].ts || 0));
+      for (let i = 0; i < keys.length - 40; i++) delete store[keys[i]];
+    }
+    sessionStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify(store));
+  } catch {}
+}
+
+// ค้นหาหน้าคอร์ดจริงจากเว็บ โดยอิง Chordtabs เป็นหลักพร้อมระบบแคชและรวมคำขอที่ซ้ำกัน
+async function searchRealWebChords(query, externalSignal = null) {
   const q = query.trim();
   if (!q) return { results: [], webTrueKey: '' };
 
@@ -843,54 +899,86 @@ async function searchRealWebChords(query) {
     }
   }
 
-  // 2. ดึงจาก Chordtabs เป็นหลัก (คอร์ดภาพแม่นยำที่สุด)
-  const fetchDdg = async (searchStr) => {
-    try {
-      const ddgUrl = `https://r.jina.ai/https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(searchStr)}`;
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 16000);
-      const res = await fetch(ddgUrl, { signal: ctrl.signal });
-      clearTimeout(timer);
-      if (res.ok) return parseDdgLiteMarkdown(await res.text(), q);
-    } catch {}
-    return [];
-  };
+  // 2. ตรวจแคช (in-memory + sessionStorage) และรวม in-flight promise
+  let relevantWeb = readSearchCache(qLower);
 
-  const chordtabsItems = await fetchDdg(`${q} site:chordtabs.in.th`);
+  if (!relevantWeb) {
+    let webPromise = inFlightSearches.get(qLower);
+    if (!webPromise) {
+      webPromise = (async () => {
+        const fetchDdg = async (searchStr) => {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 4500);
+          try {
+            const ddgUrl = `https://r.jina.ai/https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(searchStr)}`;
+            const res = await fetch(ddgUrl, { signal: ctrl.signal });
+            clearTimeout(timer);
+            if (res.ok) return parseDdgLiteMarkdown(await res.text(), q);
+          } catch {
+            clearTimeout(timer);
+          }
+          return [];
+        };
 
-  let secondaryItems = [];
-  // ถ้า Chordtabs มีน้อยกว่า 2 ผลลัพธ์ ให้ดึงเว็บข้อความคอร์ดเสริม
-  if (chordtabsItems.length < 2) {
-    secondaryItems = await fetchDdg(`${q} คอร์ด site:musicatm.com`);
+        const chordtabsItems = await fetchDdg(`${q} site:chordtabs.in.th`);
+
+        let secondaryItems = [];
+        if (chordtabsItems.length < 2) {
+          secondaryItems = await fetchDdg(`${q} คอร์ด site:musicatm.com`);
+        }
+
+        const seenUrls = new Set();
+        const rawWebList = [];
+        for (const item of [...chordtabsItems, ...secondaryItems]) {
+          if (seenUrls.has(item.url)) continue;
+          seenUrls.add(item.url);
+          rawWebList.push(item);
+        }
+
+        const hasExactMatches = rawWebList.some(it => (it.title || '').toLowerCase().includes(qLower));
+        const filtered = hasExactMatches
+          ? rawWebList.filter(it => (it.title || '').toLowerCase().includes(qLower) || (it.artist || '').toLowerCase().includes(qLower))
+          : rawWebList;
+
+        filtered.sort((a, b) => {
+          let scA = 0, scB = 0;
+          const aT = (a.title || '').toLowerCase(), bT = (b.title || '').toLowerCase();
+          const aA = (a.artist || '').toLowerCase(), bA = (b.artist || '').toLowerCase();
+
+          if (aT === qLower) scA += 100; else if (aT.includes(qLower)) scA += 60;
+          if (aA.includes(qLower)) scA += 30;
+
+          if (bT === qLower) scB += 100; else if (bT.includes(qLower)) scB += 60;
+          if (bA.includes(qLower)) scB += 30;
+
+          return scB - scA;
+        });
+
+        if (filtered.length) writeSearchCache(qLower, filtered);
+        return filtered;
+      })().finally(() => {
+        inFlightSearches.delete(qLower);
+      });
+      inFlightSearches.set(qLower, webPromise);
+    }
+
+    if (externalSignal) {
+      if (externalSignal.aborted) return { results: [], webTrueKey: '' };
+      relevantWeb = await new Promise(resolve => {
+        const onAbort = () => resolve([]);
+        externalSignal.addEventListener('abort', onAbort, { once: true });
+        webPromise.then(items => {
+          externalSignal.removeEventListener('abort', onAbort);
+          resolve(externalSignal.aborted ? [] : items);
+        }).catch(() => {
+          externalSignal.removeEventListener('abort', onAbort);
+          resolve([]);
+        });
+      });
+    } else {
+      relevantWeb = await webPromise.catch(() => []);
+    }
   }
-
-  const seenUrls = new Set();
-  const rawWebList = [];
-  for (const item of [...chordtabsItems, ...secondaryItems]) {
-    if (seenUrls.has(item.url)) continue;
-    seenUrls.add(item.url);
-    rawWebList.push(item);
-  }
-
-  // คัดกรองและจัดอันดับ: เพลงที่ชื่อตรงหรือมีคำค้นหาขึ้นก่อน
-  const hasExactMatches = rawWebList.some(it => (it.title || '').toLowerCase().includes(qLower));
-  const relevantWeb = hasExactMatches
-    ? rawWebList.filter(it => (it.title || '').toLowerCase().includes(qLower) || (it.artist || '').toLowerCase().includes(qLower))
-    : rawWebList;
-
-  relevantWeb.sort((a, b) => {
-    let scA = 0, scB = 0;
-    const aT = (a.title || '').toLowerCase(), bT = (b.title || '').toLowerCase();
-    const aA = (a.artist || '').toLowerCase(), bA = (b.artist || '').toLowerCase();
-
-    if (aT === qLower) scA += 100; else if (aT.includes(qLower)) scA += 60;
-    if (aA.includes(qLower)) scA += 30;
-
-    if (bT === qLower) scB += 100; else if (bT.includes(qLower)) scB += 60;
-    if (bA.includes(qLower)) scB += 30;
-
-    return scB - scA;
-  });
 
   for (const item of relevantWeb) {
     results.push(item);
@@ -943,98 +1031,247 @@ function autoExtractSectionsFromText(text) {
   return sections;
 }
 
-// ดึงตารางคอร์ดจริง หรือรูปภาพคอร์ดจาก Chordtabs และบันทึกลง IndexedDB ให้ออฟไลน์ 100%
-async function loadRealWebChordResult(item, allResults) {
+// ==============================================================================
+// Fast (< 5s) Chordtabs Image Pipeline Helpers
+// ==============================================================================
+const CT_IMG_MAP_KEY = 'nightChordbook.ctImgMap.v1';
+const ctResolvedImgMem = new Map();
+const inFlightCtMeta = new Map();
+const inFlightCtBgCache = new Set();
+
+function extractChordtabsId(url) {
+  if (!url || typeof url !== 'string') return '';
+  const m = url.match(/chordtabs\.in\.th\/(\d+)/i) || url.match(/[?&]song_id=(\d+)/i);
+  return m ? m[1] : '';
+}
+
+function getCachedCtImgUrl(songId) {
+  if (!songId) return '';
+  if (ctResolvedImgMem.has(songId)) return ctResolvedImgMem.get(songId);
+  try {
+    const map = JSON.parse(localStorage.getItem(CT_IMG_MAP_KEY) || '{}');
+    if (map && typeof map[songId] === 'string') {
+      ctResolvedImgMem.set(songId, map[songId]);
+      return map[songId];
+    }
+  } catch {}
+  return '';
+}
+
+function setCachedCtImgUrl(songId, imgUrl) {
+  if (!songId || !imgUrl) return;
+  ctResolvedImgMem.set(songId, imgUrl);
+  try {
+    const map = JSON.parse(localStorage.getItem(CT_IMG_MAP_KEY) || '{}');
+    map[songId] = imgUrl;
+    const keys = Object.keys(map);
+    if (keys.length > 200) {
+      for (let i = 0; i < keys.length - 200; i++) delete map[keys[i]];
+    }
+    localStorage.setItem(CT_IMG_MAP_KEY, JSON.stringify(map));
+  } catch {}
+}
+
+function resolveChordtabsMetaViaJina(targetUrl, timeoutMs = 4000) {
+  if (!targetUrl) return Promise.resolve(null);
+  if (inFlightCtMeta.has(targetUrl)) return inFlightCtMeta.get(targetUrl);
+
+  const p = (async () => {
+    const songId = extractChordtabsId(targetUrl);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const jinaUrl = `https://r.jina.ai/${targetUrl}`;
+      const res = await fetch(jinaUrl, {
+        headers: { 'X-Engine': 'direct', 'X-With-Images-Summary': 'true' },
+        signal: ctrl.signal
+      });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      const md = await res.text();
+
+      let chordImgUrl = '';
+      const imgMatch = md.match(/!\[.*?\]\((https:\/\/chordtabs\.in\.th\/img\/nm\/[^\s)]+\.(?:png|webp|jpg))\)/i) ||
+                       md.match(/(https:\/\/chordtabs\.in\.th\/img\/nm\/[^\s)]+\.(?:png|webp|jpg))/i);
+      if (imgMatch) {
+        chordImgUrl = imgMatch[1];
+        if (songId) setCachedCtImgUrl(songId, chordImgUrl);
+      }
+
+      let { title, artist, key } = parseTitleAndArtist('', md, targetUrl);
+      const titleLine = md.split('\n').find(l => l.startsWith('Title:') || l.startsWith('# '));
+      if (titleLine) {
+        const parsedH = parseTitleAndArtist(titleLine.replace(/^Title:\s*|^#\s*/, ''), md, targetUrl);
+        if (parsedH.title) title = parsedH.title;
+        if (parsedH.artist && !artist) artist = parsedH.artist;
+        if (parsedH.key && !key) key = parsedH.key;
+      }
+
+      const chordsUsed = [];
+      for (const cm of md.matchAll(/chord-([A-G][#b]?(?:m|maj|dim|aug|sus|\d+)*)/gi)) {
+        if (!chordsUsed.includes(cm[1])) chordsUsed.push(cm[1]);
+      }
+      if (!chordsUsed.length) {
+        for (const cm of md.matchAll(/\/([A-G][#b]?(?:m|maj|dim|aug|sus|\d+)*)\.webp/gi)) {
+          if (!chordsUsed.includes(cm[1])) chordsUsed.push(cm[1]);
+        }
+      }
+      if (!key && chordsUsed.length) key = chordsUsed[0];
+
+      return { chordImgUrl, title, artist, key, chordsUsed };
+    } catch {
+      clearTimeout(timer);
+      return null;
+    }
+  })().finally(() => {
+    inFlightCtMeta.delete(targetUrl);
+  });
+
+  inFlightCtMeta.set(targetUrl, p);
+  return p;
+}
+
+function cacheChordtabsImageInBackground(songId, imageUrl, songRef = null) {
+  if (!songId || !imageUrl) return;
+  const idbKey = `ct-img-${songId}`;
+  if (inFlightCtBgCache.has(idbKey)) return;
+  inFlightCtBgCache.add(idbKey);
+
+  // Extract raw origin URL if already wrapped in wsrv/weserv
+  let originUrl = imageUrl;
+  try {
+    if (imageUrl.includes('wsrv.nl') || imageUrl.includes('weserv.nl')) {
+      const u = new URL(imageUrl);
+      const inner = u.searchParams.get('url');
+      if (inner) originUrl = /^https?:\/\//i.test(inner) ? inner : 'https://' + inner;
+    }
+  } catch {}
+  if (originUrl.includes('chordtabs.in.th/img/nm/')) {
+    setCachedCtImgUrl(songId, originUrl);
+  }
+
+  (async () => {
+    try {
+      const existing = await idbGet(idbKey).catch(() => null);
+      if (existing) return;
+
+      const proxies = [
+        `https://wsrv.nl/?url=${encodeURIComponent(originUrl)}&output=webp&q=85&w=1400&we`,
+        `https://images.weserv.nl/?url=${encodeURIComponent(originUrl)}&output=webp`
+      ];
+
+      for (const proxyUrl of proxies) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 4000);
+        try {
+          const res = await fetch(proxyUrl, { signal: ctrl.signal });
+          clearTimeout(timer);
+          const ct = (res.headers.get('content-type') || '').toLowerCase();
+          if (res.ok && ct.startsWith('image/')) {
+            const blob = await res.blob();
+            if (blob && blob.size > 0) {
+              await idbPut(idbKey, blob);
+              // Upgrade in-memory songRef and saved book record if present
+              if (songRef && Array.isArray(songRef.images)) {
+                const idx = songRef.images.indexOf(imageUrl);
+                if (idx >= 0) songRef.images[idx] = idbKey;
+                else if (songRef.images.length === 1 && /^https?:\/\//i.test(songRef.images[0])) {
+                  songRef.images[0] = idbKey;
+                }
+              }
+              const book = loadBook();
+              const bi = songRef ? book.findIndex(s => s.id === songRef.id) : -1;
+              if (bi >= 0 && Array.isArray(book[bi].images)) {
+                const changed = book[bi].images.some(x => typeof x === 'string' && /^https?:\/\//i.test(x) && x.includes('chordtabs.in.th'));
+                if (changed) {
+                  book[bi].images = book[bi].images.map(x =>
+                    typeof x === 'string' && /^https?:\/\//i.test(x) && x.includes('chordtabs.in.th') ? idbKey : x
+                  );
+                  saveBook(book);
+                }
+              }
+              return;
+            }
+          }
+        } catch {
+          clearTimeout(timer);
+        }
+      }
+    } finally {
+      inFlightCtBgCache.delete(idbKey);
+    }
+  })();
+}
+
+// ดึงตารางคอร์ดจริง หรือรูปภาพคอร์ดจาก Chordtabs แบบความเร็วสูง (< 5 วินาที) พร้อมแคช IndexedDB ออฟไลน์
+async function loadRealWebChordResult(item, allResults = []) {
   const candidateUrls = [];
   if (item.url) candidateUrls.push(item.url);
 
-  // 1. ตรวจสอบว่าผลลัพธ์เป็น Chordtabs.in.th หรือไม่ (ดึงรูปภาพ + เนื้อเพลง + คีย์)
-  const isChordtabs = candidateUrls.some(u => u.includes('chordtabs.in.th'));
-  if (isChordtabs) {
-    for (const targetUrl of candidateUrls.filter(u => u.includes('chordtabs.in.th'))) {
-      try {
-        const jinaUrl = `https://r.jina.ai/${targetUrl}`;
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 20000);
-        const res = await fetch(jinaUrl, { headers: { 'X-With-Images-Summary': 'true' }, signal: ctrl.signal });
-        clearTimeout(timer);
+  // 1. Chordtabs.in.th Fast Path (< 5s): IDB first -> immediate direct <img> + parallel X-Engine: direct metadata/legacy resolution
+  const ctUrls = candidateUrls.filter(u => u.includes('chordtabs.in.th'));
+  if (ctUrls.length) {
+    const targetUrl = ctUrls[0];
+    const songId = extractChordtabsId(targetUrl);
 
-        if (res.ok) {
-          const md = await res.text();
+    if (songId) {
+      const idbKey = `ct-img-${songId}`;
+      const cachedBlob = await idbGet(idbKey).catch(() => null);
+      const needsMeta = !item.title || !item.artist || !item.key;
+      const metaPromise = (needsMeta && (!cachedBlob || navigator.onLine !== false))
+        ? resolveChordtabsMetaViaJina(targetUrl, 4000)
+        : null;
 
-          // หา Chord Image URL
-          let chordImgUrl = '';
-          const imgMatch = md.match(/!\[.*?\]\((https:\/\/chordtabs\.in\.th\/img\/nm\/[^\s)]+\.(?:png|webp|jpg))\)/i) ||
-                           md.match(/(https:\/\/chordtabs\.in\.th\/img\/nm\/[^\s)]+\.(?:png|webp|jpg))/i);
-          if (imgMatch) {
-            chordImgUrl = imgMatch[1];
-          } else {
-            const idMatch = targetUrl.match(/chordtabs\.in\.th\/(\d+)/);
-            if (idMatch) chordImgUrl = `https://chordtabs.in.th/img/nm/${idMatch[1]}.png`;
-          }
-
-          // สกัด Title, Artist, Key จาก Markdown และ Header
-          let { title, artist, key } = parseTitleAndArtist(item.title || '', md, targetUrl);
-          if (item.artist) artist = item.artist;
-          const titleLine = md.split('\n').find(l => l.startsWith('Title:') || l.startsWith('# '));
-          if (titleLine) {
-            const parsedH = parseTitleAndArtist(titleLine.replace(/^Title:\s*|^#\s*/, ''), md, targetUrl);
-            if (parsedH.title) title = parsedH.title;
-            if (parsedH.artist && !artist) artist = parsedH.artist;
-            if (parsedH.key && !key) key = parsedH.key;
-          }
-
-          // ตรวจสอบคอร์ดที่ใช้ในเพลงจากไอคอนคอร์ด
-          const chordsUsed = [];
-          for (const cm of md.matchAll(/chord-([A-G][#b]?(?:m|maj|dim|aug|sus|\d+)*)/gi)) {
-            if (!chordsUsed.includes(cm[1])) chordsUsed.push(cm[1]);
-          }
-          if (!chordsUsed.length) {
-            for (const cm of md.matchAll(/\/([A-G][#b]?(?:m|maj|dim|aug|sus|\d+)*)\.webp/gi)) {
-              if (!chordsUsed.includes(cm[1])) chordsUsed.push(cm[1]);
-            }
-          }
-          if (!key && chordsUsed.length) key = chordsUsed[0];
-
-          // ดาวน์โหลดรูปภาพคอร์ดและบันทึกลง IndexedDB ให้เล่นออฟไลน์ 100% (ไม่แนบเนื้อเพลงที่รกตา)
-          const images = [];
-          if (chordImgUrl) {
-            const proxyImg = `https://images.weserv.nl/?url=${encodeURIComponent(chordImgUrl)}&output=webp`;
-            try {
-              const imgCtrl = new AbortController();
-              const imgTimer = setTimeout(() => imgCtrl.abort(), 7000);
-              const imgRes = await fetch(proxyImg, { signal: imgCtrl.signal });
-              clearTimeout(imgTimer);
-              if (imgRes.ok) {
-                const blob = await imgRes.blob();
-                const imgId = 'ct-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
-                await idbPut(imgId, blob);
-                images.push(imgId);
-              } else {
-                images.push(proxyImg);
-              }
-            } catch (imgErr) {
-              console.warn('Failed to cache image in idb, using proxy directly:', imgErr);
-              images.push(proxyImg);
-            }
-            if (!images.length) images.push(proxyImg);
-          }
-
-          return {
-            id: item.id || ('ct-' + Date.now().toString(36)),
-            title: title || item.title,
-            artist: artist || item.artist || '',
-            key: key || item.key || (chordsUsed[0] || 'C'),
-            text: '', // ตัดเนื้อเพลงที่แนบมาออก
-            images,
-            sections: [],
-            src: targetUrl,
-            shift: 0
-          };
-        }
-      } catch (err) {
-        console.warn('Chordtabs direct load error:', err);
+      if (cachedBlob) {
+        return {
+          id: item.id || ('ct-' + songId),
+          title: item.title || `Chordtabs #${songId}`,
+          artist: item.artist || '',
+          key: item.key || 'C',
+          text: '',
+          images: [idbKey],
+          sections: [],
+          src: targetUrl,
+          shift: 0,
+          _ctSongId: songId,
+          _metaPromise: metaPromise
+        };
       }
+
+      const cachedImgUrl = getCachedCtImgUrl(songId);
+      const directImgUrl = cachedImgUrl || `https://chordtabs.in.th/img/nm/${songId}.png`;
+      // Always kick off X-Engine: direct in parallel on cold open so legacy IDs (e.g. 620 -> c0013003.png) resolve in ~0.8-1.5s without waiting!
+      const parallelMetaPromise = metaPromise || resolveChordtabsMetaViaJina(targetUrl, 4000);
+
+      return {
+        id: item.id || ('ct-' + songId),
+        title: item.title || `Chordtabs #${songId}`,
+        artist: item.artist || '',
+        key: item.key || 'C',
+        text: '',
+        images: [directImgUrl],
+        sections: [],
+        src: targetUrl,
+        shift: 0,
+        _ctSongId: songId,
+        _metaPromise: parallelMetaPromise
+      };
+    }
+
+    // Non-numeric Chordtabs URL fallback: resolve via X-Engine: direct (4.0s timeout)
+    const meta = await resolveChordtabsMetaViaJina(targetUrl, 4000);
+    if (meta && meta.chordImgUrl) {
+      return {
+        id: item.id || ('ct-' + Date.now().toString(36)),
+        title: meta.title || item.title || 'Chordtabs',
+        artist: item.artist || meta.artist || '',
+        key: meta.key || item.key || 'C',
+        text: '',
+        images: [meta.chordImgUrl],
+        sections: [],
+        src: targetUrl,
+        shift: 0
+      };
     }
   }
 
@@ -1045,17 +1282,22 @@ async function loadRealWebChordResult(item, allResults) {
     }
   }
 
-  if (!candidateUrls.some(u => u.includes('musicatm.com'))) {
+  if (!candidateUrls.some(u => u.includes('musicatm.com')) && item.title) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
     try {
       const ddgUrl = `https://r.jina.ai/https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(item.title + ' คอร์ด site:musicatm.com')}`;
-      const res = await fetch(ddgUrl);
+      const res = await fetch(ddgUrl, { signal: ctrl.signal });
+      clearTimeout(timer);
       if (res.ok) {
         const extra = parseDdgLiteMarkdown(await res.text(), item.title);
         for (const ex of extra) {
           if (ex.url && !candidateUrls.includes(ex.url)) candidateUrls.push(ex.url);
         }
       }
-    } catch {}
+    } catch {
+      clearTimeout(timer);
+    }
   }
 
   for (const targetUrl of candidateUrls) {
@@ -1067,7 +1309,7 @@ async function loadRealWebChordResult(item, allResults) {
 
       if (formattedText && formattedText.length > 80 && sheetChords.length >= 2) {
         const actualSheetKey = detectTrueKeyFromChords(sheetChords, formattedText);
-        const parsed = parseTitleAndArtist(rawTitle, targetUrl);
+        const parsed = parseTitleAndArtist(rawTitle, '', targetUrl);
 
         return {
           id: item.id,
@@ -1198,7 +1440,7 @@ const idbPut = (id, b) => idbTx('readwrite', s => s.put(b, id));
 const idbGet = id => idbTx('readonly', s => s.get(id));
 const idbDel = id => idbTx('readwrite', s => s.delete(id));
 
-function shrinkImage(file, max = 4096) {
+function shrinkImage(file, max = 2048) {
   return new Promise((res, rej) => {
     const u = URL.createObjectURL(file), im = new Image();
     im.onload = () => {
@@ -1254,14 +1496,18 @@ function playMetronomeClick(isDownbeat) {
   osc.stop(now + 0.05);
 }
 
+function updateMetroBtnLabel() {
+  const btnEl = $('#metroBtn');
+  if (!btnEl) return;
+  btnEl.classList.toggle('metroOn', metroPlaying);
+  btnEl.textContent = metroPlaying ? `⏹️ ${metroBpm} BPM` : `⏱️ ${metroBpm} BPM`;
+}
+
 function setMetronome(on) {
+  metroBpm = Math.min(300, Math.max(30, parseInt(metroBpm, 10) || 100));
   metroPlaying = on;
   clearInterval(metroTimer);
-  const btnEl = $('#metroBtn');
-  if (btnEl) {
-    btnEl.classList.toggle('metroOn', on);
-    btnEl.textContent = on ? `⏹️ ${metroBpm} BPM` : `⏱️ ${metroBpm} BPM`;
-  }
+  updateMetroBtnLabel();
   if (on) {
     metroBeat = 0;
     playMetronomeClick(true);
@@ -1286,9 +1532,7 @@ if ($('#tapTempoBtn')) {
       for (let i = 1; i < tapTimes.length; i++) sum += tapTimes[i] - tapTimes[i - 1];
       const avgMs = sum / (tapTimes.length - 1);
       metroBpm = Math.min(240, Math.max(45, Math.round(60000 / avgMs)));
-      if ($('#metroBtn')) {
-        $('#metroBtn').textContent = metroPlaying ? `⏹️ ${metroBpm} BPM` : `⏱️ ${metroBpm} BPM`;
-      }
+      updateMetroBtnLabel();
       if (metroPlaying) setMetronome(true);
       toast(`⏱️ จังหวะ Tap Tempo: ${metroBpm} BPM`);
     } else {
@@ -1333,6 +1577,13 @@ function updateBottomNav(viewName) {
 }
 
 function show(name, push = true) {
+  const prevView = document.body.dataset.view;
+  if (prevView === 'editor' && name !== 'editor' && typeof revokeEdImgUrls === 'function') {
+    revokeEdImgUrls();
+    edImgs = [];
+    const thumbsEl = $('#thumbs');
+    if (thumbsEl) thumbsEl.innerHTML = '';
+  }
   document.body.dataset.view = name;
   $('#placeholder').hidden = !(name === 'home' || name === 'playlists');
   $('#editorView').hidden = name !== 'editor';
@@ -1440,6 +1691,7 @@ if ($('#extGoogleModalBtn')) {
 }
 
 let searchSeq = 0;
+let onlineSearchCtrl = null;
 async function runInAppOnlineSearch() {
   const q = $('#q').value.trim();
   if (!q) {
@@ -1452,6 +1704,12 @@ async function runInAppOnlineSearch() {
     show('home', false);
   }
 
+  if (onlineSearchCtrl) {
+    try { onlineSearchCtrl.abort(); } catch {}
+  }
+  onlineSearchCtrl = new AbortController();
+  const { signal } = onlineSearchCtrl;
+
   const seq = ++searchSeq;
   const box = $('#resultsBox'), list = $('#results'), btnEl = $('#onlineSearchBtn');
   box.hidden = false;
@@ -1459,9 +1717,16 @@ async function runInAppOnlineSearch() {
   btnEl.disabled = true;
   list.innerHTML = `<div class="empty"><span class="spinner"></span> กำลังสืบค้นตารางคอร์ดจริงจากเว็บคอร์ด…</div>`;
 
-  const { results: items, webTrueKey } = await searchRealWebChords(q);
-  if (seq !== searchSeq) return;
-  btnEl.disabled = false;
+  let items = [];
+  let webTrueKey = '';
+  try {
+    const res = await searchRealWebChords(q, signal);
+    items = res.results;
+    webTrueKey = res.webTrueKey;
+  } finally {
+    if (seq === searchSeq) btnEl.disabled = false;
+  }
+  if (seq !== searchSeq || signal.aborted) return;
 
   const keyInfo = webTrueKey ? ` · คีย์ต้นฉบับ: ${webTrueKey}` : '';
   $('#resultsTitle').textContent = `🌐 คอร์ดจากเว็บสำหรับ “${q}” (${items.length})${keyInfo}`;
@@ -1469,7 +1734,7 @@ async function runInAppOnlineSearch() {
 
   if (!items.length) {
     const empty = mk('div', 'empty');
-    empty.innerHTML = `<b>🔍</b>ไม่พบหน้าเว็บคอร์ดสำหรับ “${q}”`;
+    empty.innerHTML = `<b>🔍</b>ไม่พบหน้าเว็บคอร์ดสำหรับ “${escapeHtml(q)}”`;
     const customBtn = btn('🔗 วางลิงก์เว็บคอร์ดเอง / พิมพ์คอร์ด', () => openInAppWebFinderModal(q), 'primary small');
     customBtn.style.marginTop = '10px';
     empty.appendChild(customBtn);
@@ -1536,6 +1801,14 @@ $('#searchForm').onsubmit = e => {
 };
 
 $('#clearSearchBtn').onclick = () => {
+  clearTimeout(deb);
+  clearTimeout(onlineDeb);
+  if (onlineSearchCtrl) {
+    try { onlineSearchCtrl.abort(); } catch {}
+    onlineSearchCtrl = null;
+  }
+  const osBtn = $('#onlineSearchBtn');
+  if (osBtn) osBtn.disabled = false;
   $('#q').value = '';
   $('#clearSearchBtn').hidden = true;
   $('#resultsBox').hidden = true;
@@ -1599,12 +1872,18 @@ function doInstantLocalFilter() {
 $('#q').oninput = () => {
   clearTimeout(deb);
   clearTimeout(onlineDeb);
+  if (onlineSearchCtrl) {
+    try { onlineSearchCtrl.abort(); } catch {}
+    onlineSearchCtrl = null;
+  }
+  const osBtn = $('#onlineSearchBtn');
+  if (osBtn) osBtn.disabled = false;
   deb = setTimeout(doInstantLocalFilter, 120);
   const qVal = $('#q').value.trim();
   if (qVal.length >= 2) {
     onlineDeb = setTimeout(() => {
       runInAppOnlineSearch();
-    }, 600);
+    }, 320);
   }
 };
 
@@ -1715,14 +1994,12 @@ function renderSongbook() {
     favButton.title = 'รายการโปรด';
     actions.appendChild(favButton);
 
-    if (isSaved) {
-      const delButton = btn('🗑', (e) => {
-        e.stopPropagation();
-        removeSong(s.id, s.title);
-      });
-      delButton.title = 'ลบเพลงออกจากคลัง';
-      actions.appendChild(delButton);
-    }
+    const delButton = btn('🗑', (e) => {
+      e.stopPropagation();
+      removeSong(s.id, s.title);
+    });
+    delButton.title = 'ลบเพลงออกจากคลัง';
+    actions.appendChild(delButton);
 
     row.append(open, actions);
     list.appendChild(row);
@@ -1966,8 +2243,14 @@ function updateSetlistQueueBar() {
     if (curSong.targetKey) pills.appendChild(mk('span', 'cuePill', `🎹 คีย์เล่นจริง: ${curSong.targetKey}`));
     if (curSong.bpm) {
       pills.appendChild(mk('span', 'cuePill', `⏱️ ${curSong.bpm} BPM`));
-      metroBpm = parseInt(curSong.bpm, 10) || metroBpm;
-      updateMetroBtnLabel();
+      const parsedBpm = parseInt(curSong.bpm, 10);
+      if (!Number.isNaN(parsedBpm)) {
+        const clampedBpm = Math.min(300, Math.max(30, parsedBpm));
+        const bpmChanged = clampedBpm !== metroBpm;
+        metroBpm = clampedBpm;
+        updateMetroBtnLabel();
+        if (metroPlaying && bpmChanged) setMetronome(true);
+      }
     }
 
     const nextRow = $('#liveCueNextRow');
@@ -2118,9 +2401,41 @@ function renderSong(reload = true) {
   updateSetlistQueueBar();
 }
 
+function buildImageFallbackChain(primaryUrl, resolvedLegacyUrl = '') {
+  const urls = [];
+  const add = u => {
+    if (u && !urls.includes(u)) urls.push(u);
+  };
+  if (resolvedLegacyUrl && resolvedLegacyUrl !== primaryUrl) {
+    add(resolvedLegacyUrl);
+    add(`https://wsrv.nl/?url=${encodeURIComponent(resolvedLegacyUrl)}&output=webp&q=85&w=1400&we`);
+    add(`https://images.weserv.nl/?url=${encodeURIComponent(resolvedLegacyUrl)}&output=webp`);
+  }
+  const cleanOrigin = primaryUrl.replace(/^https?:\/\/(?:wsrv\.nl|images\.weserv\.nl)\/\?url=/i, '').split('&')[0];
+  let baseUrl = primaryUrl;
+  try {
+    if (primaryUrl.includes('wsrv.nl') || primaryUrl.includes('weserv.nl')) {
+      baseUrl = decodeURIComponent(cleanOrigin);
+      if (!/^https?:\/\//i.test(baseUrl)) baseUrl = 'https://' + baseUrl;
+    }
+  } catch {}
+  add(`https://wsrv.nl/?url=${encodeURIComponent(baseUrl)}&output=webp&q=85&w=1400&we`);
+  add(`https://images.weserv.nl/?url=${encodeURIComponent(baseUrl)}&output=webp`);
+  if (/\.png(\?.*)?$/i.test(baseUrl)) {
+    const jpgUrl = baseUrl.replace(/\.png(\?.*)?$/i, '.jpg$1');
+    const webpUrl = baseUrl.replace(/\.png(\?.*)?$/i, '.webp$1');
+    add(jpgUrl);
+    add(`https://wsrv.nl/?url=${encodeURIComponent(jpgUrl)}&output=webp&q=85&w=1400&we`);
+    add(webpUrl);
+  }
+  return urls;
+}
+
 async function loadGallery(song) {
   const tok = ++galTok, g = $('#gallery'), wrap = $('#galleryWrap');
-  galUrls.forEach(u => URL.revokeObjectURL(u));
+  galUrls.forEach(u => {
+    if (typeof u === 'string' && u.startsWith('blob:')) URL.revokeObjectURL(u);
+  });
   galUrls = [];
   g.replaceChildren();
   if (!song.images || !song.images.length) {
@@ -2131,31 +2446,172 @@ async function loadGallery(song) {
   if (wrap) wrap.hidden = false;
   g.hidden = false;
 
-  for (const id of song.images) {
+  const ctSongId = song._ctSongId || extractChordtabsId(song.src || '');
+  const resolvedItems = await Promise.all(song.images.map(async id => {
     if (typeof id === 'string' && (id.startsWith('http://') || id.startsWith('https://') || id.startsWith('data:'))) {
-      const im = mk('img', 'sheetImg');
-      if (stageInvertImg) im.classList.add('invertFilter');
-      im.src = id;
-      im.alt = 'ภาพคอร์ด';
-      im.onclick = () => openLightbox(id);
-      g.appendChild(im);
-      continue;
+      return { kind: 'url', id, url: id };
     }
-    let b = await getImg(id);
-    if (tok !== galTok) return;
-    if (!b) {
+    const b = await getImg(id);
+    if (!b) return { kind: 'missing', id };
+    return { kind: 'blob', id, url: URL.createObjectURL(b) };
+  }));
+
+  if (tok !== galTok) {
+    resolvedItems.forEach(r => {
+      if (r.kind === 'blob' && r.url) URL.revokeObjectURL(r.url);
+    });
+    return;
+  }
+
+  resolvedItems.forEach((entry, idx) => {
+    if (entry.kind === 'missing') {
       g.appendChild(mk('div', 'empty', 'ไม่พบภาพในเครื่อง (อาจลบไปแล้ว)'));
-      continue;
+      return;
     }
-    const url = URL.createObjectURL(b);
-    galUrls.push(url);
+
+    const galIdx = galUrls.length;
+    galUrls.push(entry.url);
+
+    const imgWrap = mk('div', 'sheetImgWrap');
+    const isRemote = entry.kind === 'url' && /^https?:\/\//i.test(entry.url);
+    const skel = mk('div', 'sheetImgSkeleton');
+    skel.innerHTML = `<span class="spinner"></span><span>กำลังโหลดภาพคอร์ด…</span>`;
+
     const im = mk('img', 'sheetImg');
     if (stageInvertImg) im.classList.add('invertFilter');
-    im.src = url;
     im.alt = 'ภาพคอร์ด';
-    im.onclick = () => openLightbox(url);
-    g.appendChild(im);
+    im.decoding = 'async';
+    try { im.fetchPriority = 'high'; } catch {}
+    im.referrerPolicy = 'no-referrer';
+    im.onclick = () => openLightbox(galUrls[galIdx] || im.src);
+
+    const setImgSrc = url => {
+      if (typeof url === 'string' && (url.includes('wsrv.nl') || url.includes('weserv.nl'))) {
+        im.crossOrigin = 'anonymous';
+      } else {
+        im.removeAttribute('crossorigin');
+      }
+      im.src = url;
+    };
+
+    let fallbackQueue = [];
+    let triedMetaResolve = false;
+    let settled = false;
+
+    const clearLoading = () => {
+      imgWrap.classList.remove('loading');
+      if (skel.parentNode) skel.remove();
+    };
+
+    const showRetryBox = () => {
+      clearLoading();
+      im.hidden = true;
+      const errBox = mk('div', 'sheetImgError');
+      errBox.appendChild(mk('div', null, 'ไม่สามารถโหลดภาพคอร์ดได้ในขณะนี้'));
+      const retryBtn = btn('🔄 ลองโหลดใหม่', () => {
+        errBox.remove();
+        im.hidden = false;
+        settled = false;
+        triedMetaResolve = false;
+        fallbackQueue = [];
+        song._metaPromise = null;
+        imgWrap.classList.add('loading');
+        imgWrap.prepend(skel);
+        setImgSrc(entry.url);
+      }, 'primary small');
+      errBox.appendChild(retryBtn);
+      imgWrap.appendChild(errBox);
+    };
+
+    im.onload = () => {
+      if (tok !== galTok || settled) return;
+      if (im.naturalWidth === 0) {
+        im.onerror();
+        return;
+      }
+      settled = true;
+      clearLoading();
+      galUrls[galIdx] = im.src;
+      if (isRemote && ctSongId) {
+        cacheChordtabsImageInBackground(ctSongId, im.src, song);
+      }
+    };
+
+    im.onerror = async () => {
+      if (tok !== galTok || settled) return;
+      if (isRemote && !triedMetaResolve && ctSongId && song.src && song.src.includes('chordtabs.in.th')) {
+        triedMetaResolve = true;
+        let legacyUrl = '';
+        try {
+          const meta = song._metaPromise
+            ? await song._metaPromise
+            : await resolveChordtabsMetaViaJina(song.src, 4000);
+          if (tok !== galTok || settled) return;
+          if (meta && meta.chordImgUrl) {
+            legacyUrl = meta.chordImgUrl;
+            if (current && current.song === song) {
+              if (meta.title && /^Chordtabs #\d+$/.test(song.title || '')) {
+                song.title = meta.title;
+                $('#cTitle').textContent = song.title;
+              }
+              if (meta.artist && !song.artist) {
+                song.artist = meta.artist;
+                $('#cArtist').textContent = song.artist;
+              }
+              if (meta.key && (!song.key || song.key === 'C')) {
+                song.key = meta.key;
+                $('#cKeyOrig').textContent = song.key;
+                $('#cKeyNow').textContent = song.key;
+                $('#dockKey').textContent = song.key;
+              }
+            }
+          }
+        } catch {}
+        fallbackQueue = buildImageFallbackChain(entry.url, legacyUrl);
+      } else if (isRemote && !fallbackQueue.length && !triedMetaResolve) {
+        triedMetaResolve = true;
+        fallbackQueue = buildImageFallbackChain(entry.url);
+      }
+
+      if (fallbackQueue.length) {
+        const nextUrl = fallbackQueue.shift();
+        galUrls[galIdx] = nextUrl;
+        setImgSrc(nextUrl);
+        return;
+      }
+      showRetryBox();
+    };
+
+    if (isRemote) {
+      imgWrap.classList.add('loading');
+      imgWrap.appendChild(skel);
+    }
+    imgWrap.appendChild(im);
+    g.appendChild(imgWrap);
+    setImgSrc(entry.url);
+  });
+
+  // Enrich title/artist/key in background if metadata promise resolves while viewing
+  if (song._metaPromise) {
+    song._metaPromise.then(meta => {
+      if (tok !== galTok || !meta || !current || current.song !== song) return;
+      let changed = false;
+      if (meta.title && (!song.title || /^Chordtabs #\d+$/.test(song.title))) {
+        song.title = meta.title;
+        changed = true;
+      }
+      if (meta.artist && !song.artist) {
+        song.artist = meta.artist;
+        changed = true;
+      }
+      if (meta.key && (!song.key || song.key === 'C')) {
+        song.key = meta.key;
+        changed = true;
+      }
+      if (changed) renderSong(false);
+    }).catch(() => {});
   }
+
   applyImgInvertFilter();
 }
 
@@ -2166,6 +2622,7 @@ const setShift = n => {
 $('#upBtn').onclick = () => setShift(current.shift + 1);
 $('#downBtn').onclick = () => setShift(current.shift - 1);
 $('#resetBtn').onclick = () => openDirectKeyPickerModal();
+if ($('#keyPickerTrigger')) $('#keyPickerTrigger').onclick = () => openDirectKeyPickerModal();
 
 $('#saveBtn').onclick = () => {
   const { song, shift } = current;
@@ -2176,6 +2633,7 @@ $('#saveBtn').onclick = () => {
     key: detectKey(song.text) || song.key,
     text: song.text || '',
     images: song.images || [],
+    sections: song.sections || [],
     src: song.src || '',
     shift,
     savedAt: Date.now()
@@ -2192,7 +2650,14 @@ $('#deleteBtn').onclick = () => removeSong(current.song.id, current.song.title);
 $('#editBtn').onclick = () => openEditor(current.song);
 
 function openLightbox(url) {
-  $('#lbImg').src = url;
+  const lbImg = $('#lbImg');
+  lbImg.referrerPolicy = 'no-referrer';
+  if (typeof url === 'string' && (url.includes('wsrv.nl') || url.includes('weserv.nl'))) {
+    lbImg.crossOrigin = 'anonymous';
+  } else {
+    lbImg.removeAttribute('crossorigin');
+  }
+  lbImg.src = url;
   $('#lbBody').classList.remove('zoom');
   $('#lightbox').hidden = false;
 }
@@ -2399,7 +2864,19 @@ if ($('#autoExtractSectionsBtn')) {
   };
 }
 
+function revokeEdImgUrls() {
+  for (const im of edImgs) {
+    if (im && typeof im.url === 'string' && im.url.startsWith('blob:')) {
+      URL.revokeObjectURL(im.url);
+    }
+  }
+}
+
+let edTok = 0;
+
 async function openEditor(song, prefill = '') {
+  const tok = ++edTok;
+  revokeEdImgUrls();
   const keep = song && (song.id.startsWith('u-') || song.id.startsWith('sh-') || loadBook().some(s => s.id === song.id));
   editingId = keep ? song.id : null;
   edImgs = [];
@@ -2417,10 +2894,24 @@ async function openEditor(song, prefill = '') {
   switchEditorMode('edit');
   show('editor');
   renderThumbs();
-  if (keep && song.images && song.images.length) {
-    for (const id of song.images) {
+  if (song && song.images && song.images.length) {
+    const loadedEntries = await Promise.all(song.images.map(async id => {
+      if (typeof id === 'string' && (id.startsWith('http://') || id.startsWith('https://') || id.startsWith('data:'))) {
+        return { id, blob: null, url: id, isNew: false };
+      }
       const b = await getImg(id);
-      if (b) edImgs.push({ id, blob: b, url: URL.createObjectURL(b), isNew: false });
+      return b ? { id, blob: b, url: URL.createObjectURL(b), isNew: false } : null;
+    }));
+    if (tok !== edTok || document.body.dataset.view !== 'editor') {
+      for (const entry of loadedEntries) {
+        if (entry && typeof entry.url === 'string' && entry.url.startsWith('blob:')) {
+          URL.revokeObjectURL(entry.url);
+        }
+      }
+      return;
+    }
+    for (const entry of loadedEntries) {
+      if (entry) edImgs.push(entry);
     }
     renderThumbs();
   }
@@ -2431,17 +2922,21 @@ function renderThumbs() {
   box.replaceChildren();
   edImgs.forEach((im, i) => {
     const d = mk('div', 'thumb'), img = mk('img');
-    img.src = im.url;
+    img.referrerPolicy = 'no-referrer';
     img.alt = '';
+    img.src = im.url;
 
     const delBtn = btn('✕', () => {
-      if (!im.isNew) edRemoved.push(im.id);
+      if (!im.isNew && typeof im.id === 'string' && !im.id.startsWith('http://') && !im.id.startsWith('https://') && !im.id.startsWith('data:')) {
+        edRemoved.push(im.id);
+      }
+      if (im.url && im.url.startsWith('blob:')) URL.revokeObjectURL(im.url);
       edImgs.splice(i, 1);
       renderThumbs();
     }, 'delImgBtn');
 
     const ocrBtn = btn('🔍 สแกน', () => {
-      runOcrOnImage(im.blob);
+      runOcrOnImage(im);
     }, 'ocrThisBtn');
 
     d.append(img, delBtn, ocrBtn);
@@ -2450,17 +2945,26 @@ function renderThumbs() {
 }
 
 async function addImageFiles(files) {
-  let n = 0;
-  for (const f of files) {
-    if (!f.type || !f.type.startsWith('image/')) continue;
+  const validFiles = [...files].filter(f => f && f.type && f.type.startsWith('image/'));
+  if (!validFiles.length) return;
+  let failed = 0;
+  const results = await Promise.all(validFiles.map(async f => {
     try {
       const blob = await shrinkImage(f);
-      edImgs.push({ id: 'img-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7), blob, url: URL.createObjectURL(blob), isNew: true });
-      n++;
+      return { id: 'img-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7), blob, url: URL.createObjectURL(blob), isNew: true };
     } catch {
-      toast('อ่านภาพนี้ไม่ได้ (ลองแคปหน้าจอเป็น PNG/JPG)', true);
+      failed++;
+      return null;
+    }
+  }));
+  let n = 0;
+  for (const r of results) {
+    if (r) {
+      edImgs.push(r);
+      n++;
     }
   }
+  if (failed) toast('อ่านบางภาพไม่ได้ (ลองแคปหน้าจอเป็น PNG/JPG)', true);
   renderThumbs();
   if (n) toast(`แนบ ${n} ภาพแล้ว (กด “🔍 สแกน” บนภาพเพื่อแปลงเป็นข้อความได้)`);
 }
@@ -2534,7 +3038,43 @@ $('#convertBracketBtn').onclick = () => {
   toast('🔤 แปลงคอร์ดเป็น [G]เนื้อเพลง เรียบร้อย (คอร์ดไม่เพี้ยนบนมือถือ) ✔');
 };
 
-async function runOcrOnImage(blob) {
+async function fetchImageBlobForOcr(url) {
+  if (!url) throw new Error('ไม่พบภาพสำหรับสแกน');
+  if (url.startsWith('data:') || url.startsWith('blob:')) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('อ่านภาพไม่ได้');
+    return res.blob();
+  }
+  let originUrl = url;
+  try {
+    if (url.includes('wsrv.nl') || url.includes('weserv.nl')) {
+      const u = new URL(url);
+      const inner = u.searchParams.get('url');
+      if (inner) originUrl = /^https?:\/\//i.test(inner) ? inner : 'https://' + inner;
+    }
+  } catch {}
+  const candidates = [
+    `https://wsrv.nl/?url=${encodeURIComponent(originUrl)}&output=png`,
+    `https://images.weserv.nl/?url=${encodeURIComponent(originUrl)}&output=png`
+  ];
+  for (const proxyUrl of candidates) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    try {
+      const res = await fetch(proxyUrl, { signal: ctrl.signal });
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      if (res.ok && ct.startsWith('image/')) {
+        const b = await res.blob();
+        if (b && b.size > 0) return b;
+      }
+    } catch {} finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new Error('ไม่สามารถดาวน์โหลดภาพจากเว็บเพื่อสแกน OCR ได้');
+}
+
+async function runOcrOnImage(imgOrBlob) {
   modal('🔍 AI สแกนคอร์ดจากภาพ', (box, close) => {
     const statusText = mk('p', 'muted', 'กำลังเตรียมโมดูลสแกน...');
     const progressBar = mk('div', 'progressBar');
@@ -2544,26 +3084,41 @@ async function runOcrOnImage(blob) {
 
     box.append(statusText, progressBar, cancelBtn);
 
-    scanImageWithOCR(blob, (msg, pct) => {
-      statusText.textContent = msg;
-      progressFill.style.width = pct + '%';
-    }).then(extractedText => {
-      if (!extractedText || !extractedText.trim()) {
-        statusText.textContent = 'ไม่พบข้อความในภาพนี้';
-        return;
+    const resolveBlob = async () => {
+      if (imgOrBlob instanceof Blob) return imgOrBlob;
+      if (imgOrBlob && imgOrBlob.blob instanceof Blob) return imgOrBlob.blob;
+      if (imgOrBlob && imgOrBlob.url) {
+        statusText.textContent = 'กำลังดึงภาพต้นฉบับเพื่อเตรียมสแกน...';
+        const b = await fetchImageBlobForOcr(imgOrBlob.url);
+        imgOrBlob.blob = b;
+        return b;
       }
-      close();
-      const formatted = smartFormatChordSheet(extractedText, false);
-      const existing = $('#fText').value.trim();
-      $('#fText').value = existing ? existing + '\n\n' + formatted : formatted;
+      throw new Error('ไม่พบข้อมูลรูปภาพ');
+    };
 
-      const detected = detectKey($('#fText').value);
-      if (detected) $('#fKey').value = detected;
-      toast('สแกนเสร็จสิ้น — นำเข้าเนื้อเพลงและคอร์ดแล้ว ✔');
-    }).catch(err => {
-      statusText.textContent = 'เกิดข้อผิดพลาดในการสแกน: ' + (err.message || err);
-      statusText.className = 'err';
-    });
+    resolveBlob()
+      .then(blob => scanImageWithOCR(blob, (msg, pct) => {
+        statusText.textContent = msg;
+        progressFill.style.width = pct + '%';
+      }))
+      .then(extractedText => {
+        if (!extractedText || !extractedText.trim()) {
+          statusText.textContent = 'ไม่พบข้อความในภาพนี้';
+          return;
+        }
+        close();
+        const formatted = smartFormatChordSheet(extractedText, false);
+        const existing = $('#fText').value.trim();
+        $('#fText').value = existing ? existing + '\n\n' + formatted : formatted;
+
+        const detected = detectKey($('#fText').value);
+        if (detected) $('#fKey').value = detected;
+        toast('สแกนเสร็จสิ้น — นำเข้าเนื้อเพลงและคอร์ดแล้ว ✔');
+      })
+      .catch(err => {
+        statusText.textContent = 'เกิดข้อผิดพลาดในการสแกน: ' + (err.message || err);
+        statusText.className = 'err';
+      });
   });
 }
 
@@ -2573,7 +3128,7 @@ $('#ocrScanBtn').onclick = () => {
     toast('เลือกรูปภาพคอร์ดที่ต้องการสแกน');
     return;
   }
-  runOcrOnImage(edImgs[0].blob);
+  runOcrOnImage(edImgs[0]);
 };
 
 $('#editorForm').onsubmit = async e => {
@@ -2674,22 +3229,42 @@ async function importFromUrl() {
       }
       if (loaded.images && loaded.images.length) {
         for (const id of loaded.images) {
-          const blob = await getImg(id);
-          if (blob) {
-            edImgs.push({ id, blob, url: URL.createObjectURL(blob), isNew: false });
-          } else if (typeof id === 'string' && (id.startsWith('http://') || id.startsWith('https://'))) {
-            edImgs.push({ id, url: id, isNew: false });
+          if (typeof id === 'string' && (id.startsWith('http://') || id.startsWith('https://') || id.startsWith('data:'))) {
+            edImgs.push({ id, blob: null, url: id, isNew: false });
+          } else {
+            const blob = await getImg(id);
+            if (blob) {
+              edImgs.push({ id, blob, url: URL.createObjectURL(blob), isNew: false });
+            }
           }
         }
         renderThumbs();
       }
-      toast(`ดึงรูปคอร์ด “${loaded.title}” จาก Chordtabs สำเร็จแล้ว ✔`);
+      if (loaded._metaPromise) {
+        loaded._metaPromise.then(meta => {
+          if (!meta || $('#editorView').hidden) return;
+          if (meta.title && (!$('#fTitle').value || /^Chordtabs #\d+$/.test($('#fTitle').value))) {
+            $('#fTitle').value = meta.title;
+          }
+          if (meta.artist && !$('#fArtist').value) $('#fArtist').value = meta.artist;
+          if (meta.key && (!$('#fKey').value || $('#fKey').value === 'C')) $('#fKey').value = meta.key;
+          if (meta.chordImgUrl) {
+            const targetImg = loaded.images && loaded.images[0];
+            const idx = targetImg ? edImgs.findIndex(x => x.id === targetImg) : -1;
+            if (idx >= 0 && edImgs[idx].id !== meta.chordImgUrl) {
+              edImgs[idx] = { id: meta.chordImgUrl, blob: null, url: meta.chordImgUrl, isNew: false };
+              renderThumbs();
+            }
+          }
+        }).catch(() => {});
+      }
+      toast(`ดึงรูปคอร์ด “${loaded.title || 'Chordtabs'}” สำเร็จแล้ว ✔`);
       return;
     }
 
     const html = await fetchPageWithFallbacks(url);
     const { rawTitle, text } = extractChordTextFromHtml(html);
-    const { title, artist } = parseTitleAndArtist(rawTitle, url);
+    const { title, artist } = parseTitleAndArtist(rawTitle, '', url);
 
     if (title && !$('#fTitle').value) $('#fTitle').value = title;
     if (artist && !$('#fArtist').value) $('#fArtist').value = artist;
@@ -2868,7 +3443,7 @@ function openAcct() {
           : `<span class="badge">☁️ เชื่อมต่อบัญชีคลาวด์ Supabase แล้ว</span>`;
 
         userCard.innerHTML = `
-          <div style="font-weight:700; font-size:1.05rem; margin-bottom:6px">${user.email}</div>
+          <div style="font-weight:700; font-size:1.05rem; margin-bottom:6px">${escapeHtml(user.email || '')}</div>
           <div style="margin-bottom:12px">${modeBadge}</div>
         `;
 
@@ -2985,18 +3560,18 @@ function openAcct() {
 
       const guideDetails = mk('details');
       guideDetails.innerHTML = `
-        <summary>💡 วิธีเปิดใช้งาน Supabase Cloud Sync (เช็คจุดที่ต้องเปิด)</summary>
+        <summary>💡 วิธีตั้งค่าและเชื่อมต่อ Supabase Cloud Sync</summary>
         <div class="small" style="line-height:1.55; margin-top:8px; color:#d4d4d8">
-          <p style="margin:0 0 8px">โปรเจกต์ Supabase ในโค้ดปัจจุบัน (<code>otbfzxypqyzobglbdrxp</code>) ตอบกลับเป็น <b>HTTP 502 (Paused)</b> เนื่องจากไม่ได้ใช้งานเกิน 7 วัน วิธีเปิดใช้งานมี 3 ขั้นตอนครับ:</p>
+          <p style="margin:0 0 8px">แอปสามารถใช้งานได้ทั้งโหมดโปรไฟล์ในเครื่อง (ออฟไลน์ 100%) และโหมดซิงก์คลาวด์ผ่าน Supabase หากเชื่อมต่อคลาวด์ไม่สำเร็จหรือโปรเจกต์ถูกพักชั่วคราว สามารถตรวจสอบได้ 3 จุดครับ:</p>
           <ol style="padding-left:20px; margin:0">
-            <li><b>ปลุกโปรเจกต์ (Restore Project):</b> เข้าเว็บ <a href="https://supabase.com/dashboard/project/otbfzxypqyzobglbdrxp" target="_blank" rel="noopener" style="color:var(--accent)">Supabase Dashboard</a> → กดปุ่ม <b>“Restore project”</b> (หรือสร้างโปรเจกต์ใหม่) แล้วรอประมาณ 1–2 นาที</li>
+            <li><b>ตรวจสอบสถานะโปรเจกต์:</b> เข้าเว็บ <a href="https://supabase.com/dashboard" target="_blank" rel="noopener" style="color:var(--accent)">Supabase Dashboard</a> หากโปรเจกต์ถูกพัก ให้กด <b>“Restore project”</b> แล้วรอประมาณ 1–2 นาที</li>
             <li><b>เปิดระบบสมัครและล็อกอินด้วยอีเมล:</b> ไปที่เมนูซ้าย <b>Authentication → Providers → Email</b>:
               <ul style="padding-left:18px; margin:4px 0">
                 <li>เปิด <b>Enable Email provider</b> = ON</li>
-                <li>ปิด <b>Confirm email</b> = OFF (เพื่อให้สมัครแล้วล็อกอินเข้าใช้งานได้ทันทีโดยไม่ต้องรอกดลิงก์ในอีเมล)</li>
+                <li>ปิด <b>Confirm email</b> = OFF (เพื่อให้สมัครแล้วล็อกอินเข้าใช้งานได้ทันที)</li>
               </ul>
             </li>
-            <li><b>กรณีสร้างโปรเจกต์ Supabase ใหม่:</b> ไปที่ <b>Project Settings (รูปเฟือง) → API</b> แล้วคัดลอก <b>Project URL</b> กับ <b>anon public key</b> มาใส่ในช่องตั้งค่าด้านล่างนี้</li>
+            <li><b>กรณีใช้โปรเจกต์ Supabase ของตัวเอง:</b> ไปที่ <b>Project Settings → API</b> แล้วคัดลอก <b>Project URL</b> กับ <b>anon public key</b> มาใส่ในช่องตั้งค่าด้านล่างนี้</li>
           </ol>
         </div>
       `;
@@ -3043,7 +3618,9 @@ async function getImg(id) {
   let b = await idbGet(id).catch(() => null);
   if (!b && sb && user && !user.isLocal) {
     try {
-      const { data, error } = await sb.storage.from(BUCKET).download(user.id + '/' + id + '.jpg');
+      const downloadPromise = sb.storage.from(BUCKET).download(user.id + '/' + id + '.jpg');
+      const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('IMG_TIMEOUT')), 3500));
+      const { data, error } = await Promise.race([downloadPromise, timeoutPromise]);
       if (!error && data) {
         b = data;
         idbPut(id, b).catch(() => {});
@@ -3059,9 +3636,11 @@ async function pushImages(m, list) {
   for (const s of list) {
     for (const id of s.images || []) {
       if (m.imgs[id]) continue;
+      if (typeof id === 'string' && (id.startsWith('http://') || id.startsWith('https://') || id.startsWith('data:'))) continue;
       const b = await idbGet(id).catch(() => null);
       if (!b) continue;
-      const { error } = await sb.storage.from(BUCKET).upload(user.id + '/' + id + '.jpg', b, { contentType: 'image/jpeg', upsert: true });
+      const contentType = (b && b.type) ? b.type : 'image/jpeg';
+      const { error } = await sb.storage.from(BUCKET).upload(user.id + '/' + id + '.jpg', b, { contentType, upsert: true });
       if (error) throw error;
       m.imgs[id] = 1;
     }
@@ -3195,8 +3774,15 @@ async function syncAll() {
       const { error: e3 } = await sb.from('playlist_items').delete().eq('playlist_id', p.id);
       if (e3) throw e3;
       if (p.songIds.length) {
-        const { error: e4 } = await sb.from('playlist_items').insert(p.songIds.map((sid, i) => ({ playlist_id: p.id, song_id: sid, position: i })));
-        if (e4) throw e4;
+        const plRows = p.songIds
+          .filter(it => !(it && typeof it === 'object' && it.type === 'break'))
+          .map(it => (typeof it === 'string' ? it : (it && it.songId ? it.songId : '')))
+          .filter(Boolean)
+          .map((sid, i) => ({ playlist_id: p.id, song_id: sid, position: i }));
+        if (plRows.length) {
+          const { error: e4 } = await sb.from('playlist_items').insert(plRows);
+          if (e4) throw e4;
+        }
       }
       m.pls[p.id] = { h: plH(p), cu: data[0].updated_at };
     }
@@ -3222,43 +3808,6 @@ async function syncAll() {
 /* ==============================================================================
  * 13) เซ็ตเพลง / Playlist & แชร์ลิงก์แบบไม่ต้องง้อเซิร์ฟเวอร์
  * ============================================================================== */
-function encodePlaylistSharePayload(plName, songs) {
-  const payload = {
-    n: plName,
-    s: songs.map(s => ({
-      i: s.id,
-      t: s.title,
-      a: s.artist || '',
-      k: detectKey(s.text) || s.key || '',
-      x: s.text || '',
-      h: s.shift || 0
-    }))
-  };
-  const jsonStr = JSON.stringify(payload);
-  const bytes = new TextEncoder().encode(jsonStr);
-  let bin = '';
-  bytes.forEach(b => (bin += String.fromCharCode(b)));
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function decodePlaylistSharePayload(b64) {
-  const norm = b64.replace(/-/g, '+').replace(/_/g, '/');
-  const bin = atob(norm);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const obj = JSON.parse(new TextDecoder().decode(bytes));
-  return {
-    name: obj.n || 'เซ็ตเพลงที่แชร์มา',
-    songs: (obj.s || []).map(x => ({
-      id: x.i || 's-' + Math.random().toString(36).slice(2, 7),
-      title: x.t,
-      artist: x.a,
-      key: x.k,
-      text: x.x,
-      shift: x.h || 0
-    }))
-  };
-}
 
 function normalizePlItem(it) {
   if (!it) return { id: 'it-' + Math.random().toString(36).slice(2, 7), type: 'song', songId: '' };
@@ -3439,21 +3988,21 @@ function renderPlView() {
     const playableOnly = songs.filter(s => s.type !== 'break');
 
     if (playableOnly.length) {
-      bar.append(
-        btn('▶️ เริ่มเล่นเซ็ตนี้', () => {
-          activeSetlistContext = { plId: p.id, name: p.name, songs: playableOnly, index: 0 };
-          const first = playableOnly[0];
-          let startShift = first.shift || 0;
-          if (first.targetKey) {
-            const origKey = detectKey(first.text) || first.key;
-            if (origKey) {
-              const diff = noteIndex(first.targetKey.replace(/m$/, '')) - noteIndex(origKey.replace(/m$/, ''));
-              startShift = normShift(diff);
-            }
+      const playBtn = btn('▶️ เริ่มเล่นเซ็ตนี้', () => {
+        activeSetlistContext = { plId: p.id, name: p.name, songs: playableOnly, index: 0 };
+        const first = playableOnly[0];
+        let startShift = first.shift || 0;
+        if (first.targetKey) {
+          const origKey = detectKey(first.text) || first.key;
+          if (origKey) {
+            const diff = noteIndex(first.targetKey.replace(/m$/, '')) - noteIndex(origKey.replace(/m$/, ''));
+            startShift = normShift(diff);
           }
-          openSong(first, startShift);
-        }, 'primary small')
-      );
+        }
+        openSong(first, startShift);
+      }, 'primary small');
+      playBtn.id = 'plPlayAll';
+      bar.append(playBtn);
     }
 
     bar.append(
@@ -3643,20 +4192,20 @@ function openEditPlaylistItemModal(plId, item, song) {
     form.innerHTML = `
       <div class="row" style="margin-top:0">
         <div class="grow" style="min-width:140px">
-          <label style="margin-top:0">คีย์ที่วงเล่นจริง (ออริจินอล: ${origKey})</label>
-          <input id="cueKeyInp" placeholder="เช่น ${origKey}" value="${item.targetKey || origKey}" autocapitalize="characters">
+          <label style="margin-top:0">คีย์ที่วงเล่นจริง (ออริจินอล: ${escapeHtml(origKey)})</label>
+          <input id="cueKeyInp" placeholder="เช่น ${escapeHtml(origKey)}" value="${escapeHtml(item.targetKey || origKey)}" autocapitalize="characters">
         </div>
         <div class="grow" style="min-width:120px">
           <label style="margin-top:0">ผู้ร้องนำ</label>
-          <input id="cueSingerInp" placeholder="เช่น บอย, เมย์" value="${item.singer || ''}">
+          <input id="cueSingerInp" placeholder="เช่น บอย, เมย์" value="${escapeHtml(item.singer || '')}">
         </div>
         <div style="width:105px">
           <label style="margin-top:0">จังหวะ (BPM)</label>
-          <input id="cueBpmInp" type="number" placeholder="เช่น 100" value="${item.bpm || ''}">
+          <input id="cueBpmInp" type="number" min="30" max="300" placeholder="เช่น 100" value="${escapeHtml(String(item.bpm || ''))}">
         </div>
       </div>
       <label style="margin-top:10px">📢 โน้ตบอกคิวเล่นสด / สคริปต์ส่งเพลงในวง</label>
-      <textarea id="cueNoteInp" rows="3" placeholder="เช่น ส่งไม้กลอง 4 จังหวะ, จบแล้วต่อเพลงซมซานทันที (Medley), ท่อนฮุกรอบสุดท้ายดรอปเครื่อง">${item.cue || ''}</textarea>
+      <textarea id="cueNoteInp" rows="3" placeholder="เช่น ส่งไม้กลอง 4 จังหวะ, จบแล้วต่อเพลงซมซานทันที (Medley), ท่อนฮุกรอบสุดท้ายดรอปเครื่อง">${escapeHtml(item.cue || '')}</textarea>
     `;
 
     const saveBtn = btn('💾 บันทึกคิวนี้', () => {
@@ -3666,17 +4215,27 @@ function openEditPlaylistItemModal(plId, item, song) {
       const cue = $('#cueNoteInp').value.trim();
 
       mutPl(plId, x => {
-        const it = x.songIds.find(i => (typeof i === 'string' ? i : i.id) === item.id || (i.songId && i.songId === song.id));
-        if (it) {
-          if (typeof it === 'string') {
-            const idx = x.songIds.indexOf(it);
-            x.songIds[idx] = { id: 'it-' + hash(it), type: 'song', songId: it, targetKey, singer, bpm, cue };
-          } else {
-            it.targetKey = targetKey;
-            it.singer = singer;
-            it.bpm = bpm;
-            it.cue = cue;
-          }
+        let idx = x.songIds.findIndex(i =>
+          typeof i === 'string'
+            ? ('it-' + hash(i)) === item.id
+            : i.id === item.id
+        );
+        if (idx === -1) {
+          idx = x.songIds.findIndex(i =>
+            typeof i === 'string'
+              ? i === song.id
+              : (i.songId && i.songId === song.id)
+          );
+        }
+        if (idx !== -1) {
+          const entry = typeof x.songIds[idx] === 'string'
+            ? normalizePlItem(x.songIds[idx])
+            : x.songIds[idx];
+          entry.targetKey = targetKey;
+          entry.singer = singer;
+          entry.bpm = bpm;
+          entry.cue = cue;
+          x.songIds[idx] = entry;
         }
       });
       close();
@@ -4128,8 +4687,8 @@ function openQuickSongSwitcherModal(initialQuery = '') {
               const titleDiv = mk('div', 'qsTitleRow');
               titleDiv.innerHTML = `
                 <b class="qsTitle">${s.origIdx + 1}. ${escapeHtml(s.title)}</b>
-                ${s.key ? `<span class="badge">Key ${s.key}</span>` : ''}
-                ${s.targetKey && s.targetKey !== s.key ? `<span class="badge green">เล่นจริง: ${s.targetKey}</span>` : ''}
+                ${s.key ? `<span class="badge">Key ${escapeHtml(s.key)}</span>` : ''}
+                ${s.targetKey && s.targetKey !== s.key ? `<span class="badge green">เล่นจริง: ${escapeHtml(s.targetKey)}</span>` : ''}
                 ${isNext ? '<span class="badge accent">⏭ คิวต่อไป</span>' : ''}
                 ${s.cue ? `<span class="badge dim">📢 ${escapeHtml(s.cue)}</span>` : ''}
               `;
@@ -4172,7 +4731,7 @@ function openQuickSongSwitcherModal(initialQuery = '') {
           const titleDiv = mk('div', 'qsTitleRow');
           titleDiv.innerHTML = `
             <b class="qsTitle">${escapeHtml(s.title)}</b>
-            ${s.key ? `<span class="badge">Key ${s.key}</span>` : ''}
+            ${s.key ? `<span class="badge">Key ${escapeHtml(s.key)}</span>` : ''}
             <span class="badge green">💾 ในคลัง</span>
             ${s.images && s.images.length ? '<span class="badge dim">🖼️ คอร์ดภาพ</span>' : ''}
           `;
@@ -4230,7 +4789,7 @@ function openQuickSongSwitcherModal(initialQuery = '') {
           const titleDiv = mk('div', 'qsTitleRow');
           titleDiv.innerHTML = `
             <b class="qsTitle">${escapeHtml(displayTitle)}</b>
-            ${s.key ? `<span class="badge">Key ${s.key}</span>` : ''}
+            ${s.key ? `<span class="badge">Key ${escapeHtml(s.key)}</span>` : ''}
             ${inSetlist ? '<span class="badge accent">🎼 ในเซ็ต</span>' : ''}
             <span class="badge ${isSaved ? 'green' : 'dim'}">${isSaved ? '💾 ในคลัง' : '🌐 เว็บ'}</span>
             ${s.images && s.images.length ? '<span class="badge dim">🖼️ คอร์ดภาพ</span>' : ''}
@@ -4355,7 +4914,7 @@ function openQuickSongSwitcherModal(initialQuery = '') {
               const tRow = mk('div', 'qsTitleRow');
               tRow.innerHTML = `
                 <b class="qsTitle">${escapeHtml(disp)}</b>
-                ${item.key ? `<span class="badge">Key ${item.key}</span>` : ''}
+                ${item.key ? `<span class="badge">Key ${escapeHtml(item.key)}</span>` : ''}
                 <span class="badge green">${escapeHtml(item.domain)}</span>
               `;
               const pAct = mk('span', 'qsPlayAction', '▶️ เปิดคอร์ด');
