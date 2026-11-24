@@ -3486,6 +3486,9 @@ function initClient() {
   authReadyPromise = null;
 
   const savedLocal = LS.get(K.localUser, null);
+  try {
+    localStorage.removeItem('nightChordbook.localAdminUsers.v1');
+  } catch {}
   if (savedLocal) {
     user = savedLocal;
     profile = savedLocal;
@@ -3760,10 +3763,19 @@ function openApprovals() {
         );
         const act = mk('div', 'row');
         const set = async st => {
-          const { error: e } = await sb.from('profiles').update({ status: st, approved_at: st === 'approved' ? new Date().toISOString() : null, approved_by: user.id }).eq('id', r.id);
+          const validAdminUid = (user && !user.isLocal && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id)) ? user.id : null;
+          const patch = {
+            status: st,
+            is_active: st === 'approved',
+            approved_at: st === 'approved' ? new Date().toISOString() : null,
+            approved_by: validAdminUid,
+            updated_at: new Date().toISOString()
+          };
+          const { error: e } = await sb.from('profiles').update(patch).eq('id', r.id);
           if (e) { toast('ทำรายการไม่สำเร็จ: ' + e.message, true); return; }
           toast(st === 'approved' ? `อนุมัติ ${r.username || r.email} แล้ว ✔` : `ปฏิเสธ ${r.username || r.email} แล้ว`);
           draw();
+          if (typeof fetchAdminUsers === 'function') fetchAdminUsers(false);
         };
         if (filter !== 'approved') act.appendChild(btn('✔ อนุมัติ', () => set('approved'), 'primary small approveBtn'));
         if (filter !== 'rejected' && r.id !== user.id) act.appendChild(btn('✖ ปฏิเสธ', () => set('rejected'), 'danger small rejectBtn'));
@@ -3787,18 +3799,22 @@ function renderAdminStats() {
   if (!bar) return;
   const total = adminUsersCache.length;
   const admins = adminUsersCache.filter(u => getUserRole(u) === 'admin').length;
-  const active = adminUsersCache.filter(u => isUserActive(u)).length;
-  const inactive = total - active;
+  const active = adminUsersCache.filter(u => u.status === 'approved' && isUserActive(u)).length;
+  const inactive = adminUsersCache.filter(u => u.status === 'approved' && !isUserActive(u)).length;
   const pending = adminUsersCache.filter(u => u.status === 'pending').length;
+  const rejected = adminUsersCache.filter(u => u.status === 'rejected').length;
 
   bar.replaceChildren();
   const stats = [
     { label: '👥 ผู้ใช้ทั้งหมด', val: total },
     { label: '🛡️ สิทธิ์ Admin', val: admins },
-    { label: '🟢 เปิดใช้งาน', val: active },
+    { label: '🟢 ใช้งานปกติ', val: active },
     { label: '🔴 ปิดใช้งาน', val: inactive },
     { label: '⏳ รออนุมัติ', val: pending }
   ];
+  if (rejected > 0) {
+    stats.push({ label: '⛔ ปฏิเสธแล้ว', val: rejected });
+  }
   for (const st of stats) {
     const c = mk('div', 'adminStatCard');
     c.append(mk('b', null, String(st.val)), mk('small', null, st.label));
@@ -3808,27 +3824,39 @@ function renderAdminStats() {
 
 async function updateUserProfileByAdmin(targetUser, patch, successMsg) {
   if (!requireAdmin()) return false;
-  if (user && targetUser.id === user.id && (patch.role === 'user' || patch.is_admin === false || patch.is_active === false || (patch.status && patch.status !== 'approved'))) {
+  const isTargetSelf = !!(user && (
+    targetUser.id === user.id ||
+    (user.email && targetUser.email && String(user.email).toLowerCase().trim() === String(targetUser.email).toLowerCase().trim())
+  ));
+  if (isTargetSelf && (patch.role === 'user' || patch.is_admin === false || patch.is_active === false || (patch.status && patch.status !== 'approved'))) {
     toast('ไม่สามารถลดสิทธิ์หรือปิดการใช้งานบัญชีของตัวเองได้', true);
     return false;
   }
-  if (!sb || (user && user.isLocal)) {
-    const LOCAL_USERS_KEY = 'nightChordbook.localAdminUsers.v1';
-    adminUsersCache = adminUsersCache.map(u => u.id === targetUser.id ? { ...u, ...patch } : u);
-    LS.set(LOCAL_USERS_KEY, adminUsersCache);
-    pendingCount = adminUsersCache.filter(u => u.status === 'pending').length;
-    paintAcct();
-    renderAdminStats();
-    renderAdminUserList();
-    if (successMsg) toast(successMsg);
-    return true;
+
+  const cleanPatch = { ...patch, updated_at: new Date().toISOString() };
+  if (cleanPatch.status === 'approved') {
+    cleanPatch.is_active = true;
+    cleanPatch.approved_at = cleanPatch.approved_at || new Date().toISOString();
+  } else if (cleanPatch.status === 'rejected') {
+    cleanPatch.is_active = false;
+    cleanPatch.approved_at = null;
   }
-  const { error } = await sb.from('profiles').update(patch).eq('id', targetUser.id);
-  if (error) {
-    toast('อัปเดตข้อมูลไม่สำเร็จ: ' + error.message, true);
-    return false;
+
+  if ('approved_by' in cleanPatch) {
+    const uid = cleanPatch.approved_by;
+    const isValidUUID = uid && typeof uid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uid);
+    if (!isValidUUID) cleanPatch.approved_by = null;
   }
-  adminUsersCache = adminUsersCache.map(u => u.id === targetUser.id ? { ...u, ...patch } : u);
+
+  if (sb) {
+    const { error } = await sb.from('profiles').update(cleanPatch).eq('id', targetUser.id);
+    if (error) {
+      toast('อัปเดตข้อมูลบนคลาวด์ไม่สำเร็จ: ' + error.message, true);
+      return false;
+    }
+  }
+
+  adminUsersCache = adminUsersCache.map(u => u.id === targetUser.id ? { ...u, ...cleanPatch } : u);
   pendingCount = adminUsersCache.filter(u => u.status === 'pending').length;
   paintAcct();
   renderAdminStats();
@@ -3902,8 +3930,8 @@ function renderAdminUserList() {
     const active = isUserActive(u);
     if (adminFilter === 'admin' && role !== 'admin') return false;
     if (adminFilter === 'user' && role !== 'user') return false;
-    if (adminFilter === 'active' && !active) return false;
-    if (adminFilter === 'inactive' && active) return false;
+    if (adminFilter === 'active' && (!active || u.status !== 'approved')) return false;
+    if (adminFilter === 'inactive' && (active && u.status === 'approved')) return false;
     if (adminFilter === 'pending' && u.status !== 'pending') return false;
     if (tokens.length) {
       const hay = `${u.username || ''} ${u.email || ''} ${u.id || ''} ${role}`.toLowerCase();
@@ -3918,24 +3946,34 @@ function renderAdminUserList() {
   }
 
   for (const r of filtered) {
-    const isSelf = !!(user && r.id === user.id);
+    const isSelf = !!(user && (
+      r.id === user.id ||
+      (user.email && r.email && String(user.email).toLowerCase().trim() === String(r.email).toLowerCase().trim())
+    ));
     const role = getUserRole(r);
     const active = isUserActive(r);
     const dispName = r.username || (r.email || '').split('@')[0] || 'ไม่ระบุชื่อ';
 
-    const row = mk('div', 'adminUserRow' + (active ? '' : ' isInactive'));
+    const isRowInactive = (r.status === 'rejected' || !active);
+    const row = mk('div', 'adminUserRow' + (isRowInactive ? ' isInactive' : ''));
     row.dataset.userId = r.id;
     row.dataset.role = role;
     row.dataset.active = String(active);
+    row.dataset.status = r.status || 'approved';
 
     const info = mk('div', 'adminUserInfo');
     const titleLine = mk('div', 'adminUserTitle');
     titleLine.appendChild(mk('span', null, dispName));
     if (isSelf) titleLine.appendChild(mk('span', 'badge dim', 'คุณ'));
     titleLine.appendChild(mk('span', role === 'admin' ? 'badge adminRoleBadge' : 'badge dim adminRoleBadge', role === 'admin' ? '🛡️ Admin' : '👤 User'));
-    titleLine.appendChild(mk('span', active ? 'badge green adminActiveBadge' : 'badge red adminActiveBadge', active ? '🟢 ใช้งานปกติ' : '🔴 ปิดใช้งาน'));
-    if (r.status === 'pending') titleLine.appendChild(mk('span', 'badge', '⏳ รออนุมัติ'));
-    else if (r.status === 'rejected') titleLine.appendChild(mk('span', 'badge red', '⛔ ปฏิเสธแล้ว'));
+
+    if (r.status === 'pending') {
+      titleLine.appendChild(mk('span', 'badge', '⏳ รออนุมัติ'));
+    } else if (r.status === 'rejected') {
+      titleLine.appendChild(mk('span', 'badge red', '⛔ ปฏิเสธแล้ว'));
+    } else {
+      titleLine.appendChild(mk('span', active ? 'badge green adminActiveBadge' : 'badge red adminActiveBadge', active ? '🟢 ใช้งานปกติ' : '🔴 ปิดใช้งาน'));
+    }
 
     const createdStr = r.created_at ? ' · สมัคร ' + new Date(r.created_at).toLocaleDateString('th-TH') : '';
     const subLine = mk('div', 'adminUserSub', (r.email || '') + createdStr);
@@ -3964,32 +4002,36 @@ function renderAdminUserList() {
     }
     actions.appendChild(roleSelect);
 
-    // Enable / Disable Account Toggle (is_active)
-    const toggleBtn = btn(
-      active ? '🚫 ปิดการใช้งาน' : '✅ เปิดการใช้งาน',
-      async () => {
+    const validAdminUid = (user && !user.isLocal && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id)) ? user.id : null;
+
+    // Enable / Disable Account Toggle (is_active) - for approved users
+    if (r.status === 'approved') {
+      const toggleBtn = btn(
+        active ? '🚫 ปิดการใช้งาน' : '✅ เปิดการใช้งาน',
+        async () => {
+          toggleBtn.disabled = true;
+          await updateUserProfileByAdmin(
+            r,
+            { is_active: !active },
+            !active ? `เปิดการใช้งานบัญชี ${dispName} แล้ว ✔` : `ระงับการใช้งานบัญชี ${dispName} แล้ว`
+          );
+          toggleBtn.disabled = false;
+        },
+        (active ? 'danger small toggleActiveBtn' : 'primary small toggleActiveBtn')
+      );
+      if (isSelf) {
         toggleBtn.disabled = true;
-        await updateUserProfileByAdmin(
-          r,
-          { is_active: !active },
-          !active ? `เปิดการใช้งานบัญชี ${dispName} แล้ว ✔` : `ระงับการใช้งานบัญชี ${dispName} แล้ว`
-        );
-        toggleBtn.disabled = false;
-      },
-      (active ? 'danger small toggleActiveBtn' : 'primary small toggleActiveBtn')
-    );
-    if (isSelf) {
-      toggleBtn.disabled = true;
-      toggleBtn.title = 'ไม่สามารถปิดการใช้งานบัญชีของตัวเองได้';
+        toggleBtn.title = 'ไม่สามารถปิดการใช้งานบัญชีของตัวเองได้';
+      }
+      actions.appendChild(toggleBtn);
     }
-    actions.appendChild(toggleBtn);
 
     // Quick Approve / Reject for pending or rejected accounts
     if (!isSelf && r.status !== 'approved') {
       actions.appendChild(btn('✔ อนุมัติ', async () => {
         await updateUserProfileByAdmin(
           r,
-          { status: 'approved', is_active: true, approved_at: new Date().toISOString(), approved_by: user.id },
+          { status: 'approved', is_active: true, approved_at: new Date().toISOString(), approved_by: validAdminUid },
           `อนุมัติ ${dispName} แล้ว ✔`
         );
       }, 'primary small adminApproveBtn'));
@@ -3998,7 +4040,7 @@ function renderAdminUserList() {
       actions.appendChild(btn('✖ ปฏิเสธ', async () => {
         await updateUserProfileByAdmin(
           r,
-          { status: 'rejected', approved_at: null, approved_by: user.id },
+          { status: 'rejected', is_active: false, approved_at: null, approved_by: validAdminUid },
           `ปฏิเสธ ${dispName} แล้ว`
         );
       }, 'small adminRejectBtn'));
@@ -4013,48 +4055,58 @@ async function fetchAdminUsers(showToastOnRefresh = false) {
   if (!requireAdmin()) return;
   adminLoading = true;
   renderAdminUserList();
-  if (!sb || (user && user.isLocal)) {
-    const LOCAL_USERS_KEY = 'nightChordbook.localAdminUsers.v1';
-    let localData = LS.get(LOCAL_USERS_KEY, null);
-    if (!localData || !localData.length) {
-      localData = [
-        { id: user.id, email: user.email, username: user.email.split('@')[0], role: 'admin', is_admin: true, is_active: true, status: 'approved', created_at: new Date(user.createdAt || Date.now()).toISOString() },
-        { id: 'u-alice', email: 'alice@band.com', username: 'alice', role: 'user', is_admin: false, is_active: true, status: 'approved', created_at: new Date(Date.now() - 86400000).toISOString() },
-        { id: 'u-bob', email: 'bob@band.com', username: 'bob', role: 'user', is_admin: false, is_active: false, status: 'approved', created_at: new Date(Date.now() - 172800000).toISOString() },
-        { id: 'u-rookie', email: 'rookie@band.com', username: 'rookie', role: 'user', is_admin: false, is_active: true, status: 'pending', created_at: new Date(Date.now() - 3600000).toISOString() }
-      ];
-      LS.set(LOCAL_USERS_KEY, localData);
-    }
-    adminLoading = false;
-    adminUsersCache = localData;
-    pendingCount = adminUsersCache.filter(u => u.status === 'pending').length;
-    paintAcct();
-    renderAdminStats();
-    renderAdminUserList();
-    if (showToastOnRefresh) toast('อัปเดตรายชื่อผู้ใช้แล้ว ✔');
-    return;
-  }
+
+  // Clear any stale mock user cache
   try {
-    const { data, error } = await sb.from('profiles').select('*').order('created_at', { ascending: false });
-    adminLoading = false;
-    if (error) {
-      const list = $('#adminUserList');
-      if (list) {
-        list.replaceChildren(mk('div', 'err', 'โหลดรายชื่อผู้ใช้ไม่สำเร็จ: ' + error.message));
+    localStorage.removeItem('nightChordbook.localAdminUsers.v1');
+  } catch {}
+
+  if (sb) {
+    try {
+      const { data, error } = await sb.from('profiles').select('*').order('created_at', { ascending: false });
+      adminLoading = false;
+      if (error) {
+        const list = $('#adminUserList');
+        if (list) {
+          list.replaceChildren(mk('div', 'err', 'โหลดรายชื่อผู้ใช้จากคลาวด์ไม่สำเร็จ: ' + error.message));
+        }
+        return;
+      }
+      adminUsersCache = Array.isArray(data) ? data : [];
+      pendingCount = adminUsersCache.filter(u => u.status === 'pending').length;
+      paintAcct();
+      renderAdminStats();
+      renderAdminUserList();
+      if (showToastOnRefresh) {
+        toast(`อัปเดตรายชื่อผู้ใช้แล้ว ✔ (พบ ${adminUsersCache.length} บัญชี)`);
       }
       return;
+    } catch (err) {
+      adminLoading = false;
+      const list = $('#adminUserList');
+      if (list) list.replaceChildren(mk('div', 'err', 'เกิดข้อผิดพลาดในการโหลดข้อมูลผู้ใช้'));
+      return;
     }
-    adminUsersCache = Array.isArray(data) ? data : [];
-    pendingCount = adminUsersCache.filter(u => u.status === 'pending').length;
-    paintAcct();
-    renderAdminStats();
-    renderAdminUserList();
-    if (showToastOnRefresh) toast('อัปเดตรายชื่อผู้ใช้แล้ว ✔');
-  } catch (err) {
-    adminLoading = false;
-    const list = $('#adminUserList');
-    if (list) list.replaceChildren(mk('div', 'err', 'เกิดข้อผิดพลาดในการโหลดข้อมูลผู้ใช้'));
   }
+
+  adminLoading = false;
+  adminUsersCache = user ? [
+    {
+      id: user.id,
+      email: user.email,
+      username: user.username || (user.email || '').split('@')[0],
+      role: getUserRole(user),
+      is_admin: isAdminUser(),
+      is_active: isUserActive(user),
+      status: approval || 'approved',
+      created_at: new Date(user.createdAt || Date.now()).toISOString()
+    }
+  ] : [];
+  pendingCount = adminUsersCache.filter(u => u.status === 'pending').length;
+  paintAcct();
+  renderAdminStats();
+  renderAdminUserList();
+  if (showToastOnRefresh) toast('อัปเดตรายชื่อผู้ใช้แล้ว ✔');
 }
 
 function openAdminUsersView(opts = {}) {

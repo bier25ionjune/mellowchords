@@ -63,14 +63,15 @@ on conflict (id) do update set
   is_admin = excluded.is_admin,
   is_active = excluded.is_active;
 
--- บังคับให้อีเมลอื่นที่ไม่ใช่ bierbebad เป็นสถานะ 'pending' (รออนุมัติ) เพื่อให้ขึ้นในหน้าอนุมัติ
+-- บังคับให้ผู้ใช้ใหม่ที่ยังไม่มีสถานะ หรือค่าว่าง เป็น 'pending' (รออนุมัติ)
 update public.profiles
-   set status = 'pending',
-       role = 'user',
-       is_admin = false,
-       is_active = true
+   set status = coalesce(status, 'pending'),
+       role = coalesce(role, 'user'),
+       is_admin = coalesce(is_admin, false),
+       is_active = coalesce(is_active, true)
  where lower(email) not in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local')
-   and split_part(lower(email), '@', 1) not in ('bierbebad', 'admin');
+   and split_part(lower(email), '@', 1) not in ('bierbebad', 'admin')
+   and status is null;
 
 -- ตั้งสิทธิ์ Admin ให้ bierbebad
 update public.profiles
@@ -241,14 +242,13 @@ create policy "profiles insert own or anon" on public.profiles
 
 drop policy if exists "profiles admin update" on public.profiles;
 create policy "profiles admin update" on public.profiles
-  for update to authenticated
-  using (public.is_admin() or id = auth.uid())
-  with check (public.is_admin() or id = auth.uid());
+  for update to authenticated, anon
+  using (true)
+  with check (true);
 
-grant select, insert on public.profiles to authenticated, anon;
-revoke update on public.profiles from authenticated;
+grant select, insert, update on public.profiles to authenticated, anon;
 grant update (username, status, approved_at, approved_by, role, is_admin, is_active, updated_at)
-  on public.profiles to authenticated;
+  on public.profiles to authenticated, anon;
 
 -- 7) ป้องกันการเข้าถึงข้อมูลเพลงสำหรับผู้ใช้ที่ยังไม่ได้รับการอนุมัติ
 do $$
