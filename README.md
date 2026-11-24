@@ -66,3 +66,5 @@ python3 -m http.server 8080
 สามารถ Deploy ไปยังแพลตฟอร์ม Static Hosting ฟรีได้ทันที:
 - **GitHub Pages:** ไปที่ Settings -> Pages -> Source: Deploy from branch `main`
 - **Cloudflare Pages / Vercel / Netlify:** เชื่อมต่อ Repository แล้วกด Deploy ได้ทันทีโดยไม่ต้องรันคำสั่ง build
+## ระบบอนุมัติผู้สมัคร (User approval)
+ไฟล์ `supabase/migrations/20261124000000_user_approval.sql` (ยังไม่ได้รัน) สร้างตาราง `profiles`, trigger (มีเฉพาะ `bierbebad` ที่อนุมัติ+เป็นแอดมินอัตโนมัติ ที่เหลือ `pending`), RLS และ policy แบบ restrictive บน songs/playlists/playlist_items/storage `chord-images`. ตรวจชื่อ policy/ตารางกับ production (`select * from pg_policies`) และทดสอบบน staging ก่อนรัน. สมัครบัญชี `bierbebad` ก่อนเผยแพร่. ถ้ายังไม่รัน migration แอปจะทำงานเหมือนเดิม.

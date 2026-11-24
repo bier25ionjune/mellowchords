@@ -39,7 +39,7 @@
     <div class="row" style="gap:6px">
       <button id="hdrSearchBtn" class="small ghost" type="button" title="ค้นหาเพลงด่วน (ทุกหน้า)">🔍 ค้นเพลง</button>
       <button id="pwaInstallHeaderBtn" class="small primary" hidden>📲 ติดตั้งแอป</button>
-      <button id="acct" class="small">☁️ ซิงก์ / ตั้งค่า</button>
+      <button id="acct" class="small" type="button" aria-label="บัญชีและการซิงก์">👤 เข้าสู่ระบบ</button>
     </div>
   </div>
 </header>
@@ -397,7 +397,7 @@
 </div>
 
 <!-- Toast Feedback -->
-<div id="toast" class="toast" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
 <!-- Supabase SDK & App Logic -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

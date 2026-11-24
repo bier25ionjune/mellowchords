@@ -3295,6 +3295,12 @@ $('#fUrl').addEventListener('paste', () => setTimeout(() => {
  * 12) ระบบบัญชีไฮบริด (Hybrid Cloud + Local Account) & ตัวตรวจสอบสถานะ Supabase
  * ============================================================================== */
 let sb = null, user = null, syncing = false, status = '', sbErr = '';
+/* Approval state: 'none' = not applicable (local profile / profiles table missing / unknown),
+ * 'checking' | 'approved' | 'pending' | 'rejected'. Server RLS is the real gate; this just drives the UI. */
+let profile = null, approval = 'none', pendingCount = 0, profPromise = null;
+const cloudOn = () => !!(sb && user && !user.isLocal && (approval === 'approved' || approval === 'none'));
+const isAdminUser = () => !!(profile && profile.is_admin && approval === 'approved');
+const isMissingTable = e => !!e && (e.code === 'PGRST205' || e.code === '42P01' || e.status === 404 || /does not exist|schema cache|Could not find the table/i.test(e.message || ''));
 const conf = () => {
   const s = LS.get(K.cfg, {});
   return { url: s.url || CFG.url || '', key: s.key || CFG.key || '' };
@@ -3374,9 +3380,12 @@ function initClient() {
         user = s.user;
         LS.set(K.localUser, null);
         paintAcct();
-        setTimeout(syncAll, 0);
+        setTimeout(() => loadProfile().then(syncAll), 0);
       } else if (!LS.get(K.localUser, null)) {
         user = null;
+        profile = null;
+        approval = 'none';
+        closePendingGate();
         paintAcct();
       }
     });
@@ -3396,10 +3405,173 @@ function paintAcct() {
   let t = '👤 เข้าสู่ระบบ';
   if (user) {
     const name = (user.email || 'นักดนตรี').split('@')[0];
-    const badge = user.isLocal ? '📱' : ({ ok: '☁️✓', sync: '☁️⟳', err: '📱', off: '⚡' }[status] || '☁️');
+    let badge = user.isLocal ? '📱' : ({ ok: '☁️✓', sync: '☁️⟳', err: '📱', off: '⚡' }[status] || '☁️');
+    if (!user.isLocal && approval === 'pending') badge = '⏳';
+    else if (!user.isLocal && approval === 'rejected') badge = '⛔';
     t = `${badge} ${name}`;
+    if (isAdminUser() && pendingCount > 0) t += ` 🛡️${pendingCount}`;
   }
-  $('#acct').textContent = t;
+  const a = $('#acct');
+  a.textContent = t;
+  a.classList.toggle('hasBadge', isAdminUser() && pendingCount > 0);
+  a.title = user && !user.isLocal && approval === 'pending' ? 'รอแอดมินอนุมัติ'
+    : isAdminUser() && pendingCount > 0 ? `มีผู้สมัครรออนุมัติ ${pendingCount} คน` : '';
+}
+
+/* ---- Approval: own profile, pending screen, admin approvals ---- */
+function closePendingGate() {
+  const g = document.getElementById('pendingGate');
+  if (g) g.remove();
+}
+
+function showPendingGate() {
+  closePendingGate();
+  const rejected = approval === 'rejected';
+  const ov = mk('div', 'modal');
+  ov.id = 'pendingGate';
+  ov.style.zIndex = '95';
+  ov.setAttribute('role', 'alertdialog');
+  const box = mk('div', 'box pendingBox');
+  box.append(
+    mk('div', 'pendingIcon', rejected ? '⛔' : '⏳'),
+    mk('h2', null, rejected ? 'บัญชีของคุณไม่ได้รับการอนุมัติ' : 'รอแอดมินอนุมัติบัญชี'),
+    mk('p', 'pendingMsg', rejected
+      ? 'แอดมินปฏิเสธคำขอสมัครของบัญชีนี้ ระบบซิงก์คลาวด์ถูกปิดไว้ หากคิดว่าผิดพลาด โปรดติดต่อแอดมิน (bierbebad)'
+      : 'สมัครสมาชิกเรียบร้อยแล้ว ตอนนี้กำลังรอแอดมิน (bierbebad) อนุมัติ ระหว่างนี้ยังไม่ซิงก์ข้อมูลกับคลาวด์ แต่ยังใช้งานแอปในเครื่องได้ตามปกติ'),
+    mk('div', 'pendingUser', user && user.email ? user.email : '')
+  );
+  const row = mk('div', 'col');
+  const chk = btn('🔄 ตรวจสอบสถานะอีกครั้ง', async () => {
+    chk.disabled = true;
+    await loadProfile();
+    chk.disabled = false;
+    if (approval === 'approved') {
+      toast('ได้รับการอนุมัติแล้ว ✔ กำลังซิงก์…');
+      syncAll();
+    } else if (approval === 'pending' || approval === 'rejected') {
+      showPendingGate();
+      toast(approval === 'pending' ? 'ยังรออนุมัติอยู่' : 'บัญชีถูกปฏิเสธ', approval === 'rejected');
+    }
+  }, 'primary');
+  row.append(
+    chk,
+    btn('📱 ใช้งานในเครื่องระหว่างรอ', () => ov.remove()),
+    btn('ออกจากระบบ', () => doSignOut(), 'danger')
+  );
+  box.appendChild(row);
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+}
+
+function loadProfile() {
+  if (profPromise) return profPromise;
+  profPromise = (async () => {
+    const prev = approval;
+    if (!sb || !user || user.isLocal) {
+      profile = null;
+      approval = 'none';
+      pendingCount = 0;
+      return approval;
+    }
+    approval = 'checking';
+    try {
+      const { data, error } = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
+      if (error) {
+        // Table missing => migration not applied yet: behave exactly like before.
+        // Other (network) errors: keep last known verdict, else fail open (RLS still protects data).
+        approval = isMissingTable(error) ? 'none' : (['approved', 'pending', 'rejected'].includes(prev) ? prev : 'none');
+        if (isMissingTable(error)) profile = null;
+      } else if (!data) {
+        profile = null;
+        approval = 'none';
+      } else {
+        profile = data;
+        approval = ['approved', 'pending', 'rejected'].includes(data.status) ? data.status : 'pending';
+      }
+    } catch {
+      approval = ['approved', 'pending', 'rejected'].includes(prev) ? prev : 'none';
+    }
+    if (approval === 'pending' || approval === 'rejected') showPendingGate();
+    else closePendingGate();
+    if (isAdminUser()) await refreshPendingCount();
+    else pendingCount = 0;
+    paintAcct();
+    return approval;
+  })().finally(() => { profPromise = null; });
+  return profPromise;
+}
+
+async function refreshPendingCount() {
+  if (!isAdminUser() || !sb) return 0;
+  try {
+    const { count, error } = await sb.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'pending');
+    if (!error && typeof count === 'number') pendingCount = count;
+  } catch {}
+  paintAcct();
+  return pendingCount;
+}
+
+async function doSignOut() {
+  if (sb && user && !user.isLocal) await sb.auth.signOut().catch(() => {});
+  LS.set(K.localUser, null);
+  LS.set(K.meta, { songs: {}, pls: {} });
+  user = null;
+  profile = null;
+  approval = 'none';
+  pendingCount = 0;
+  closePendingGate();
+  paintAcct();
+  toast('ออกจากระบบแล้ว');
+}
+
+function openApprovals() {
+  if (!isAdminUser()) return;
+  modal('🛡️ อนุมัติผู้สมัคร', (box, close) => {
+    let filter = 'pending';
+    const tabs = mk('div', 'row'), list = mk('div', 'approvalList');
+    const labels = { pending: 'รออนุมัติ', rejected: 'ปฏิเสธแล้ว', approved: 'อนุมัติแล้ว' };
+    const tabBtns = {};
+    const draw = async () => {
+      Object.entries(tabBtns).forEach(([k, b]) => b.classList.toggle('primary', k === filter));
+      list.replaceChildren(mk('div', 'empty', 'กำลังโหลด…'));
+      const { data, error } = await sb.from('profiles').select('*').eq('status', filter).order('created_at', { ascending: true });
+      list.replaceChildren();
+      if (error) {
+        list.appendChild(mk('div', 'err', 'โหลดรายชื่อไม่สำเร็จ: ' + error.message));
+        return;
+      }
+      if (filter === 'pending') { pendingCount = (data || []).length; paintAcct(); }
+      if (!data || !data.length) {
+        list.appendChild(mk('div', 'empty', filter === 'pending' ? '✅ ไม่มีผู้สมัครที่รออนุมัติ' : 'ไม่มีรายการ'));
+        return;
+      }
+      for (const r of data) {
+        const item = mk('div', 'approvalItem');
+        const info = mk('div', 'approvalInfo');
+        info.append(
+          mk('b', null, r.username || (r.email || '').split('@')[0]),
+          mk('div', 'small dim', (r.email || '') + (r.created_at ? ' · สมัคร ' + new Date(r.created_at).toLocaleDateString('th-TH') : ''))
+        );
+        const act = mk('div', 'row');
+        const set = async st => {
+          const { error: e } = await sb.from('profiles').update({ status: st, approved_at: st === 'approved' ? new Date().toISOString() : null, approved_by: user.id }).eq('id', r.id);
+          if (e) { toast('ทำรายการไม่สำเร็จ: ' + e.message, true); return; }
+          toast(st === 'approved' ? `อนุมัติ ${r.username || r.email} แล้ว ✔` : `ปฏิเสธ ${r.username || r.email} แล้ว`);
+          draw();
+        };
+        if (filter !== 'approved') act.appendChild(btn('✔ อนุมัติ', () => set('approved'), 'primary small approveBtn'));
+        if (filter !== 'rejected' && r.id !== user.id) act.appendChild(btn('✖ ปฏิเสธ', () => set('rejected'), 'danger small rejectBtn'));
+        item.append(info, act);
+        list.appendChild(item);
+      }
+    };
+    for (const k of Object.keys(labels)) {
+      tabBtns[k] = btn(labels[k], () => { filter = k; draw(); }, 'small');
+      tabs.appendChild(tabBtns[k]);
+    }
+    box.append(tabs, list);
+    draw();
+  });
 }
 $('#acct').onclick = () => openAcct();
 
@@ -3418,7 +3590,7 @@ function signInLocalProfile(email) {
 }
 
 function openAcct() {
-  modal('👤 บัญชีผู้ใช้ & ตั้งค่า Supabase', box => {
+  modal('👤 บัญชีผู้ใช้ & ตั้งค่า', box => {
     const body = mk('div');
     box.appendChild(body);
     const draw = () => {
@@ -3440,7 +3612,9 @@ function openAcct() {
         userCard.style.padding = '14px';
         const modeBadge = user.isLocal
           ? `<span class="badge green">📱 โหมดโปรไฟล์ในเครื่อง (พร้อมใช้งาน & แชร์เซ็ตเพลงได้ทันที)</span>`
-          : `<span class="badge">☁️ เชื่อมต่อบัญชีคลาวด์ Supabase แล้ว</span>`;
+          : approval === 'pending' ? `<span class="badge">⏳ รอแอดมินอนุมัติ — ยังไม่ซิงก์คลาวด์</span>`
+          : approval === 'rejected' ? `<span class="badge">⛔ บัญชีไม่ได้รับการอนุมัติ</span>`
+          : `<span class="badge">☁️ เชื่อมต่อบัญชีคลาวด์แล้ว${isAdminUser() ? ' · 🛡️ แอดมิน' : ''}</span>`;
 
         userCard.innerHTML = `
           <div style="font-weight:700; font-size:1.05rem; margin-bottom:6px">${escapeHtml(user.email || '')}</div>
@@ -3448,7 +3622,13 @@ function openAcct() {
         `;
 
         const btnRow = mk('div', 'row');
-        if (!user.isLocal && sb) {
+        if (isAdminUser()) {
+          btnRow.appendChild(btn(`🛡️ อนุมัติผู้สมัคร${pendingCount ? ' (' + pendingCount + ')' : ''}`, () => openApprovals(), 'primary small'));
+        }
+        if (!user.isLocal && sb && (approval === 'pending' || approval === 'rejected')) {
+          btnRow.appendChild(btn('สถานะการอนุมัติ', () => showPendingGate(), 'small'));
+        }
+        if (cloudOn()) {
           btnRow.appendChild(
             btn('🔄 ซิงก์คลาวด์ตอนนี้', async () => {
               await syncAll();
@@ -3461,13 +3641,8 @@ function openAcct() {
         );
         btnRow.appendChild(
           btn('ออกจากระบบ', async () => {
-            if (sb && !user.isLocal) await sb.auth.signOut().catch(() => {});
-            LS.set(K.localUser, null);
-            LS.set(K.meta, { songs: {}, pls: {} });
-            user = null;
-            paintAcct();
+            await doSignOut();
             draw();
-            toast('ออกจากระบบแล้ว');
           }, 'danger small')
         );
         userCard.appendChild(btnRow);
@@ -3486,7 +3661,7 @@ function openAcct() {
 
         const msg = mk('div', 'err');
         const b1 = btn('เข้าสู่ระบบ / เริ่มใช้งาน', () => go(false), 'primary small');
-        const b2 = btn('สมัครบัญชีคลาวด์', () => go(true), 'small');
+        const b2 = btn('สมัครบัญชีใหม่ (รอแอดมินอนุมัติ)', () => go(true), 'small');
 
         const go = async up => {
           msg.style.color = '';
@@ -3513,7 +3688,7 @@ function openAcct() {
 
           b1.disabled = b2.disabled = true;
           msg.style.color = 'var(--muted)';
-          msg.textContent = 'กำลังตรวจสอบเซิร์ฟเวอร์ Supabase…';
+          msg.textContent = 'กำลังตรวจสอบกับเซิร์ฟเวอร์…';
 
           try {
             const c = { email: emailVal, password: pw.value };
@@ -3525,7 +3700,7 @@ function openAcct() {
             if (error) {
               if (/fetch|network|502|503|timeout|load failed/i.test(error.message || '')) {
                 signInLocalProfile(emailVal);
-                toast('เข้าสู่ระบบในโหมดโปรไฟล์เครื่องเรียบร้อย ✔ (Supabase พักอยู่)');
+                toast('📱 เชื่อมต่อคลาวด์ไม่ได้ — เข้าโหมดในเครื่อง (ไม่ซิงก์/ไม่ผ่านการอนุมัติ)');
                 draw();
                 return;
               }
@@ -3537,16 +3712,23 @@ function openAcct() {
               user = data.session.user;
               LS.set(K.localUser, null);
               paintAcct();
-              toast('เข้าสู่ระบบคลาวด์ Supabase สำเร็จ ✔');
+              await loadProfile();
+              if (approval === 'pending' || approval === 'rejected') {
+                toast(up ? 'สมัครแล้ว ✔ รอแอดมินอนุมัติ' : 'เข้าสู่ระบบแล้ว — บัญชียังไม่ได้รับการอนุมัติ');
+              } else {
+                toast(up ? 'สมัครบัญชีสำเร็จ ✔' : 'เข้าสู่ระบบสำเร็จ ✔');
+                syncAll();
+              }
               draw();
             } else {
-              signInLocalProfile(emailVal);
-              toast('เข้าสู่ระบบพร้อมใช้งานทันที ✔');
-              draw();
+              // No session returned (e.g. e-mail confirmation required): do NOT silently fall back to a local login.
+              msg.textContent = up
+                ? 'สมัครแล้ว แต่ต้องยืนยันอีเมลก่อนจึงจะเข้าสู่ระบบได้ และต้องรอแอดมินอนุมัติ'
+                : 'เข้าสู่ระบบไม่สำเร็จ (ไม่ได้รับ session จากเซิร์ฟเวอร์)';
             }
           } catch (e) {
             signInLocalProfile(emailVal);
-            toast('เข้าสู่ระบบในโหมดโปรไฟล์เครื่องเรียบร้อย ✔');
+            toast('📱 เชื่อมต่อคลาวด์ไม่ได้ — เข้าโหมดในเครื่อง (ไม่ซิงก์/ไม่ผ่านการอนุมัติ)');
             draw();
           } finally {
             b1.disabled = b2.disabled = false;
@@ -3616,7 +3798,7 @@ function openAcct() {
 const BUCKET = 'chord-images';
 async function getImg(id) {
   let b = await idbGet(id).catch(() => null);
-  if (!b && sb && user && !user.isLocal) {
+  if (!b && cloudOn()) {
     try {
       const downloadPromise = sb.storage.from(BUCKET).download(user.id + '/' + id + '.jpg');
       const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('IMG_TIMEOUT')), 3500));
@@ -3631,7 +3813,7 @@ async function getImg(id) {
 }
 
 async function pushImages(m, list) {
-  if (!sb || !user || user.isLocal) return;
+  if (!cloudOn()) return;
   m.imgs = m.imgs || {};
   for (const s of list) {
     for (const id of s.images || []) {
@@ -3648,12 +3830,12 @@ async function pushImages(m, list) {
 }
 
 function cloudDelImgs(ids) {
-  if (!sb || !user || user.isLocal || !ids || !ids.length) return;
+  if (!cloudOn() || !ids || !ids.length) return;
   sb.storage.from(BUCKET).remove(ids.map(i => user.id + '/' + i + '.jpg')).catch(() => {});
 }
 
 function needsSync() {
-  if (!sb || !user || user.isLocal) return false;
+  if (!cloudOn()) return false;
   const m = getMeta(), f = favs(), book = loadBook(), ids = new Set(book.map(s => s.id)), P = getPls(), pids = new Set(P.map(p => p.id));
   return (
     book.some(s => !m.songs[s.id] || m.songs[s.id].h !== songH(s, f.has(s.id))) ||
@@ -3672,7 +3854,7 @@ const schedSync = () => {
 };
 
 async function syncAll() {
-  if (!sb || !user || user.isLocal || syncing) return;
+  if (!cloudOn() || syncing) return;
   if (!navigator.onLine) {
     setStatus('off');
     return;
@@ -5012,7 +5194,8 @@ if (matchMedia('(min-width: 920px)').matches && !current && !location.hash.start
 addEventListener('hashchange', route);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    syncAll();
+    if (approval === 'pending' || isAdminUser()) loadProfile().then(syncAll);
+    else syncAll();
     if (document.body.dataset.view === 'song') requestWakeLock();
   }
 });

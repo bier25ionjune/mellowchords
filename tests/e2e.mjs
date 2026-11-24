@@ -94,6 +94,83 @@ async function waitForLoadedGalleryImg(page, timeoutMs = 8000) {
   }, undefined, { timeout: timeoutMs });
 }
 
+
+// ---------------------------------------------------------------------------
+// Mocked-Supabase helpers (NEVER touches the real project: every *.supabase.co
+// request is intercepted and fulfilled locally).
+// ---------------------------------------------------------------------------
+const CORS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-headers': '*',
+  'access-control-allow-methods': '*',
+  'access-control-expose-headers': 'content-range'
+};
+
+function fakeSession(email, id) {
+  const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: id, email, role: 'authenticated', exp })}.sig`;
+  return {
+    access_token: jwt, token_type: 'bearer', expires_in: 3600, expires_at: exp, refresh_token: 'rt-' + id,
+    user: { id, aud: 'authenticated', role: 'authenticated', email, app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() }
+  };
+}
+
+async function newMockedPage(browser, url, scenario) {
+  const ctx = await browser.newContext({ viewport: { width: 400, height: 800 } });
+  const page = await ctx.newPage();
+  const log = { rest: [], patches: [] };
+  const pageErrs = [];
+  page.on('pageerror', e => pageErrs.push(String(e)));
+  await ctx.route(/\.supabase\.co\//, async route => {
+    const req = route.request();
+    const u = new URL(req.url());
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+    const json = (status, body, extra = {}) => route.fulfill({ status, headers: { ...CORS, 'content-type': 'application/json', ...extra }, body: JSON.stringify(body) });
+    if (u.pathname.startsWith('/auth/v1/token')) {
+      return json(200, fakeSession(scenario.email, scenario.uid));
+    }
+    if (u.pathname.startsWith('/auth/v1/logout')) return route.fulfill({ status: 204, headers: CORS });
+    if (u.pathname.startsWith('/rest/v1/')) {
+      const table = u.pathname.replace('/rest/v1/', '');
+      log.rest.push(`${req.method()} ${table}`);
+      if (table === 'profiles') {
+        if (scenario.profilesMissing) {
+          return json(404, { code: 'PGRST205', message: "Could not find the table 'public.profiles' in the schema cache" });
+        }
+        if (req.method() === 'PATCH') {
+          log.patches.push({ url: u.search, body: req.postDataJSON() });
+          return json(200, []);
+        }
+        const q = u.searchParams;
+        const wantObj = (req.headers()['accept'] || '').includes('vnd.pgrst.object');
+        if (q.get('id') && q.get('id').startsWith('eq.')) {
+          return wantObj ? json(200, scenario.profile) : json(200, [scenario.profile]);
+        }
+        const rows = (scenario.pendingRows || []).filter(r => q.get('status') === 'eq.' + r.status);
+        if (req.method() === 'HEAD') {
+          return route.fulfill({ status: 200, headers: { ...CORS, 'content-range': `0-${Math.max(rows.length - 1, 0)}/${rows.length}` } });
+        }
+        return json(200, rows, { 'content-range': `0-${Math.max(rows.length - 1, 0)}/${rows.length}` });
+      }
+      return json(200, []);
+    }
+    return json(200, {});
+  });
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.supabase && typeof initClient === 'function', undefined, { timeout: 15000 });
+  await page.waitForSelector('#songbook', { timeout: 5000 });
+  return { ctx, page, log, pageErrs };
+}
+
+async function uiLogin(page, name) {
+  await page.click('#acct');
+  await page.waitForSelector('.modal input[type=email]');
+  await page.fill('.modal input[type=email]', name);
+  await page.fill('.modal input[type=password]', 'secret123');
+  await page.click('.modal button:has-text("เข้าสู่ระบบ / เริ่มใช้งาน")');
+}
+
 async function run() {
   const { server, url } = await startStaticServer();
   const pw = await loadPlaywright();
@@ -385,11 +462,92 @@ async function run() {
     assert(searchBtnDisabled === false, 'Expected #onlineSearchBtn.disabled === false after #clearSearchBtn click');
     console.log('  PASS: Quick Switcher escaped targetKey safely and #onlineSearchBtn recovered on clear.');
 
+
+    // -------------------------------------------------------------------------
+    // Test 9: Approval system (mocked Supabase; never hits production)
+    // -------------------------------------------------------------------------
+    console.log('[Test 9a] Pending user sees pending screen and no cloud sync...');
+    {
+      const m = await newMockedPage(browser, url, { email: 'newbie@mellowchords.local', uid: 'u-pending',
+        profile: { id: 'u-pending', email: 'newbie@mellowchords.local', username: 'newbie', status: 'pending', is_admin: false } });
+      await uiLogin(m.page, 'newbie');
+      await m.page.waitForSelector('#pendingGate', { timeout: 5000 });
+      const txt = await m.page.textContent('#pendingGate');
+      assert(txt.includes('รอแอดมินอนุมัติ'), `Pending screen text missing: ${txt}`);
+      await m.page.evaluate(() => syncAll());
+      await m.page.waitForTimeout(300);
+      assert(!m.log.rest.some(r => /songs|playlists/.test(r)), `Pending user must not sync, saw: ${m.log.rest.join(', ')}`);
+      const acct = await m.page.textContent('#acct');
+      assert(acct.includes('⏳'), `Expected pending badge on #acct, got ${acct}`);
+      const h = await m.page.evaluate(() => document.querySelector('#pendingGate button').getBoundingClientRect().height);
+      assert(h >= 44, `Pending-screen button must be >= 44px tall, got ${h}`);
+      assert(m.pageErrs.length === 0, `Page errors (9a): ${m.pageErrs.join('; ')}`);
+      await m.ctx.close();
+      console.log('  PASS: pending screen shown, no songs/playlists requests.');
+    }
+
+    console.log('[Test 9b] Missing profiles table degrades gracefully (behaves as before)...');
+    {
+      const m = await newMockedPage(browser, url, { email: 'old@mellowchords.local', uid: 'u-old', profilesMissing: true });
+      await uiLogin(m.page, 'old');
+      await m.page.waitForFunction(() => user && !user.isLocal && approval === 'none', undefined, { timeout: 5000 });
+      await m.page.waitForFunction(() => document.querySelectorAll('#pendingGate').length === 0);
+      await m.page.evaluate(() => syncAll());
+      await m.page.waitForTimeout(500);
+      assert(m.log.rest.some(r => /GET songs/.test(r)), `Expected cloud sync (GET songs) when profiles table missing, saw: ${m.log.rest.join(', ')}`);
+      assert(m.pageErrs.length === 0, `Page errors (9b): ${m.pageErrs.join('; ')}`);
+      await m.ctx.close();
+      console.log('  PASS: no approval screen and sync proceeds.');
+    }
+
+    console.log('[Test 9c] Admin sees pending badge, approvals modal, approve/reject...');
+    {
+      const rows = [
+        { id: 'p1', email: 'alice@mellowchords.local', username: 'alice', status: 'pending', created_at: '2026-11-20T10:00:00Z' },
+        { id: 'p2', email: 'bob@mellowchords.local', username: 'bob', status: 'pending', created_at: '2026-11-21T10:00:00Z' }
+      ];
+      const m = await newMockedPage(browser, url, { email: 'bierbebad@mellowchords.local', uid: 'u-admin', pendingRows: rows,
+        profile: { id: 'u-admin', email: 'bierbebad@mellowchords.local', username: 'bierbebad', status: 'approved', is_admin: true } });
+      await uiLogin(m.page, 'bierbebad');
+      await m.page.waitForFunction(() => document.querySelector('#acct').textContent.includes('🛡️2'), undefined, { timeout: 5000 });
+      assert((await m.page.locator('#pendingGate').count()) === 0, 'Admin must not see pending gate');
+      // login modal stays open and redraws to the account card
+      await m.page.click('.modal button:has-text("อนุมัติผู้สมัคร")');
+      await m.page.waitForSelector('.approvalItem', { timeout: 5000 });
+      assert((await m.page.locator('.approvalItem').count()) === 2, 'Expected 2 pending rows in approvals modal');
+      const bh = await m.page.evaluate(() => document.querySelector('.approveBtn').getBoundingClientRect().height);
+      assert(bh >= 44, `Approve button must be >= 44px, got ${bh}`);
+      await m.page.click('.approvalItem:has-text("alice") .approveBtn');
+      await m.page.waitForTimeout(400);
+      const patch = m.log.patches.find(p => p.url.includes('id=eq.p1'));
+      assert(patch && patch.body.status === 'approved' && patch.body.approved_by === 'u-admin', `Expected approve PATCH for p1, got ${JSON.stringify(m.log.patches)}`);
+      await m.page.click('.approvalItem:has-text("bob") .rejectBtn');
+      await m.page.waitForTimeout(400);
+      const patch2 = m.log.patches.find(p => p.url.includes('id=eq.p2'));
+      assert(patch2 && patch2.body.status === 'rejected', `Expected reject PATCH for p2, got ${JSON.stringify(m.log.patches)}`);
+      assert(m.pageErrs.length === 0, `Page errors (9c): ${m.pageErrs.join('; ')}`);
+      await m.ctx.close();
+      console.log('  PASS: admin badge, modal list, approve & reject PATCHes.');
+    }
+
+    console.log('[Test 9d] Non-admin approved user has no approvals entry...');
+    {
+      const m = await newMockedPage(browser, url, { email: 'carol@mellowchords.local', uid: 'u-carol',
+        profile: { id: 'u-carol', email: 'carol@mellowchords.local', username: 'carol', status: 'approved', is_admin: false } });
+      await uiLogin(m.page, 'carol');
+      await m.page.waitForFunction(() => approval === 'approved', undefined, { timeout: 5000 });
+      await m.page.waitForSelector('.modal .card');
+      const has = await m.page.evaluate(() => [...document.querySelectorAll('.modal button')].some(b => b.textContent.includes('อนุมัติผู้สมัคร')));
+      assert(!has, 'Non-admin must not see approvals button');
+      await m.ctx.close();
+      console.log('  PASS.');
+    }
+
     assert(pageErrors.length === 0, `Page errors occurred: ${pageErrors.join('; ')}`);
     assert(consoleErrors.length === 0, `Console errors occurred: ${consoleErrors.join('; ')}`);
     assert(softFailures.length === 0, `Subtest failures: ${softFailures.join('; ')}`);
 
-    console.log('\n✅ ALL 8 E2E & <5s LATENCY TESTS PASSED!');
+    console.log('\n✅ ALL 9 E2E & <5s LATENCY TESTS PASSED!');
   } finally {
     await browser.close();
     server.close();
