@@ -825,7 +825,7 @@ async function run() {
     // -------------------------------------------------------------------------
     console.log('[Test 13] Real-time Live Room 2-tab sync + 1-click Band Group invite + MIDI Footswitch...');
     {
-      // Seed 2 songs in Songbook on the main page so Live Room has a multi-song setlist
+      // Seed 3 songs in Songbook (Song 1 has BOTH image + text to verify Image-First display, Song 3 will be added mid-session)
       await page.evaluate(() => {
         const seedSongs = [
           {
@@ -834,7 +834,7 @@ async function run() {
             artist: 'Band A',
             key: 'C',
             text: '[Verse]\nC       G\nเริ่มเล่นเพลงแรก\nAm      F\nซิงก์พร้อมกันทั้งวง',
-            images: [],
+            images: ['data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII='],
             shift: 0,
             savedAt: Date.now()
           },
@@ -863,6 +863,15 @@ async function run() {
       const roomCode = (await page.textContent('#lrRoomCodeBadge')).trim();
       assert(roomCode.length === 6, `Expected 6-char room code, got "${roomCode}"`);
 
+      // Verify Image-First display on Song 1 (has both image and text -> image shown first!)
+      await page.waitForSelector('#lrChordGallery .lr-chord-img', { timeout: 4000 });
+      assert((await page.locator('#lrModeTextBtn').count()) === 1, 'Expected Image/Text switcher when song has both');
+
+      // Verify iPad wide-stage toggle hides/shows sidebar cleanly
+      await page.click('#lrToggleSidebarBtn');
+      assert((await page.locator('.lr-stage-body.wide-stage').count()) === 1, 'Expected wide-stage class on iPad toggle');
+      await page.click('#lrToggleSidebarBtn');
+
       // Tab 2 (Member): Same browser context so BroadcastChannel & localStorage mirror cross-tab realtime
       const memberPage = await context.newPage();
       const memberErrs = [];
@@ -875,10 +884,37 @@ async function run() {
       await memberPage.click('#lrJoinSubmitBtn');
       await memberPage.waitForSelector('#lrCurrentSongTitle', { timeout: 5000 });
 
+      // Member also sees Image-First on Song 1!
+      await memberPage.waitForSelector('#lrChordGallery .lr-chord-img', { timeout: 4000 });
+
       // Wait for Presence online count to show 2 members
       await page.waitForFunction(() => {
         const bar = document.querySelector('#lrOnlineBar');
         return bar && bar.textContent.includes('(2)');
+      }, undefined, { timeout: 5000 });
+
+      // 0) Host adds a 3rd song right from Live Room Setlist panel -> syncs live to Member!
+      await page.evaluate(() => {
+        const b = loadBook();
+        b.push({
+          id: 'lr-song-3',
+          title: 'เพลงแถมหน้าเวที 3',
+          artist: 'Encore Band',
+          key: 'D',
+          text: 'D  A  Bm  G',
+          images: [],
+          shift: 0,
+          savedAt: Date.now()
+        });
+        saveBook(b);
+      });
+      await page.click('#lrAddSongBtn');
+      await page.waitForSelector('[data-lr-picker-add="lr-song-3"]', { timeout: 4000 });
+      await page.click('[data-lr-picker-add="lr-song-3"]');
+      await page.click('.modal button:has-text("เสร็จสิ้น")');
+      await memberPage.waitForFunction(() => {
+        const list = document.querySelector('.lr-setlist-list');
+        return list && list.textContent.includes('เพลงแถมหน้าเวที 3');
       }, undefined, { timeout: 5000 });
 
       // 1) Host clicks Next Song -> Member syncs to Song 2 immediately
@@ -916,7 +952,7 @@ async function run() {
 
       assert(memberErrs.length === 0, `Page errors on Member tab: ${memberErrs.join('; ')}`);
       await memberPage.close();
-      console.log(`  PASS: Live Room (${roomCode}) 2-tab Presence, Song Sync, Key Sync & MIDI Host/Member lock verified.`);
+      console.log(`  PASS: Live Room (${roomCode}) Image-First, In-Room +Add Song Sync, iPad Wide-Stage, 2-tab Presence, Song/Key Sync & MIDI verified.`);
     }
 
     assert(pageErrors.length === 0, `Page errors occurred: ${pageErrors.join('; ')}`);

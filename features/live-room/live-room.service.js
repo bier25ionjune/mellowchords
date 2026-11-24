@@ -308,6 +308,7 @@
       var displayName = (opts && opts.displayName) || me.username || (role === 'host' ? 'Host' : 'สมาชิก');
       var onPresenceChange = opts && typeof opts.onPresenceChange === 'function' ? opts.onPresenceChange : function () {};
       var onStateSync = opts && typeof opts.onStateSync === 'function' ? opts.onStateSync : function () {};
+      var onSetlistSync = opts && typeof opts.onSetlistSync === 'function' ? opts.onSetlistSync : function () {};
       var onRoomClosed = opts && typeof opts.onRoomClosed === 'function' ? opts.onRoomClosed : function () {};
 
       // Cloud Supabase Realtime (Presence + Broadcast + Postgres Changes)
@@ -349,6 +350,12 @@
           }
         });
 
+        ch.on('broadcast', { event: 'setlist_sync' }, function (msg) {
+          if (msg && msg.payload && Array.isArray(msg.payload.setlist_snapshot)) {
+            onSetlistSync(msg.payload.setlist_snapshot);
+          }
+        });
+
         ch.on('broadcast', { event: 'room_closed' }, function () {
           onRoomClosed();
         });
@@ -362,6 +369,9 @@
             if (row.is_active === false) {
               onRoomClosed();
               return;
+            }
+            if (Array.isArray(row.setlist_snapshot)) {
+              onSetlistSync(row.setlist_snapshot);
             }
             onStateSync({
               current_song_index: row.current_song_index,
@@ -423,6 +433,8 @@
             onPresenceChange(Array.from(localPresenceMap.values()));
           } else if (data.type === 'room_state_sync' && data.payload) {
             onStateSync(data.payload);
+          } else if (data.type === 'setlist_sync' && data.payload && Array.isArray(data.payload.setlist_snapshot)) {
+            onSetlistSync(data.payload.setlist_snapshot);
           } else if (data.type === 'room_closed') {
             onRoomClosed();
           }
@@ -489,6 +501,54 @@
       }
     }
 
+    /* ---------------- 6B) Broadcast & Persist Updated Room Setlist ---------- */
+    async function broadcastRoomSetlist(room, rawSongs) {
+      if (!room || !room.id) return [];
+      var snapshot = sanitizeSongSnapshot(rawSongs);
+      var payload = {
+        setlist_snapshot: snapshot,
+        ts: Date.now()
+      };
+
+      if (activeChannel && typeof activeChannel.send === 'function') {
+        try {
+          activeChannel.send({
+            type: 'broadcast',
+            event: 'setlist_sync',
+            payload: payload
+          });
+        } catch (_) {}
+      }
+      if (activeBroadcast) {
+        try {
+          activeBroadcast.postMessage({
+            type: 'setlist_sync',
+            clientTabId: clientTabId,
+            payload: payload
+          });
+        } catch (_) {}
+      }
+
+      if (useCloud() && !String(room.id).startsWith('room-')) {
+        var sb = getSupabase();
+        try {
+          await sb
+            .from('live_rooms')
+            .update({ setlist_snapshot: snapshot })
+            .eq('id', room.id);
+        } catch (_) {}
+      } else {
+        var rooms = loadLocalRooms();
+        var target = rooms.find(function (r) { return r.id === room.id; });
+        if (target) {
+          target.setlist_snapshot = snapshot;
+          target.updated_at = new Date().toISOString();
+          saveLocalRooms(rooms);
+        }
+      }
+      return snapshot;
+    }
+
     /* ---------------- 7) Close Room (Host) ---------------- */
     async function closeRoom(room) {
       if (!room || !room.id) return;
@@ -531,6 +591,7 @@
       inviteMembers: inviteMembers,
       subscribeToRoom: subscribeToRoom,
       broadcastRoomState: broadcastRoomState,
+      broadcastRoomSetlist: broadcastRoomSetlist,
       closeRoom: closeRoom,
       unsubscribe: unsubscribe,
       getActiveRoomId: function () { return activeRoomId; }

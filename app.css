@@ -2380,4 +2380,98 @@ body.is-admin #bottomNav {
   resize: vertical;
 }
 
+/* ==============================================================================
+ * iPad Portrait (768px–1024px) & Landscape (1024px–1366px) Stage UX/UI Optimization
+ * ============================================================================== */
+button,
+.navTab,
+.pillTab,
+.quickCard {
+  touch-action: manipulation;
+}
+
+#hdr .hdrTop .row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+#hdr .hdrTop .row::-webkit-scrollbar {
+  display: none;
+}
+
+#hdr .hdrTop .row > * {
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) and (max-width: 1180px) {
+  .app {
+    display: grid;
+    grid-template-columns: 310px 1fr;
+    align-items: start;
+  }
+
+  body[data-view="live-room"] .app,
+  body[data-view="friends"] .app {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-view="live-room"] #side,
+  body[data-view="friends"] #side {
+    display: none !important;
+  }
+
+  body[data-view="home"] #pane,
+  body[data-view="playlists"] #pane {
+    display: block;
+  }
+
+  #side {
+    position: sticky;
+    top: var(--hh, 56px);
+    max-height: calc(100dvh - var(--hh, 56px));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  #pane {
+    min-height: calc(100dvh - var(--hh, 56px));
+    padding: 16px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .songTopActions button,
+  .setlistNav button,
+  .keyBar button,
+  .keyBar .keyPill,
+  #hdr button {
+    min-height: 44px;
+    padding-left: 13px;
+    padding-right: 13px;
+  }
+
+  #gallery img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  #bottomNav {
+    display: none;
+  }
+}
+
+@media (min-width: 1181px) {
+  body[data-view="live-room"] .app,
+  body[data-view="friends"] .app {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-view="live-room"] #side,
+  body[data-view="friends"] #side {
+    display: none !important;
+  }
+}
+
+
 

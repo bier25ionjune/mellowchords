@@ -6616,6 +6616,179 @@ if (window.MellowFriendsService && window.MellowFriendsUI) {
   if (friendsMount) friendsUIInstance.mount(friendsMount);
 }
 
+function openLiveRoomSongPicker({ room, existingSongs = [], onAddSong }) {
+  const existingIds = new Set((existingSongs || []).map(s => s.id));
+  modal('➕ เพิ่มเพลงเข้าเซ็ตในห้อง Live Room', (box, close) => {
+    const searchForm = mk('form', 'row');
+    searchForm.style.gap = '8px';
+    searchForm.style.marginBottom = '10px';
+
+    const searchInp = mk('input', 'grow');
+    searchInp.id = 'lrPickerSearchInput';
+    searchInp.type = 'search';
+    searchInp.placeholder = 'ค้นชื่อเพลง / ศิลปินในคลัง หรือกดค้นออนไลน์...';
+
+    const onlineBtn = btn('🌐 ค้นออนไลน์', () => runOnlineSearch(), 'secondary small');
+    onlineBtn.id = 'lrPickerOnlineBtn';
+    onlineBtn.type = 'button';
+
+    searchForm.append(searchInp, onlineBtn);
+
+    const statusEl = mk('div', 'muted small');
+    statusEl.id = 'lrPickerStatus';
+    statusEl.style.marginBottom = '8px';
+
+    const listEl = mk('div', 'list');
+    listEl.id = 'lrPickerList';
+    listEl.style.maxHeight = '52vh';
+    listEl.style.overflowY = 'auto';
+
+    async function handlePickSong(song) {
+      if (!song) return;
+      await onAddSong(song);
+      existingIds.add(song.id);
+      // Also persist into underlying saved playlist if room is linked to one
+      if (room && typeof room.setlist_id === 'string' && room.setlist_id.startsWith('pl:')) {
+        const plId = room.setlist_id.slice(3);
+        const pls = getPls();
+        const pl = pls.find(p => p.id === plId);
+        if (pl) {
+          if (!Array.isArray(pl.songIds)) pl.songIds = [];
+          if (!pl.songIds.includes(song.id)) pl.songIds.push(song.id);
+          if (Array.isArray(pl.items) && !pl.items.some(it => it && it.songId === song.id)) {
+            pl.items.push({ songId: song.id, targetKey: song.key || '' });
+          }
+          setPls(pls);
+          renderPls();
+        }
+      }
+      renderLocalList(searchInp.value);
+    }
+
+    function renderLocalList(query = '') {
+      const q = String(query || '').trim().toLowerCase();
+      const book = loadBook();
+      const filtered = book.filter(s => {
+        if (!q) return true;
+        return String(s.title || '').toLowerCase().includes(q) ||
+               String(s.artist || '').toLowerCase().includes(q);
+      });
+      listEl.innerHTML = '';
+      statusEl.textContent = `📚 คลังเพลงของฉัน (${filtered.length} เพลง)`;
+      if (!filtered.length) {
+        const empty = mk('div', 'muted small', 'ไม่พบเพลงในคลัง — กดปุ่ม "🌐 ค้นออนไลน์" เพื่อดึงคอร์ดจากเว็บเข้าห้องได้เลย');
+        empty.style.padding = '16px';
+        empty.style.textAlign = 'center';
+        listEl.append(empty);
+        return;
+      }
+      filtered.forEach(s => {
+        const row = mk('div', 'row');
+        row.style.justifyContent = 'space-between';
+        row.style.alignItems = 'center';
+        row.style.padding = '10px 12px';
+        row.style.borderRadius = '10px';
+        row.style.background = 'rgba(255,255,255,0.04)';
+        row.style.marginBottom = '6px';
+
+        const info = mk('div');
+        info.innerHTML = `<b>${escapeHtml(s.title)}</b><div class="muted small">${escapeHtml(s.artist || '')}${s.key ? ' · คีย์ ' + escapeHtml(s.key) : ''}</div>`;
+
+        if (existingIds.has(s.id)) {
+          const badge = mk('span', 'badge green', '✓ อยู่ในห้องแล้ว');
+          row.append(info, badge);
+        } else {
+          const addBtn = btn('➕ เพิ่มเข้าห้อง', () => handlePickSong(s), 'primary small');
+          addBtn.dataset.lrPickerAdd = s.id;
+          addBtn.style.minHeight = '40px';
+          row.append(info, addBtn);
+        }
+        listEl.append(row);
+      });
+    }
+
+    async function runOnlineSearch() {
+      const q = searchInp.value.trim();
+      if (!q) {
+        toast('กรุณาพิมพ์ชื่อเพลงที่ต้องการค้นหาออนไลน์', true);
+        searchInp.focus();
+        return;
+      }
+      statusEl.textContent = `🌐 กำลังค้นหา "${q}" ออนไลน์...`;
+      listEl.innerHTML = '';
+      try {
+        const res = await searchRealWebChords(q);
+        const items = Array.isArray(res) ? res : [];
+        statusEl.textContent = `🌐 พบผลลัพธ์ออนไลน์ ${items.length} รายการ`;
+        if (!items.length) {
+          listEl.append(mk('div', 'muted small', 'ไม่พบเพลงออนไลน์ที่ตรงกับคำค้นหา'));
+          return;
+        }
+        items.slice(0, 15).forEach(item => {
+          const row = mk('div', 'row');
+          row.style.justifyContent = 'space-between';
+          row.style.alignItems = 'center';
+          row.style.padding = '10px 12px';
+          row.style.borderRadius = '10px';
+          row.style.background = 'rgba(255,255,255,0.04)';
+          row.style.marginBottom = '6px';
+
+          const info = mk('div');
+          info.innerHTML = `<b>${escapeHtml(item.title || item.name || 'เพลงออนไลน์')}</b><div class="muted small">${escapeHtml(item.artist || '')}</div>`;
+
+          const addOnlineBtn = btn('⬇️ ดึงเข้าห้อง', async () => {
+            addOnlineBtn.disabled = true;
+            addOnlineBtn.textContent = '⏳ กำลังดึง...';
+            try {
+              const loaded = await loadRealWebChordResult(item, { silentOpen: true });
+              const songObj = loaded && loaded.id ? loaded : {
+                id: 'web-' + Date.now().toString(36),
+                title: item.title || q,
+                artist: item.artist || '',
+                key: item.key || '',
+                text: '',
+                images: item.imgUrl ? [item.imgUrl] : [],
+                savedAt: Date.now()
+              };
+              const book = loadBook();
+              if (!book.some(b => b.id === songObj.id)) {
+                book.push(songObj);
+                saveBook(book);
+                renderSongbook();
+              }
+              await handlePickSong(songObj);
+              addOnlineBtn.textContent = '✓ เพิ่มแล้ว';
+            } catch (err) {
+              toast('ดึงเพลงออนไลน์ไม่สำเร็จ: ' + (err.message || err), true);
+              addOnlineBtn.disabled = false;
+              addOnlineBtn.textContent = '⬇️ ดึงเข้าห้อง';
+            }
+          }, 'primary small');
+          addOnlineBtn.style.minHeight = '40px';
+          row.append(info, addOnlineBtn);
+          listEl.append(row);
+        });
+      } catch (err) {
+        statusEl.textContent = 'ค้นหาออนไลน์ไม่สำเร็จ: ' + (err.message || err);
+      }
+    }
+
+    searchInp.oninput = () => renderLocalList(searchInp.value);
+    searchForm.onsubmit = (e) => {
+      e.preventDefault();
+      renderLocalList(searchInp.value);
+    };
+
+    const footer = mk('div', 'row');
+    footer.style.justifyContent = 'flex-end';
+    footer.style.marginTop = '10px';
+    footer.append(btn('เสร็จสิ้น', close, 'ghost'));
+
+    box.append(searchForm, statusEl, listEl, footer);
+    renderLocalList('');
+  });
+}
+
 if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
   liveRoomServiceInstance = window.MellowLiveRoomService.createService({
     getSupabase: () => sb,
@@ -6635,6 +6808,10 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
       const k = detectKey(txt);
       renderSheet(tmp, txt, sh || 0, preferFlat(k, sh || 0));
       return tmp.innerHTML;
+    },
+    onAddSongRequest: openLiveRoomSongPicker,
+    onOpenLightbox: (imgUrl) => {
+      if (typeof openLightbox === 'function') openLightbox(imgUrl);
     },
     onToast: (msg, isErr) => toast(msg, isErr)
   });

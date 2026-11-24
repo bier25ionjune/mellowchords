@@ -31,6 +31,8 @@
     var transposeText = typeof options.transposeText === 'function' ? options.transposeText : function (t) { return t; };
     var transposeChord = typeof options.transposeChord === 'function' ? options.transposeChord : function (c) { return c; };
     var renderChordHtml = typeof options.renderChordHtml === 'function' ? options.renderChordHtml : null;
+    var onAddSongRequest = typeof options.onAddSongRequest === 'function' ? options.onAddSongRequest : null;
+    var onOpenLightbox = typeof options.onOpenLightbox === 'function' ? options.onOpenLightbox : null;
     var onToast = typeof options.onToast === 'function' ? options.onToast : function () {};
 
     var rootEl = null;
@@ -39,6 +41,8 @@
     var localOverride = false;
     var localSongIndex = 0;
     var localKeyShift = 0;
+    var displayMode = 'image'; // 'image' (Image-first default) | 'text'
+    var stageWide = false;     // iPad stage toggle: hide sidebar for full-screen chord sheet
     var onlineMembers = [];
     var myRooms = [];
     var friends = [];
@@ -139,6 +143,16 @@
           }
           render();
         },
+        onSetlistSync: function (updatedSnapshot) {
+          if (!activeRoom || !Array.isArray(updatedSnapshot)) return;
+          var prevLen = getSnapshotSongs().length;
+          activeRoom.setlist_snapshot = updatedSnapshot;
+          if (updatedSnapshot.length > prevLen) {
+            var added = updatedSnapshot[updatedSnapshot.length - 1];
+            onToast('⚡ Host เพิ่มเพลงเข้าเซ็ต: ' + (added ? added.title : 'เพลงใหม่'));
+          }
+          render();
+        },
         onRoomClosed: function () {
           onToast('ห้อง Live Room ถูกปิดโดย Host แล้ว');
           leaveRoom();
@@ -148,11 +162,26 @@
       render();
     }
 
+    async function hostAddSongToRoom(song) {
+      if (!activeRoom || !isHost || !song) return;
+      var currentSongs = getSnapshotSongs().slice();
+      if (currentSongs.some(function (s) { return s.id === song.id; })) {
+        onToast('เพลง "' + song.title + '" อยู่ในเซ็ตของห้องนี้แล้ว');
+        return;
+      }
+      currentSongs.push(song);
+      var syncedSnapshot = await service.broadcastRoomSetlist(activeRoom, currentSongs);
+      activeRoom.setlist_snapshot = syncedSnapshot && syncedSnapshot.length ? syncedSnapshot : currentSongs;
+      onToast('➕ เพิ่ม "' + song.title + '" เข้าเซ็ตห้องและซิงก์ทั้งวงแล้ว ✔');
+      render();
+    }
+
     async function leaveRoom() {
       service.unsubscribe();
       activeRoom = null;
       isHost = false;
       localOverride = false;
+      stageWide = false;
       onlineMembers = [];
       await refreshLobbyData();
     }
@@ -453,26 +482,37 @@
       var origKey = curSong && curSong.key ? curSong.key : 'C';
       var playKey = curSong ? transposeChord(origKey, curShift) : '-';
 
-      var sheetHtml = '';
+      var textSource = '';
+      var validImgs = [];
       if (curSong) {
-        var textSource = (curSong.parsedChordSheet && curSong.parsedChordSheet.monospaceText)
+        textSource = (curSong.parsedChordSheet && curSong.parsedChordSheet.monospaceText)
           ? curSong.parsedChordSheet.monospaceText
           : (curSong.text || '');
+        if (Array.isArray(curSong.images)) {
+          validImgs = curSong.images.filter(function (u) {
+            return typeof u === 'string' && /^(https?:|data:|blob:)/i.test(u);
+          });
+        }
+      }
 
-        if (textSource) {
+      var hasImages = validImgs.length > 0;
+      var hasText = !!(textSource && textSource.trim());
+      var showImageNow = hasImages && (displayMode === 'image' || !hasText);
+
+      var sheetHtml = '';
+      if (curSong) {
+        if (showImageNow) {
+          sheetHtml = '<div class="lr-chord-gallery" id="lrChordGallery">' +
+            validImgs.map(function (imgUrl, i) {
+              return '<img class="lr-chord-img" data-lr-img-idx="' + i + '" src="' + esc(imgUrl) + '" referrerpolicy="no-referrer" alt="' + esc(curSong.title) + '" title="แตะเพื่อขยายดูเต็มจอ">';
+            }).join('') +
+          '</div>';
+        } else if (hasText) {
           sheetHtml = '<div class="lr-chord-sheet" id="lrChordSheet">' +
             (renderChordHtml ? renderChordHtml(textSource, curShift) : esc(transposeText(textSource, curShift))) +
           '</div>';
-        } else if (curSong.images && curSong.images.length) {
-          sheetHtml = '<div style="text-align:center">' +
-            curSong.images.map(function (imgUrl) {
-              return typeof imgUrl === 'string' && /^(https?:|data:|blob:)/i.test(imgUrl)
-                ? '<img class="lr-chord-img" src="' + esc(imgUrl) + '" referrerpolicy="no-referrer" alt="' + esc(curSong.title) + '">'
-                : '';
-            }).join('') +
-          '</div>';
         } else {
-          sheetHtml = '<div class="lr-empty">เพลงนี้ยังไม่มีเนื้อคอร์ดหรือรูปภาพ</div>';
+          sheetHtml = '<div class="lr-empty">เพลงนี้ยังไม่มีรูปภาพหรือเนื้อคอร์ด</div>';
         }
       }
 
@@ -482,6 +522,13 @@
 
       var canControl = isHost || localOverride;
 
+      var modeSwitchHtml = (hasImages && hasText)
+        ? '<div class="lr-mode-switch" role="tablist" aria-label="สลับโหมดแสดงคอร์ด">' +
+            '<button type="button" class="small' + (showImageNow ? ' primary' : ' ghost') + '" id="lrModeImageBtn">🖼️ รูปภาพ</button>' +
+            '<button type="button" class="small' + (!showImageNow ? ' primary' : ' ghost') + '" id="lrModeTextBtn">📝 ข้อความ</button>' +
+          '</div>'
+        : '';
+
       var html = '<div class="lr-shell">' +
         '<div class="lr-stage-top">' +
           '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
@@ -490,6 +537,9 @@
             roleBadge +
           '</div>' +
           '<div class="fr-actions">' +
+            '<button type="button" class="small ghost" id="lrToggleSidebarBtn" title="ซ่อน/แสดงแถบเซ็ตเพลงสำหรับหน้าจอ iPad">' +
+              (stageWide ? '📋 แสดงเซ็ต' : '🖥️ ขยายเต็มจอ') +
+            '</button>' +
             '<button type="button" class="small ghost" id="lrCopyCodeBtn">📋 คัดลอกโค้ด</button>' +
             (isHost
               ? '<button type="button" class="small danger" id="lrCloseRoomBtn">⏹ ปิดห้อง</button>'
@@ -516,39 +566,47 @@
             : '') +
         '</div>' +
 
-        '<div class="lr-stage-body">' +
+        '<div class="lr-stage-body' + (stageWide ? ' wide-stage' : '') + '">' +
           // Left: Setlist Queue
           '<aside class="lr-setlist-panel">' +
-            '<div class="fr-sec-title">🎼 รายการเพลงในห้อง (' + songs.length + ')</div>' +
-            songs.map(function (s, idx) {
-              var activeCls = idx === curIdx ? ' active' : '';
-              return '<button type="button" class="lr-song-btn' + activeCls + '" data-lr-song-idx="' + idx + '"' + (!canControl ? ' disabled' : '') + '>' +
-                '<span>' + (idx + 1) + '. ' + esc(s.title) + '</span>' +
-                '<small class="badge dim">' + esc(s.key || '-') + '</small>' +
-              '</button>';
-            }).join('') +
+            '<div class="lr-setlist-head">' +
+              '<span class="fr-sec-title">🎼 เซ็ตเพลง (' + songs.length + ')</span>' +
+              (isHost && onAddSongRequest
+                ? '<button type="button" class="small primary" id="lrAddSongBtn">➕ เพิ่มเพลง</button>'
+                : '') +
+            '</div>' +
+            '<div class="lr-setlist-list">' +
+              songs.map(function (s, idx) {
+                var activeCls = idx === curIdx ? ' active' : '';
+                return '<button type="button" class="lr-song-btn' + activeCls + '" data-lr-song-idx="' + idx + '"' + (!canControl ? ' disabled' : '') + '>' +
+                  '<span class="lr-song-label">' + (idx + 1) + '. ' + esc(s.title) + '</span>' +
+                  '<small class="badge dim">' + esc(s.key || '-') + '</small>' +
+                '</button>';
+              }).join('') +
+            '</div>' +
           '</aside>' +
 
           // Right: Live Chord Stage
           '<section class="lr-chord-stage">' +
             '<div class="lr-controls-bar">' +
               '<div>' +
-                '<h3 id="lrCurrentSongTitle" style="margin:0;font-size:1.2rem">' + esc(curSong ? curSong.title : 'ไม่มีเพลง') + '</h3>' +
+                '<h3 id="lrCurrentSongTitle" style="margin:0;font-size:1.25rem">' + esc(curSong ? curSong.title : 'ไม่มีเพลง') + '</h3>' +
                 '<div class="fr-user-sub" id="lrCurrentSongArtist">' + esc(curSong ? (curSong.artist || '') : '') + '</div>' +
               '</div>' +
-              '<div class="fr-actions">' +
-                '<button type="button" class="small" id="lrPrevSongBtn"' + (!canControl || curIdx <= 0 ? ' disabled' : '') + '>⏮ ก่อนหน้า</button>' +
+              '<div class="lr-nav-controls">' +
+                '<button type="button" class="small lr-touch-btn" id="lrPrevSongBtn"' + (!canControl || curIdx <= 0 ? ' disabled' : '') + '>⏮ ก่อนหน้า</button>' +
                 '<span class="badge dim" id="lrSongCounter">' + (curIdx + 1) + ' / ' + songs.length + '</span>' +
-                '<button type="button" class="small primary" id="lrNextSongBtn"' + (!canControl || curIdx >= songs.length - 1 ? ' disabled' : '') + '>ถัดไป ⏭</button>' +
+                '<button type="button" class="small primary lr-touch-btn" id="lrNextSongBtn"' + (!canControl || curIdx >= songs.length - 1 ? ' disabled' : '') + '>ถัดไป ⏭</button>' +
               '</div>' +
             '</div>' +
 
             '<div class="lr-key-controls">' +
               '<span class="keyPill">คีย์เดิม <b>' + esc(origKey) + '</b></span>' +
               '<span class="keyPill">คีย์ที่เล่น <b id="lrPlayKeyVal">' + esc(playKey) + '</b> <small id="lrShiftVal">(' + (curShift >= 0 ? '+' + curShift : curShift) + ')</small></span>' +
-              '<button type="button" class="small" id="lrKeyDownBtn"' + (!canControl ? ' disabled' : '') + '>− ลดคีย์</button>' +
-              '<button type="button" class="small ghost" id="lrKeyResetBtn"' + (!canControl ? ' disabled' : '') + '>รีเซ็ต</button>' +
-              '<button type="button" class="small primary" id="lrKeyUpBtn"' + (!canControl ? ' disabled' : '') + '>+ เพิ่มคีย์</button>' +
+              '<button type="button" class="small lr-touch-btn" id="lrKeyDownBtn"' + (!canControl ? ' disabled' : '') + '>− ลดคีย์</button>' +
+              '<button type="button" class="small ghost lr-touch-btn" id="lrKeyResetBtn"' + (!canControl ? ' disabled' : '') + '>รีเซ็ต</button>' +
+              '<button type="button" class="small primary lr-touch-btn" id="lrKeyUpBtn"' + (!canControl ? ' disabled' : '') + '>+ เพิ่มคีย์</button>' +
+              modeSwitchHtml +
             '</div>' +
 
             sheetHtml +
@@ -562,6 +620,54 @@
     }
 
     function bindActiveRoomEvents(curIdx, curShift) {
+      var toggleSidebarBtn = rootEl.querySelector('#lrToggleSidebarBtn');
+      if (toggleSidebarBtn) {
+        toggleSidebarBtn.onclick = function () {
+          stageWide = !stageWide;
+          render();
+        };
+      }
+
+      var modeImageBtn = rootEl.querySelector('#lrModeImageBtn');
+      if (modeImageBtn) {
+        modeImageBtn.onclick = function () {
+          displayMode = 'image';
+          render();
+        };
+      }
+
+      var modeTextBtn = rootEl.querySelector('#lrModeTextBtn');
+      if (modeTextBtn) {
+        modeTextBtn.onclick = function () {
+          displayMode = 'text';
+          render();
+        };
+      }
+
+      var addSongBtn = rootEl.querySelector('#lrAddSongBtn');
+      if (addSongBtn && onAddSongRequest) {
+        addSongBtn.onclick = function () {
+          onAddSongRequest({
+            room: activeRoom,
+            existingSongs: getSnapshotSongs(),
+            onAddSong: function (song) { return hostAddSongToRoom(song); }
+          });
+        };
+      }
+
+      rootEl.querySelectorAll('.lr-chord-img').forEach(function (img) {
+        img.onerror = function () {
+          if (img.dataset.fallbackTried) return;
+          img.dataset.fallbackTried = '1';
+          if (/^https?:\/\//i.test(img.src) && !img.src.includes('wsrv.nl')) {
+            img.src = 'https://wsrv.nl/?url=' + encodeURIComponent(img.src) + '&output=webp&q=85&w=1400&we';
+          }
+        };
+        img.onclick = function () {
+          if (onOpenLightbox) onOpenLightbox(img.src);
+        };
+      });
+
       var copyBtn = rootEl.querySelector('#lrCopyCodeBtn');
       if (copyBtn) {
         copyBtn.onclick = function () {
