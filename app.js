@@ -795,6 +795,7 @@ function parseDdgLiteMarkdown(md, q) {
       continue;
     }
 
+    const isChordtabs = domain.includes('chordtabs.in.th');
     if (/\/(artist|category|tag|search)\//i.test(targetUrl)) continue;
     if (isChordtabs && (!/\/\d+/.test(targetUrl) && !/song\.php/i.test(targetUrl))) continue;
 
@@ -802,7 +803,6 @@ function parseDdgLiteMarkdown(md, q) {
     const { title, artist, key } = parseTitleAndArtist(rawLinkTitle, snippetBlock, targetUrl);
     if (key && !trueKey) trueKey = key;
 
-    const isChordtabs = domain.includes('chordtabs.in.th');
     const displayDomain = isChordtabs ? 'chordtabs.in.th (คอร์ดภาพ)' : domain;
 
     items.push({
@@ -1551,7 +1551,7 @@ function renderPopularChips() {
   if (bar) bar.hidden = true;
 }
 
-let deb;
+let deb, onlineDeb;
 function doInstantLocalFilter() {
   const q = $('#q').value.trim();
   $('#clearSearchBtn').hidden = !q;
@@ -1579,8 +1579,11 @@ function doInstantLocalFilter() {
     $('#resultsTitle').textContent = `🎵 พบในคลังเพลง (${localMatches.length}) · กด “🌐 ค้นออนไลน์” เพื่อดึงจากเว็บคอร์ด`;
     list.replaceChildren();
     for (const it of localMatches) {
-      const row = mk('div', 'item'), b = mk('button', 'open'), titleEl = mk('div', 't', it.title);
-      titleEl.appendChild(mk('span', 'badge', `Key ${it.key}`));
+      const displayTitle = it.artist && !it.title.toLowerCase().includes(it.artist.toLowerCase())
+        ? `${it.title} - ${it.artist}`
+        : it.title;
+      const row = mk('div', 'item'), b = mk('button', 'open'), titleEl = mk('div', 't', displayTitle);
+      if (it.key) titleEl.appendChild(mk('span', 'badge', `Key ${it.key}`));
       titleEl.appendChild(mk('span', 'badge green', '💾 ในคลัง'));
       b.append(titleEl);
       b.onclick = () => {
@@ -1595,7 +1598,14 @@ function doInstantLocalFilter() {
 
 $('#q').oninput = () => {
   clearTimeout(deb);
+  clearTimeout(onlineDeb);
   deb = setTimeout(doInstantLocalFilter, 120);
+  const qVal = $('#q').value.trim();
+  if (qVal.length >= 2) {
+    onlineDeb = setTimeout(() => {
+      runInAppOnlineSearch();
+    }, 600);
+  }
 };
 
 $$('.filterTabs .pillTab').forEach(pill => {
@@ -2122,18 +2132,18 @@ async function loadGallery(song) {
   g.hidden = false;
 
   for (const id of song.images) {
+    if (typeof id === 'string' && (id.startsWith('http://') || id.startsWith('https://') || id.startsWith('data:'))) {
+      const im = mk('img', 'sheetImg');
+      if (stageInvertImg) im.classList.add('invertFilter');
+      im.src = id;
+      im.alt = 'ภาพคอร์ด';
+      im.onclick = () => openLightbox(id);
+      g.appendChild(im);
+      continue;
+    }
     let b = await getImg(id);
     if (tok !== galTok) return;
     if (!b) {
-      if (typeof id === 'string' && (id.startsWith('http://') || id.startsWith('https://') || id.startsWith('data:'))) {
-        const im = mk('img', 'sheetImg');
-        if (stageInvertImg) im.classList.add('invertFilter');
-        im.src = id;
-        im.alt = 'ภาพคอร์ด';
-        im.onclick = () => openLightbox(id);
-        g.appendChild(im);
-        continue;
-      }
       g.appendChild(mk('div', 'empty', 'ไม่พบภาพในเครื่อง (อาจลบไปแล้ว)'));
       continue;
     }
@@ -4091,6 +4101,7 @@ function openQuickSongSwitcherModal(initialQuery = '') {
     searchWrap.append(sIcon, input, clearBtn);
 
     const resultsContainer = mk('div', 'qsResultsContainer');
+    let qsWebDeb = null, qsWebSeq = 0;
 
     function renderQsResults(qStr) {
       const q = qStr.trim().toLowerCase();
@@ -4316,6 +4327,61 @@ function openQuickSongSwitcherModal(initialQuery = '') {
       };
 
       resultsContainer.appendChild(webActionCard);
+
+      // Live Chordtabs results list inside modal
+      if (qStr.trim().length >= 2) {
+        const webListWrap = mk('div');
+        webListWrap.style.marginTop = '10px';
+        webListWrap.innerHTML = `<div class="muted small" style="padding:6px 4px"><span class="spinner"></span> กำลังค้นหาคอร์ดจาก Chordtabs สำหรับ “${escapeHtml(qStr)}”…</div>`;
+        resultsContainer.appendChild(webListWrap);
+
+        clearTimeout(qsWebDeb);
+        const curTok = ++qsWebSeq;
+        qsWebDeb = setTimeout(async () => {
+          try {
+            const { results: webItems } = await searchRealWebChords(qStr);
+            if (curTok !== qsWebSeq) return;
+            webListWrap.replaceChildren();
+            const onlyWeb = (webItems || []).filter(x => x.source !== 'builtin');
+            if (!onlyWeb.length) return;
+
+            webListWrap.appendChild(mk('div', 'qsSecHeader', `🌐 เลือกศิลปินจาก Chordtabs (${onlyWeb.length}):`));
+            for (const item of onlyWeb) {
+              const wCard = mk('button', 'qsItem');
+              wCard.type = 'button';
+              const disp = item.artist && !item.title.toLowerCase().includes(item.artist.toLowerCase())
+                ? `${item.title} - ${item.artist}`
+                : item.title;
+              const tRow = mk('div', 'qsTitleRow');
+              tRow.innerHTML = `
+                <b class="qsTitle">${escapeHtml(disp)}</b>
+                ${item.key ? `<span class="badge">Key ${item.key}</span>` : ''}
+                <span class="badge green">${escapeHtml(item.domain)}</span>
+              `;
+              const pAct = mk('span', 'qsPlayAction', '▶️ เปิดคอร์ด');
+              wCard.append(tRow, pAct);
+
+              wCard.onclick = async (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                wCard.disabled = true;
+                pAct.textContent = '⏳ กำลังดึง…';
+                toast(`⏳ กำลังดึงรูปคอร์ด “${disp}”…`);
+                close();
+                try {
+                  const loaded = await loadRealWebChordResult(item, onlyWeb);
+                  activeSetlistContext = null;
+                  openSong(loaded, 0);
+                  toast(`🎶 เปิดเพลง “${disp}” เรียบร้อย ✔`);
+                } catch {
+                  toast('การเชื่อมต่อไปยังเว็บต้นทางติดขัด กรุณาลองใหม่ครับ', true);
+                }
+              };
+              webListWrap.appendChild(wCard);
+            }
+          } catch {}
+        }, 420);
+      }
     }
 
     input.oninput = () => {
