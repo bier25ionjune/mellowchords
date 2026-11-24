@@ -60,7 +60,20 @@ select
 from auth.users u
 on conflict (id) do update set
   email = excluded.email,
-  username = coalesce(public.profiles.username, excluded.username);
+  username = coalesce(public.profiles.username, excluded.username),
+  status = excluded.status,
+  role = excluded.role,
+  is_admin = excluded.is_admin,
+  is_active = excluded.is_active;
+
+-- บังคับให้อีเมลอื่นที่ไม่ใช่ bierbebad เป็นสถานะ 'pending' (รออนุมัติ) เพื่อให้ขึ้นในหน้าอนุมัติ
+update public.profiles
+   set status = 'pending',
+       role = 'user',
+       is_admin = false,
+       is_active = true
+ where lower(email) not in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local')
+   and split_part(lower(email), '@', 1) not in ('bierbebad', 'admin');
 
 update public.profiles
    set role = 'admin',
@@ -222,8 +235,8 @@ grant execute on function public.is_approved()    to authenticated, anon;
 -- 6) Profiles RLS Policies & Column-Level Grants ------------------------------
 drop policy if exists "profiles read own or admin" on public.profiles;
 create policy "profiles read own or admin" on public.profiles
-  for select to authenticated
-  using (id = auth.uid() or public.is_admin());
+  for select to authenticated, anon
+  using (true);
 
 drop policy if exists "profiles insert own or anon" on public.profiles;
 create policy "profiles insert own or anon" on public.profiles
