@@ -978,6 +978,16 @@ async function run() {
         }, 0);
       });
       await ipadPage.waitForSelector('#focusBtn', { timeout: 4000 });
+      // Verify NORMAL (non-focus) song view on iPad Portrait is 100% full-width (NOT squished into 300px!) and .focusTopBar doesn't overlap Header
+      const normalPortrait = await ipadPage.evaluate(() => ({
+        paneWidth: document.querySelector('#pane').getBoundingClientRect().width,
+        vw: window.innerWidth,
+        focusBarHidden: getComputedStyle(document.querySelector('.focusTopBar')).display === 'none'
+      }));
+      assert(normalPortrait.paneWidth >= normalPortrait.vw * 0.9,
+        `Expected full-width #pane in normal iPad Portrait song view, got ${normalPortrait.paneWidth} / ${normalPortrait.vw}`);
+      assert(normalPortrait.focusBarHidden, 'Expected .focusTopBar hidden outside Focus Mode so #wakeLockBadge never overlaps Header');
+
       await ipadPage.click('#focusBtn');
       await ipadPage.waitForSelector('#stageQuickSearchBtn:visible', { timeout: 4000 });
 

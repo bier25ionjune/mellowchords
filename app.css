@@ -310,14 +310,14 @@ body[data-view="live-room"] #side {
   display: none;
 }
 
-/* Desktop 2-pane split layout */
-@media (min-width: 920px) {
+/* iPad Landscape & Desktop 2-pane split layout (>= 1024px) */
+@media (min-width: 1024px) {
   body {
     padding-bottom: 0;
   }
   .app {
     display: grid;
-    grid-template-columns: 380px 1fr;
+    grid-template-columns: 340px 1fr;
     align-items: start;
   }
   #side {
@@ -326,6 +326,7 @@ body[data-view="live-room"] #side {
     top: var(--hh);
     height: calc(100dvh - var(--hh));
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     border-right: 1px solid var(--line);
     padding: 16px;
   }
@@ -336,7 +337,7 @@ body[data-view="live-room"] #side {
   }
   #pane {
     display: block !important;
-    padding: 20px 28px;
+    padding: 18px 24px;
   }
   .topBack, #bottomNav {
     display: none !important;
@@ -996,6 +997,10 @@ section.block:first-child {
 /* ==============================================================================
  * 9) Stage / Focus Mode
  * ============================================================================== */
+body:not(.focus) .focusTopBar {
+  display: none !important;
+}
+
 .focusTopBar {
   position: fixed;
   top: calc(10px + env(safe-area-inset-top, 0px));
@@ -2436,45 +2441,37 @@ button,
   flex-shrink: 0;
 }
 
-@media (min-width: 768px) and (max-width: 1180px) {
-  body:not(.focus) .app {
-    display: grid;
-    grid-template-columns: 300px 1fr;
-    align-items: start;
-  }
-
-  body.focus .app {
+/* iPad Portrait (768px–1023px): Full-width 100% single-pane for huge chord readability */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .app {
     display: block !important;
-    grid-template-columns: 1fr !important;
-  }
-
-  body[data-view="live-room"] .app,
-  body[data-view="friends"] .app {
-    grid-template-columns: 1fr;
-  }
-
-  body[data-view="live-room"] #side,
-  body[data-view="friends"] #side {
-    display: none !important;
-  }
-
-  body[data-view="home"] #pane,
-  body[data-view="playlists"] #pane {
-    display: block;
+    width: 100%;
+    max-width: 100%;
   }
 
   #side {
-    position: sticky;
-    top: var(--hh, 56px);
-    max-height: calc(100dvh - var(--hh, 56px));
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    width: 100%;
+    max-width: 100%;
+    padding: 14px 18px calc(80px + env(safe-area-inset-bottom, 0px));
   }
 
   #pane {
-    min-height: calc(100dvh - var(--hh, 56px));
-    padding: 16px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+    width: 100%;
+    max-width: 100%;
+    padding: 12px 18px calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+
+  #songView .card {
+    padding: 14px 16px;
+  }
+
+  .songTopBar {
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .songTopActions {
+    gap: 6px;
   }
 
   .songTopActions button,
@@ -2482,46 +2479,48 @@ button,
   .keyBar button,
   .keyBar .keyPill,
   #hdr button {
-    min-height: 44px;
-    padding-left: 13px;
-    padding-right: 13px;
+    min-height: 40px;
+    padding: 6px 12px;
+  }
+
+  #gallery img {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+    display: block;
+  }
+}
+
+/* iPad Landscape & Desktop (>= 1024px): Crisp 2-pane for Songbook, Full-width for Live Room / Friends / Focus */
+@media (min-width: 1024px) {
+  body.focus .app,
+  body[data-view="live-room"] .app,
+  body[data-view="friends"] .app,
+  body[data-view="admin"] .app {
+    display: block !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  body.focus #side,
+  body[data-view="live-room"] #side,
+  body[data-view="friends"] #side,
+  body[data-view="admin"] #side {
+    display: none !important;
+  }
+
+  .songTopActions button,
+  .setlistNav button,
+  .keyBar button,
+  #hdr button {
+    min-height: 40px;
   }
 
   #gallery img {
     max-width: 100%;
     height: auto;
-  }
-
-  #bottomNav {
-    display: none;
-  }
-}
-
-/* iPad Landscape (1024px–1366px) & Desktop */
-@media (min-width: 1024px) and (orientation: landscape) {
-  body:not(.focus) .app {
-    grid-template-columns: 340px 1fr;
-  }
-  body.focus #pane {
-    padding-left: calc(28px + env(safe-area-inset-left, 0px)) !important;
-    padding-right: calc(28px + env(safe-area-inset-right, 0px)) !important;
-  }
-}
-
-@media (min-width: 1181px) {
-  body.focus .app {
-    display: block !important;
-    grid-template-columns: 1fr !important;
-  }
-
-  body[data-view="live-room"] .app,
-  body[data-view="friends"] .app {
-    grid-template-columns: 1fr;
-  }
-
-  body[data-view="live-room"] #side,
-  body[data-view="friends"] #side {
-    display: none !important;
+    margin: 0 auto;
+    display: block;
   }
 }
 
