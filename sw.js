@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'mellowchords-v21';
+const CACHE_NAME = 'mellowchords-v22';
 const IMG_CACHE_NAME = 'mellowchords-imgs-v1';
 const MAX_IMG_CACHE = 150;
 const STATIC_ASSETS = [
@@ -17,6 +17,12 @@ const STATIC_ASSETS = [
   './features/midi/midi-settings.css',
   './features/midi/midi-footswitch.js',
   './features/midi/midi-settings.js',
+  './features/friends/friends.css',
+  './features/friends/friends.service.js',
+  './features/friends/friends.ui.js',
+  './features/live-room/live-room.css',
+  './features/live-room/live-room.service.js',
+  './features/live-room/live-room.ui.js',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',

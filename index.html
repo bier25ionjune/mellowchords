@@ -29,6 +29,8 @@
 <link rel="stylesheet" href="components/setlist-picker/setlist-picker.css">
 <link rel="stylesheet" href="components/chord-parser/chord-dual-view.css">
 <link rel="stylesheet" href="features/midi/midi-settings.css">
+<link rel="stylesheet" href="features/friends/friends.css">
+<link rel="stylesheet" href="features/live-room/live-room.css">
 </head>
 <body data-view="home">
 
@@ -41,6 +43,8 @@
     </div>
     <div class="row" style="gap:6px">
       <button id="hdrSearchBtn" class="small ghost" type="button" title="ค้นหาเพลงด่วน (ทุกหน้า)">🔍 ค้นเพลง</button>
+      <button id="friendsNavBtn" class="small ghost" type="button" title="เพื่อน &amp; กรุ๊ปวงดนตรี">👥 เพื่อน/วง</button>
+      <button id="liveRoomNavBtn" class="small ghost" type="button" title="ห้องซิงก์คอร์ดเรียลไทม์ (Live Room)">🎤 Live</button>
       <span id="midiHeaderSlot"></span>
       <button id="adminNavBtn" class="small secondary adminOnly" type="button" title="จัดการผู้ใช้งาน (เฉพาะ Admin)" hidden>🛡️ จัดการผู้ใช้</button>
       <button id="pwaInstallHeaderBtn" class="small primary" hidden>📲 ติดตั้งแอป</button>
@@ -79,11 +83,11 @@
         <small>ดึงจากคลิปบอร์ดทันที</small>
       </span>
     </button>
-    <button type="button" id="addBtn" class="quickCard">
-      <span class="qIcon">📸</span>
+    <button type="button" id="quickLiveBtn" class="quickCard">
+      <span class="qIcon">🎤</span>
       <span class="qText">
-        <b>เพิ่มเพลง / รูปคอร์ด</b>
-        <small>พิมพ์เอง หรือสแกนภาพ</small>
+        <b>ห้อง Live Room</b>
+        <small>ซิงก์คอร์ดเรียลไทม์ทั้งวง</small>
       </span>
     </button>
   </div>
@@ -263,6 +267,7 @@
         <button type="button" id="quickNextSongBtn" class="primary small" title="ค้นหาเพลงถัดไปทันทีโดยไม่ต้องย้อนกลับ">🔍 ค้นเพลงถัดไป</button>
         <span id="savedTag" class="badge green" hidden>บันทึกแล้ว ✔</span>
         <button id="saveBtn" class="primary small">💾 บันทึกเข้าคลัง</button>
+        <button id="saveOcrBtn" class="secondary small" type="button" hidden title="เลือกเก็บเป็นภาพ หรือแปลงเป็น Text (OCR) และปรับแก้ก่อนบันทึก">📝 เก็บภาพ / Text (OCR)</button>
         <button id="favBtn" class="small iconBtn" title="รายการโปรด" aria-label="รายการโปรด">☆</button>
         <button id="plBtn" class="small" title="เพิ่มเข้าเซ็ตเพลง">➕ เซ็ตเพลง</button>
         <button id="printBtn" class="small" title="พิมพ์คอร์ด / บันทึกเป็น PDF">🖨️ PDF</button>
@@ -405,6 +410,16 @@
       <div id="adminUserList" class="adminUserList"></div>
     </div>
   </div>
+
+  <!-- ==================== VIEW: FRIENDS & BAND GROUPS ==================== -->
+  <div id="friendsView" hidden>
+    <div id="friendsMount"></div>
+  </div>
+
+  <!-- ==================== VIEW: REAL-TIME LIVE ROOM ==================== -->
+  <div id="liveRoomView" hidden>
+    <div id="liveRoomMount"></div>
+  </div>
 </section>
 </div>
 
@@ -418,9 +433,13 @@
     <span class="nIcon">🎼</span>
     <span>เซ็ตเพลง</span>
   </button>
-  <button type="button" class="navTab" data-nav="editor">
-    <span class="nIcon">➕</span>
-    <span>เพิ่มเพลง</span>
+  <button type="button" class="navTab" data-nav="live-room">
+    <span class="nIcon">🎤</span>
+    <span>Live</span>
+  </button>
+  <button type="button" class="navTab" data-nav="friends">
+    <span class="nIcon">👥</span>
+    <span>เพื่อน/วง</span>
   </button>
   <button type="button" class="navTab adminOnly" id="bottomAdminTab" data-nav="admin" hidden>
     <span class="nIcon">🛡️</span>
@@ -454,6 +473,10 @@
 <script src="components/chord-parser/chord-dual-view.js"></script>
 <script src="features/midi/midi-footswitch.js"></script>
 <script src="features/midi/midi-settings.js"></script>
+<script src="features/friends/friends.service.js"></script>
+<script src="features/friends/friends.ui.js"></script>
+<script src="features/live-room/live-room.service.js"></script>
+<script src="features/live-room/live-room.ui.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

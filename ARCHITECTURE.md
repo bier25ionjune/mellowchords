@@ -21,9 +21,9 @@
 
 ```text
 mellowchords/
-├── index.html                                              # โครงสร้าง SPA Shell, Header, Views (#editorView, #songView, #plView, #adminView), Bottom Nav
-├── app.css                                                 # ระบบสไตล์ Dark Glassmorphism, Responsive 2-Pane/Mobile, Stage Mode, Admin UI & RBAC rules
-├── app.js                                                  # ลอจิกหลักทั้งหมด (Music Theory, Scraper, <5s Image Pipeline, OCR, Storage, Auth/RBAC, Admin UI, Sync, Module Wiring)
+├── index.html                                              # โครงสร้าง SPA Shell, Header, Views (#editorView, #songView, #plView, #adminView, #friendsView, #liveRoomView), Bottom Nav
+├── app.css                                                 # ระบบสไตล์ Dark Glassmorphism, Responsive 2-Pane/Mobile, Stage Mode, Admin UI, RBAC & Save OCR Modal
+├── app.js                                                  # ลอจิกหลักทั้งหมด (Music Theory, Scraper, <5s Image Pipeline, OCR Save Pop-up, Storage, Auth/RBAC, Admin UI, Sync, Module Wiring)
 ├── components/
 │   ├── setlist-picker/                                     # โมดูลเลือกเพลงจากคลังและค้นหาออนไลน์เข้าเซ็ตลิสต์
 │   │   ├── setlist-picker.service.js                       # ลอจิกกรองคลังเพลง, ตรวจจับเพลงซ้ำ 4 ระดับ, และ Online Auto-Add
@@ -34,18 +34,27 @@ mellowchords/
 │       ├── chord-dual-view.js                              # ปุ่มสลับ Image View <-> Text View พร้อมแถบแสดงคีย์, ปุ่ม +/- ทดคีย์ และโหมด Monospace/ChordPro
 │       └── chord-dual-view.css                             # สไตล์แบบ Scoped (.cdv-*) สำหรับการอ่านบนเวที
 ├── features/
-│   └── midi/                                               # โมดูลควบคุมการเปลี่ยนเพลงด้วย MIDI Footswitch
-│       ├── midi-footswitch.js                              # Hook/Controller (useMidiFootswitch) ใช้ Web MIDI API, Debounce, MIDI Learn, LocalStorage & Simulator
-│       ├── midi-settings.js                                # หน้าต่างตั้งค่า MIDI Settings, ปุ่ม MIDI Learn, ปุ่มจำลองสัญญาณ และสถานะการเชื่อมต่อ
-│       └── midi-settings.css                               # สไตล์แบบ Scoped (.midi-*) พร้อมแอนิเมชันสถานะ MIDI Learn
-├── sw.js                                                   # Service Worker (v21) สำหรับแคช App Shell, โมดูลทั้งหมด และรูปภาพจาก Proxy
+│   ├── midi/                                               # โมดูลควบคุมการเปลี่ยนเพลงด้วย MIDI Footswitch
+│   │   ├── midi-footswitch.js                              # Hook/Controller (useMidiFootswitch) ใช้ Web MIDI API, Debounce, MIDI Learn, LocalStorage & Simulator
+│   │   ├── midi-settings.js                                # หน้าต่างตั้งค่า MIDI Settings, ปุ่ม MIDI Learn, ปุ่มจำลองสัญญาณ และสถานะการเชื่อมต่อ
+│   │   └── midi-settings.css                               # สไตล์แบบ Scoped (.midi-*) พร้อมแอนิเมชันสถานะ MIDI Learn
+│   ├── friends/                                            # โมดูลระบบเพื่อนและกรุ๊ปวงดนตรี (Friends & Band Groups)
+│   │   ├── friends.service.js                              # บริการค้นหาผู้ใช้, คำขอเป็นเพื่อน, สร้าง/จัดการกรุ๊ปวง (Supabase Cloud + Local Fallback)
+│   │   ├── friends.ui.js                                   # UI จัดการเพื่อน ค้นหาผู้ใช้ และดึงเพื่อนเข้า/ออกจากกรุ๊ปวง
+│   │   └── friends.css                                     # สไตล์แบบ Scoped (.fr-*)
+│   └── live-room/                                          # โมดูลห้องเล่นดนตรีซิงก์คอร์ดเรียลไทม์ (Real-time Live Room)
+│       ├── live-room.service.js                            # ซิงก์ผ่าน Supabase Realtime (Presence + Broadcast + Postgres Changes) และ BroadcastChannel (Local)
+│       ├── live-room.ui.js                                 # Lobby สร้าง/เข้าห้อง, เชิญทั้งกรุ๊ปวงใน 1 คลิก, รายชื่อออนไลน์, ซิงก์เพลง/คีย์ และเชื่อมต่อ MIDI
+│       └── live-room.css                                   # สไตล์แบบ Scoped (.lr-*)
+├── sw.js                                                   # Service Worker (v22) สำหรับแคช App Shell, โมดูลทั้งหมด และรูปภาพจาก Proxy
 ├── manifest.webmanifest                                    # PWA Web Manifest
 ├── supabase/
 │   └── migrations/
 │       ├── 20261124000000_user_approval.sql                # Migration ระบบอนุมัติผู้สมัครเริ่มต้น (profiles, status, Restrictive RLS)
-│       └── 20261124010000_rbac_user_management.sql         # Migration ระบบ RBAC (role, is_active, sync trigger, self-lockout protection, RLS grants)
+│       ├── 20261124010000_rbac_user_management.sql         # Migration ระบบ RBAC (role, is_active, sync trigger, self-lockout protection, RLS grants)
+│       └── 20261124020000_friends_groups_live_rooms.sql    # Migration ระบบเพื่อน (friendships), กรุ๊ปวง (band_groups/members), และ Live Room (live_rooms/members + Realtime)
 ├── tests/
-│   └── e2e.mjs                                             # ชุดทดสอบอัตโนมัติ Playwright E2E (ครอบคลุมฟีเจอร์หลัก, Latency <5s, Approval และ RBAC)
+│   └── e2e.mjs                                             # ชุดทดสอบอัตโนมัติ Playwright E2E 13 ชุด (ฟีเจอร์หลัก, Latency <5s, Approval, RBAC, OCR Pop-up, Friends/Groups, Live Room 2-Tab + MIDI)
 ├── PROJECT.md                                              # บันทึก Milestone และสัญญาอินเทอร์เฟซของระบบ
 └── README.md                                               # คู่มือเริ่มต้นใช้งานและการ Deploy
 ```
@@ -58,11 +67,13 @@ mellowchords/
 
 | View (`data-view`) | DOM Container | URL / Route | สิทธิ์การเข้าถึง | คำอธิบาย |
 |---|---|---|---|---|
-| `home` | `#side` + `#placeholder` | `/` | ทุกคน | ค้นหาเพลง (ในคลัง + เว็บคอร์ด) และแสดงคลังเพลงส่วนตัว |
+| `home` | `#side` + `#placeholder` | `/` | ทุกคน | ค้นหาเพลง (ในคลัง + เว็บคอร์ด) และแสดงคลังเพลงส่วนตัว (นำปุ่มเพิ่มเพลงออกและใส่ทางลัด Live Room แทน) |
 | `playlists` | `#side` (`#plSection`) | (State `playlists`) | ทุกคน | รายการเซ็ตเพลง (Setlist) ทั้งหมด |
 | `playlist` | `#plView` | `#/p/<token>`, `#/s/<payload>` | ทุกคน | รายละเอียดเซ็ตเพลง จัดลำดับเพลง และเปิดลิงก์แชร์เซ็ตเพลง |
-| `editor` | `#editorView` | (State `editor`) | ทุกคน | เพิ่ม/แก้ไขเพลง ดึงคอร์ดจาก URL จัดโครงสร้างท่อน และสแกนภาพด้วย OCR |
-| `song` | `#songView` | (State `song`) | ทุกคน | หน้าแสดงคอร์ดสำหรับเล่นสด ทดคีย์ Capo Metronome Auto-Scroll และโหมดเวที |
+| `editor` | `#editorView` | (State `editor`) | ทุกคน | แก้ไขเพลงเดิม (`✏️ แก้ไข`) หรือวางคอร์ดจากคลิปบอร์ด (`📋 วางคอร์ด / ลิงก์`) |
+| `song` | `#songView` | (State `song`) | ทุกคน | หน้าแสดงคอร์ดสำหรับเล่นสด ทดคีย์ Capo Metronome Auto-Scroll โหมดเวที และ Pop-up เลือกเก็บคอร์ดเป็นภาพหรือ OCR Text |
+| `friends` | `#friendsView` | `#/friends` | ผู้ใช้ที่อนุมัติแล้ว (หรือ Local Demo) | ค้นหาผู้ใช้ ส่ง/ตอบรับ/ลบเพื่อน สร้างกรุ๊ปวงดนตรี และดึงเพื่อนเข้า/ออกจากวง |
+| `live-room` | `#liveRoomView` | `#/live`, `#/live/<code>` | ผู้ใช้ที่อนุมัติแล้ว (หรือ Local Demo) | ห้องซิงก์คอร์ดเรียลไทม์ เลือก Setlist เชิญเพื่อนรายคนหรือทั้งกรุ๊ปวงใน 1 คลิก แสดงสมาชิกออนไลน์ ซิงก์เพลง/คีย์ และรองรับ MIDI Footswitch |
 | `admin` | `#adminView` | `#/admin` | **เฉพาะ `admin` ที่ `is_active = true` และ `status = 'approved'`** | หน้าจัดการผู้ใช้งานทั้งหมด ค้นหา กรอง สลับ Role และเปิด/ปิดบัญชี |
 
 ---
@@ -178,11 +189,40 @@ mellowchords/
 
 ### 6.3 MIDI Footswitch Hook & Settings UI (`features/midi/`)
 - **Namespace:** `window.MellowMidi` (`useMidiFootswitch`, `openSettingsModal`, `renderSettingsPanel`, `createStatusBadge`)
-- **จุดเชื่อมต่อ:** ปุ่มสถานะ `🎹 MIDI` บน Header (`#midiHeaderSlot`), เมนูในหน้าตั้งค่าบัญชี (`openAcct()`), และ Callback เปลี่ยนเพลง (`navigateSongByMidi`) ในหน้าเล่นเพลง (`#songView`)
+- **จุดเชื่อมต่อ:** ปุ่มสถานะ `🎹 MIDI` บน Header (`#midiHeaderSlot`), เมนูในหน้าตั้งค่าบัญชี (`openAcct()`), Callback เปลี่ยนเพลง (`navigateSongByMidi`) ในหน้าเล่นเพลง (`#songView`) และหน้า Live Room (`#liveRoomView`)
 - **การทำงาน:**
   - ใช้ **Web MIDI API** ตรวจจับและ Hot-plug อุปกรณ์อัตโนมัติ รองรับข้อความ **CC**, **PC**, และ **Note On** พร้อม **Debounce** ป้องกันเหยียบเบิ้ล
   - มีโหมด **MIDI Learn** สำหรับกดตั้งค่าแล้วเหยียบแป้นเพื่อจำปุ่ม บันทึกลง `localStorage` (`mellowchords.midi.settings.v1`)
-  - มี **MIDI Event Simulator** (ปุ่มจำลองเพลงก่อนหน้า/ถัดไป และส่งสัญญาณกำหนดเอง) สำหรับทดสอบเมื่อไม่มีอุปกรณ์จริง
+  - มี **MIDI Event Simulator** (`simulateAction('nextSong' | 'prevSong')`) สำหรับทดสอบเมื่อไม่มีอุปกรณ์จริง
+  - **การเชื่อมต่อกับ Live Room:** เมื่อเปิดหน้า `#liveRoomView` อยู่ หากผู้ใช้เป็น **Host** การเหยียบ Footswitch จะอัปเดตเพลงในห้องและส่งสัญญาณซิงก์ให้สมาชิกทุกคนเปลี่ยนเพลงตามทันที หากเป็น **Member** ระบบจะล็อกตาม Host อัตโนมัติ (สามารถสลับโหมด "ดูอิสระเฉพาะเครื่องนี้" ได้โดยไม่กระทบห้อง)
+
+### 6.4 Save Chord Pop-up: Image vs OCR Text & Post-Scan Editing (`app.js`)
+- **จุดเชื่อมต่อ:** ปุ่ม `#saveBtn` (เมื่อเปิดคอร์ดภาพที่ยังไม่บันทึกจากการค้นหาหน้าแรก) และปุ่ม `#saveOcrBtn` (`📝 เก็บภาพ / Text (OCR)`) ในหน้า `#songView`
+- **การทำงาน:**
+  - เปิด Pop-up (`openSaveChordModeModal`) ให้ผู้ใช้เลือกรูปแบบการเก็บคอร์ดเข้าคลัง:
+    1. **🖼️ เก็บเป็นภาพ (ทันที):** บันทึกชีทคอร์ดต้นฉบับลงคลังเพลงและดูออฟไลน์ได้ทันที
+    2. **📝 แปลงเป็น Text (OCR):** เรียก `MellowChordParser.parseImageToChords` (หรือดึงจากแคช) แล้วแสดงผลในกล่อง `<textarea id="saveOcrTextArea">` พร้อมช่องชื่อเพลง/ศิลปิน/คีย์ ให้ผู้ใช้ **ปรับแก้ข้อความและคอร์ดหลังสแกนได้ทันที** ก่อนกดบันทึกเข้าคลัง
+
+### 6.5 ระบบเพื่อนและกรุ๊ปวงดนตรี (`features/friends/`)
+- **Namespace:** `window.MellowFriendsService`, `window.MellowFriendsUI`
+- **Database Schema (`20261124020000_friends_groups_live_rooms.sql`):**
+  - `public.friendships` (`requester_id`, `addressee_id`, `status`: `pending | accepted | declined`, ป้องกันแอดตัวเองและคู่ซ้ำด้วย Unique Expression Index)
+  - `public.band_groups` (`name`, `description`, `owner_id`, Trigger เพิ่มเจ้าของวงเข้า `band_group_members` อัตโนมัติ)
+  - `public.band_group_members` (`group_id`, `user_id`, `role`: `owner | member`, `added_by`)
+  - ทุกตารางบังคับ RLS + Restrictive Policy `public.is_approved()` และใช้ `SECURITY DEFINER` Helper ป้องกัน RLS recursion
+- **การทำงาน:** ค้นหาผู้ใช้ที่ได้รับอนุมัติ, ส่ง/ตอบรับ/ปฏิเสธ/ลบเพื่อน, สร้าง/ลบกรุ๊ปวง, ดึงเพื่อนเข้า/ออกจากวง และมีปุ่มลัดเปิด Live Room กับวงนั้นทันที (รองรับ Local Demo Mode เมื่อออฟไลน์)
+
+### 6.6 ห้องซิงก์คอร์ดเรียลไทม์ (`features/live-room/`)
+- **Namespace:** `window.MellowLiveRoomService`, `window.MellowLiveRoomUI`
+- **Database Schema:**
+  - `public.live_rooms` (`room_code`, `name`, `host_id`, `band_group_id`, `setlist_id`, `setlist_snapshot` jsonb, `current_song_index`, `current_song_id`, `current_key_shift`, `is_active`)
+  - `public.live_room_members` (`room_id`, `user_id`, `role`: `host | member`, `status`: `invited | joined`)
+  - เปิดใช้งาน `supabase_realtime` Publication บน `live_rooms`, `live_room_members`, และ `friendships`
+- **Realtime Event Flow (3 ชั้นบน Channel `live-room:<room_id>`):**
+  1. **Presence:** แสดงรายชื่อสมาชิกที่ออนไลน์ในห้องแบบเรียลไทม์ (`#lrOnlineBar`)
+  2. **Broadcast (`room_state_sync`, `room_closed`):** ซิงก์การเปลี่ยนเพลง (ปุ่ม UI / จิ้ม Setlist / MIDI Footswitch) และการเปลี่ยนคีย์ (`−` / `+` / `รีเซ็ต`) ไปยังหน้าจอสมาชิกทุกคนทันที (< 100ms)
+  3. **Postgres Changes (`UPDATE` on `live_rooms`):** เก็บสถานะล่าสุดในฐานข้อมูลเป็น Authoritative Fallback สำหรับผู้ที่เพิ่งเข้าห้องหรือเน็ตหลุดแล้วต่อใหม่
+  - รองรับการสร้างห้องเลือก Setlist, เชิญเพื่อนรายคน หรือ **ดึงสมาชิกทั้งกรุ๊ปวงในคลิกเดียว** พร้อม `BroadcastChannel` Fallback สำหรับการซิงก์ข้ามแท็บในโหมด Local/Offline
 
 ---
 
@@ -196,14 +236,21 @@ mellowchords/
      && node --check components/chord-parser/chord-parser.service.js \
      && node --check components/chord-parser/chord-dual-view.js \
      && node --check features/midi/midi-footswitch.js \
-     && node --check features/midi/midi-settings.js
+     && node --check features/midi/midi-settings.js \
+     && node --check features/friends/friends.service.js \
+     && node --check features/friends/friends.ui.js \
+     && node --check features/live-room/live-room.service.js \
+     && node --check features/live-room/live-room.ui.js
    ```
-2. **รันชุดทดสอบ E2E ทั้งหมด (Playwright):**
+2. **รันชุดทดสอบ E2E ทั้งหมด (Playwright — 13 ชุด):**
    ```bash
    node tests/e2e.mjs
    ```
    ครอบคลุมการทดสอบ:
-   - การเรนเดอร์คลังเพลง, เซ็ตลิสต์, การทดคีย์, Lightbox, Editor/OCR, และความเร็วโหลดภาพคอร์ด `< 5000ms` (Tests 1–8)
+   - การเรนเดอร์คลังเพลง, เซ็ตลิสต์, การทดคีย์, Lightbox, Editor/OCR, การนำปุ่มเพิ่มเพลงออก, และความเร็วโหลดภาพคอร์ด `< 5000ms` (Tests 1–8)
    - ระบบอนุมัติผู้สมัครและ Graceful Degradation กรณียังไม่รัน Migration (Tests 9a–9d)
-   - ระบบ RBAC: การซ่อนเมนูจาก Guest/User, การพิมพ์ URL `#/admin` ตรงๆ แล้วถูก Redirect กลับหน้าหลัก, การบล็อกบัญชีที่ `is_active = false`, และการจัดการผู้ใช้โดย Admin (ค้นหา, กรอง, เปลี่ยน Role, เปิด/ปิดบัญชี, ป้องกันแก้สิทธิ์ตัวเอง, และออกจากระบบ) (Tests 10a–10c)
-   - โมดูลเสริมทั้ง 3 ส่วน: Setlist Picker + Online Auto-Add Deduplication, Image-to-Text Chord Parser + Dual View + Cache + Transpose, และ MIDI Footswitch Settings + MIDI Learn + Debounce + Simulator Navigation
+   - ระบบ RBAC: การซ่อนเมนูจาก Guest/User, Redirect URL `#/admin`, บล็อกบัญชีที่ `is_active = false`, และการจัดการผู้ใช้โดย Admin (Tests 10a–10c)
+   - Save Chord Mode Pop-up: เลือกเก็บเป็นภาพหรือ OCR Text พร้อมแก้ไขข้อความหลังสแกนและบันทึกลงคลัง (Test 11)
+   - ระบบเพื่อนและกรุ๊ปวงดนตรี: ค้นหาผู้ใช้, ส่ง/ตอบรับคำขอ, สร้างกรุ๊ปวง, และเพิ่มสมาชิกเข้าวง (Test 12)
+   - Real-time Live Room 2 แท็บ: ดึงทั้งกรุ๊ปวงเข้าคำเชิญใน 1 คลิก, Presence สมาชิกออนไลน์, ซิงก์เปลี่ยนเพลงและคีย์แบบเรียลไทม์, และ MIDI Footswitch (Host ซิงก์ทั้งห้อง / Member ถูกล็อกตาม Host) (Test 13)
+

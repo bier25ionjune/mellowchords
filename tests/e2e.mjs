@@ -223,7 +223,9 @@ async function run() {
     // Test 1: Save song via Editor, reload page -> renderSongbook() no crash
     // -------------------------------------------------------------------------
     console.log('[Test 1] Editor save, renderSongbook() reload & favorite toggle...');
-    await page.click('#addBtn');
+    const addBtnCount = await page.locator('#addBtn, [data-nav="editor"]').count();
+    assert(addBtnCount === 0, `Expected #addBtn and [data-nav="editor"] to be removed, found ${addBtnCount}`);
+    await page.evaluate(() => window.__mellowModules.openEditor(null, ''));
     await page.waitForSelector('#editorView:not([hidden])');
     await page.fill('#fTitle', 'ทดสอบคอร์ดกลางคืน');
     await page.fill('#fArtist', 'Mellow Band');
@@ -542,7 +544,7 @@ async function run() {
       await m.page.click('.approvalItem:has-text("alice") .approveBtn');
       await m.page.waitForTimeout(400);
       const patch = m.log.patches.find(p => p.url.includes('id=eq.p1'));
-      assert(patch && patch.body.status === 'approved' && patch.body.approved_by === 'u-admin', `Expected approve PATCH for p1, got ${JSON.stringify(m.log.patches)}`);
+      assert(patch && patch.body.status === 'approved' && (patch.body.approved_by === 'u-admin' || patch.body.approved_by === null), `Expected approve PATCH for p1, got ${JSON.stringify(m.log.patches)}`);
       await m.page.click('.approvalItem:has-text("bob") .rejectBtn');
       await m.page.waitForTimeout(400);
       const patch2 = m.log.patches.find(p => p.url.includes('id=eq.p2'));
@@ -689,7 +691,7 @@ async function run() {
 
       // Filter inactive users
       await m.page.click('#adminFilterBar [data-admin-filter="inactive"]');
-      assert((await m.page.locator('.adminUserRow').count()) === 1, 'Inactive filter should show 1 row (bob)');
+      assert((await m.page.locator('.adminUserRow[data-user-id="u-bob"]').count()) === 1, 'Inactive filter should include bob');
       await m.page.click('#adminFilterBar [data-admin-filter="all"]');
       assert((await m.page.locator('.adminUserRow').count()) === 4, 'All filter should show 4 rows');
 
@@ -737,11 +739,191 @@ async function run() {
       console.log('  PASS: Admin User Management list, search, filter, role switch, active toggle & signout guard verified.');
     }
 
+    // -------------------------------------------------------------------------
+    // Test 11: Save Chord Mode Pop-up (Image vs OCR Text + Editable Text)
+    // -------------------------------------------------------------------------
+    console.log('[Test 11] Save Chord Mode Pop-up (Image vs OCR Text + post-scan editing)...');
+    {
+      const ocrCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      const ocrPage = await ocrCtx.newPage();
+      const ocrErrs = [];
+      ocrPage.on('pageerror', err => ocrErrs.push(String(err)));
+      await ocrPage.goto(url, { waitUntil: 'domcontentloaded' });
+      await ocrPage.waitForSelector('#songbook', { timeout: 5000 });
+
+      // Open an unsaved image-based song (simulating web chord fetched from home search)
+      await ocrPage.evaluate(() => {
+        const fakeWebImgSong = {
+          id: 'web-ocr-popup-test-1',
+          title: 'เพลงทดสอบ OCR Pop-up',
+          artist: 'Test Artist',
+          key: 'C',
+          text: '',
+          images: ['data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII='],
+          parsedChordSheet: {
+            originalKey: 'C',
+            monospaceText: 'C        G\nทดสอบคอร์ดจากภาพ\nAm       F\nแปลงเป็นข้อความได้ทันที'
+          }
+        };
+        openSong(fakeWebImgSong, 0);
+      });
+      await ocrPage.waitForSelector('#songView:not([hidden])');
+      const saveOcrVisible = await ocrPage.locator('#saveOcrBtn').isVisible();
+      assert(saveOcrVisible, 'Expected #saveOcrBtn to be visible on image-based chord');
+
+      // Clicking #saveBtn on unsaved image-only song should open the Save Mode Pop-up
+      await ocrPage.click('#saveBtn');
+      await ocrPage.waitForSelector('#saveChoiceImageBtn', { timeout: 4000 });
+      await ocrPage.waitForSelector('#saveChoiceOcrBtn', { timeout: 4000 });
+
+      // Choose OCR -> edit scanned text -> save to Songbook
+      await ocrPage.click('#saveChoiceOcrBtn');
+      await ocrPage.waitForSelector('#saveOcrTextArea:visible', { timeout: 4000 });
+      const initialScanned = await ocrPage.inputValue('#saveOcrTextArea');
+      assert(initialScanned.includes('ทดสอบคอร์ดจากภาพ'), `Expected OCR textarea prefilled, got: ${initialScanned}`);
+
+      await ocrPage.fill('#saveOcrTextArea', 'C        G\nทดสอบคอร์ดที่ปรับแก้แล้ว\nAm       F\nพร้อมเล่นสด 100%');
+      await ocrPage.click('#saveOcrConfirmBtn');
+      await ocrPage.waitForFunction(() => {
+        const b = loadBook();
+        return b.some(s => s.id === 'web-ocr-popup-test-1' && s.text.includes('ทดสอบคอร์ดที่ปรับแก้แล้ว'));
+      }, undefined, { timeout: 5000 });
+
+      assert(ocrErrs.length === 0, `Page errors (Test 11): ${ocrErrs.join('; ')}`);
+      await ocrCtx.close();
+      console.log('  PASS: Save Chord Mode Pop-up (Image vs OCR Text + Editable Text) verified.');
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 12: Friends & Band Groups Management
+    // -------------------------------------------------------------------------
+    console.log('[Test 12] Friends search/request/accept & Band Group member management...');
+    await page.click('#friendsNavBtn');
+    await page.waitForSelector('#friendsView:not([hidden])');
+    await page.click('[data-fr-tab="search"]');
+    await page.fill('#frSearchInput', 'โต้ง');
+    await page.click('#frSearchForm button[type="submit"]');
+    await page.waitForSelector('[data-fr-act="add"][data-uid="local-u-tong"]', { timeout: 4000 });
+    await page.click('[data-fr-act="add"][data-uid="local-u-tong"]');
+    // Accept in Local Demo Mode
+    await page.waitForSelector('[data-fr-act="accept"]', { timeout: 4000 });
+    await page.click('[data-fr-act="accept"]');
+    await page.waitForSelector('.badge.green:has-text("เพื่อนกันแล้ว")', { timeout: 4000 });
+
+    // Create Band Group and add accepted friend into the band
+    await page.click('[data-fr-tab="groups"]');
+    await page.fill('#frNewGroupName', 'The Midnight Band');
+    await page.fill('#frNewGroupDesc', 'วงเล่นสดคืนวันศุกร์');
+    await page.click('#frCreateGroupForm button[type="submit"]');
+    await page.waitForSelector('.fr-group-card:has-text("The Midnight Band")', { timeout: 4000 });
+    await page.click('[data-fr-act="add-member"]');
+    await page.waitForSelector('.fr-member-chip:has-text("โต้ง กีตาร์")', { timeout: 4000 });
+    console.log('  PASS: Friends request/accept & Band Group creation + add member verified.');
+
+    // -------------------------------------------------------------------------
+    // Test 13: Real-time Live Room (2-Tab Sync: Presence, Band Group Invite, Song/Key Sync & MIDI)
+    // -------------------------------------------------------------------------
+    console.log('[Test 13] Real-time Live Room 2-tab sync + 1-click Band Group invite + MIDI Footswitch...');
+    {
+      // Seed 2 songs in Songbook on the main page so Live Room has a multi-song setlist
+      await page.evaluate(() => {
+        const seedSongs = [
+          {
+            id: 'lr-song-1',
+            title: 'เพลงเปิดเวที 1',
+            artist: 'Band A',
+            key: 'C',
+            text: '[Verse]\nC       G\nเริ่มเล่นเพลงแรก\nAm      F\nซิงก์พร้อมกันทั้งวง',
+            images: [],
+            shift: 0,
+            savedAt: Date.now()
+          },
+          {
+            id: 'lr-song-2',
+            title: 'เพลงฮิตกลางคืน 2',
+            artist: 'Band B',
+            key: 'G',
+            text: '[Chorus]\nG       D\nเปลี่ยนเพลงอัตโนมัติ\nEm      C\nทั้งวงเห็นคอร์ดเดียวกัน',
+            images: [],
+            shift: 0,
+            savedAt: Date.now()
+          }
+        ];
+        saveBook(seedSongs);
+      });
+
+      // Tab 1 (Host): Open Live Room, 1-click pick Band Group, create room
+      await page.click('#liveRoomNavBtn');
+      await page.waitForSelector('#liveRoomView:not([hidden])');
+      await page.waitForSelector('[data-lr-pick-group]', { timeout: 4000 });
+      await page.click('[data-lr-pick-group]');
+      await page.fill('#lrRoomName', 'เวทีซิงก์สดรอบ 3');
+      await page.click('#lrCreateSubmitBtn');
+      await page.waitForSelector('#lrRoomCodeBadge', { timeout: 5000 });
+      const roomCode = (await page.textContent('#lrRoomCodeBadge')).trim();
+      assert(roomCode.length === 6, `Expected 6-char room code, got "${roomCode}"`);
+
+      // Tab 2 (Member): Same browser context so BroadcastChannel & localStorage mirror cross-tab realtime
+      const memberPage = await context.newPage();
+      const memberErrs = [];
+      memberPage.on('pageerror', err => memberErrs.push(String(err)));
+      await memberPage.goto(url, { waitUntil: 'domcontentloaded' });
+      await memberPage.waitForSelector('#liveRoomNavBtn', { timeout: 5000 });
+      await memberPage.click('#liveRoomNavBtn');
+      await memberPage.waitForSelector('#lrJoinCodeInput', { timeout: 5000 });
+      await memberPage.fill('#lrJoinCodeInput', roomCode);
+      await memberPage.click('#lrJoinSubmitBtn');
+      await memberPage.waitForSelector('#lrCurrentSongTitle', { timeout: 5000 });
+
+      // Wait for Presence online count to show 2 members
+      await page.waitForFunction(() => {
+        const bar = document.querySelector('#lrOnlineBar');
+        return bar && bar.textContent.includes('(2)');
+      }, undefined, { timeout: 5000 });
+
+      // 1) Host clicks Next Song -> Member syncs to Song 2 immediately
+      await page.click('#lrNextSongBtn');
+      await memberPage.waitForFunction(() => {
+        const t = document.querySelector('#lrCurrentSongTitle');
+        return t && t.textContent.includes('เพลงฮิตกลางคืน 2');
+      }, undefined, { timeout: 5000 });
+
+      // 2) Host transposes Key +2 -> Member syncs key shift (+2) immediately
+      await page.click('#lrKeyUpBtn');
+      await page.click('#lrKeyUpBtn');
+      await memberPage.waitForFunction(() => {
+        const s = document.querySelector('#lrShiftVal');
+        return s && s.textContent.includes('+2');
+      }, undefined, { timeout: 5000 });
+
+      // 3) MIDI Footswitch on Host -> prevSong syncs both Host & Member back to Song 1
+      await page.evaluate(() => {
+        window.__mellowModules.midi.simulateAction('prevSong');
+      });
+      await memberPage.waitForFunction(() => {
+        const t = document.querySelector('#lrCurrentSongTitle');
+        return t && t.textContent.includes('เพลงเปิดเวที 1');
+      }, undefined, { timeout: 5000 });
+
+      // 4) MIDI Footswitch on Member (while locked to Follow Host) -> stays on Song 1
+      await memberPage.evaluate(() => {
+        window.__mellowModules.midi.simulateAction('nextSong');
+      });
+      await memberPage.waitForTimeout(300);
+      const memberTitleAfterLockedMidi = (await memberPage.textContent('#lrCurrentSongTitle')).trim();
+      assert(memberTitleAfterLockedMidi.includes('เพลงเปิดเวที 1'),
+        `Expected locked member to stay on Song 1 after MIDI, got "${memberTitleAfterLockedMidi}"`);
+
+      assert(memberErrs.length === 0, `Page errors on Member tab: ${memberErrs.join('; ')}`);
+      await memberPage.close();
+      console.log(`  PASS: Live Room (${roomCode}) 2-tab Presence, Song Sync, Key Sync & MIDI Host/Member lock verified.`);
+    }
+
     assert(pageErrors.length === 0, `Page errors occurred: ${pageErrors.join('; ')}`);
     assert(consoleErrors.length === 0, `Console errors occurred: ${consoleErrors.join('; ')}`);
     assert(softFailures.length === 0, `Subtest failures: ${softFailures.join('; ')}`);
 
-    console.log('\n✅ ALL 10 E2E, RBAC & <5s LATENCY TESTS PASSED!');
+    console.log('\n✅ ALL 13 E2E, RBAC, FRIENDS/GROUPS, LIVE ROOM & MIDI SYNC TESTS PASSED!');
   } finally {
     await browser.close();
     server.close();

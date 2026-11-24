@@ -1595,6 +1595,10 @@ function show(name, push = true) {
   $('#plView').hidden = name !== 'playlist';
   const adminViewEl = $('#adminView');
   if (adminViewEl) adminViewEl.hidden = name !== 'admin';
+  const friendsViewEl = $('#friendsView');
+  if (friendsViewEl) friendsViewEl.hidden = name !== 'friends';
+  const liveRoomViewEl = $('#liveRoomView');
+  if (liveRoomViewEl) liveRoomViewEl.hidden = name !== 'live-room';
 
   updateBottomNav(name);
 
@@ -1616,6 +1620,14 @@ function show(name, push = true) {
     if (push && location.hash !== '#/admin') {
       history.pushState({ v: 'admin' }, '', '#/admin');
     }
+  } else if (name === 'friends') {
+    if (push && location.hash !== '#/friends') {
+      history.pushState({ v: 'friends' }, '', '#/friends');
+    }
+  } else if (name === 'live-room') {
+    if (push && !location.hash.startsWith('#/live')) {
+      history.pushState({ v: 'live-room' }, '', '#/live');
+    }
   } else {
     if (isAdminRouteUrl()) {
       history.replaceState(name !== 'home' ? { v: name } : null, '', cleanNonAdminUrl());
@@ -1632,7 +1644,7 @@ const goBack = () => {
     openPlaylist(plId);
     return;
   }
-  if (document.body.dataset.view === 'admin') {
+  if (document.body.dataset.view === 'admin' || document.body.dataset.view === 'friends' || document.body.dataset.view === 'live-room') {
     show('home', false);
     return;
   }
@@ -1647,6 +1659,14 @@ addEventListener('popstate', e => {
       return;
     }
     openAdminUsersView({ push: false });
+    return;
+  }
+  if (v === 'friends' || location.hash === '#/friends') {
+    openFriendsView({ push: false });
+    return;
+  }
+  if (v === 'live-room' || location.hash.startsWith('#/live')) {
+    openLiveRoomView({ push: false });
     return;
   }
   show((v === 'song' && !current) || (v === 'playlist' && !curPl) ? 'home' : (v || 'home'), false);
@@ -1666,6 +1686,10 @@ $('#brandHome').onclick = () => {
   show('home', false);
 };
 
+if ($('#friendsNavBtn')) $('#friendsNavBtn').onclick = () => openFriendsView();
+if ($('#liveRoomNavBtn')) $('#liveRoomNavBtn').onclick = () => openLiveRoomView();
+if ($('#quickLiveBtn')) $('#quickLiveBtn').onclick = () => openLiveRoomView();
+
 $$('#bottomNav .navTab').forEach(tab => {
   tab.onclick = () => {
     const target = tab.dataset.nav;
@@ -1675,6 +1699,10 @@ $$('#bottomNav .navTab').forEach(tab => {
     } else if (target === 'playlists') {
       activeSetlistContext = null;
       show('playlists', false);
+    } else if (target === 'friends') {
+      openFriendsView();
+    } else if (target === 'live-room') {
+      openLiveRoomView();
     } else if (target === 'editor') {
       openEditor(null, $('#q').value.trim());
     } else if (target === 'admin') {
@@ -2443,6 +2471,10 @@ function renderSong(reload = true) {
   $('#deleteBtn').hidden = !saved;
   $('#saveBtn').textContent = saved ? '💾 อัปเดตคีย์' : '💾 บันทึกเข้าคลัง';
   $('#saveBtn').hidden = saved && (loadBook().find(s => s.id === song.id)?.shift || 0) === shift;
+  const saveOcrBtnEl = $('#saveOcrBtn');
+  if (saveOcrBtnEl) {
+    saveOcrBtnEl.hidden = !hasImages;
+  }
 
   paintFav();
   updateSetlistQueueBar();
@@ -2671,7 +2703,37 @@ $('#downBtn').onclick = () => setShift(current.shift - 1);
 $('#resetBtn').onclick = () => openDirectKeyPickerModal();
 if ($('#keyPickerTrigger')) $('#keyPickerTrigger').onclick = () => openDirectKeyPickerModal();
 
-$('#saveBtn').onclick = () => {
+function saveSongEntryToBook(entry, toastMsg) {
+  const book = loadBook();
+  const i = book.findIndex(s => s.id === entry.id);
+  const existed = i >= 0;
+  if (existed) book[i] = entry; else book.push(entry);
+  if (!saveBook(book)) return false;
+  if (current && current.song && current.song.id === entry.id) {
+    current.song = { ...current.song, ...entry };
+  }
+  renderSongbook();
+  renderSong(false);
+  toast(toastMsg || (existed ? 'บันทึกคีย์ปัจจุบันแล้ว ✔' : 'บันทึกเข้าคลังเพลงแล้ว ✔'));
+  return true;
+}
+
+async function getSongFirstImageBlob(song) {
+  if (!song || !Array.isArray(song.images) || !song.images.length) {
+    throw new Error('ไม่พบรูปภาพคอร์ดในเพลงนี้');
+  }
+  const first = song.images[0];
+  if (typeof first === 'string' && /^(https?:|data:|blob:)/i.test(first)) {
+    return fetchImageBlobForOcr(first);
+  }
+  const idbBlob = await getImg(first);
+  if (idbBlob instanceof Blob) return idbBlob;
+  if (typeof first === 'string') return fetchImageBlobForOcr(first);
+  throw new Error('ไม่สามารถโหลดรูปภาพสำหรับแกะคอร์ดได้');
+}
+
+function saveCurrentSongDirect() {
+  if (!current || !current.song) return;
   const { song, shift } = current;
   const e = {
     id: song.id,
@@ -2686,13 +2748,204 @@ $('#saveBtn').onclick = () => {
     shift,
     savedAt: Date.now()
   };
-  const book = loadBook(), i = book.findIndex(s => s.id === e.id), existed = i >= 0;
-  if (existed) book[i] = e; else book.push(e);
-  if (!saveBook(book)) return;
-  renderSongbook();
-  renderSong(false);
-  toast(existed ? 'บันทึกคีย์ปัจจุบันแล้ว ✔' : 'บันทึกเข้าคลังเพลงแล้ว ✔');
+  saveSongEntryToBook(e);
+}
+
+function openSaveChordModeModal(song, shift = 0) {
+  if (!song) return;
+  modal('💾 เลือกรูปแบบการเก็บคอร์ดเข้าคลัง', (box, close) => {
+    const intro = mk('p', 'muted small');
+    intro.style.marginTop = '0';
+    intro.textContent = `เพลง "${song.title || 'ไม่ระบุชื่อ'}" — เลือกว่าจะเก็บเป็นภาพคอร์ดต้นฉบับ หรือสแกน OCR แปลงเป็น Text เพื่อปรับแก้และเปลี่ยนคีย์ได้ทันที`;
+
+    const choiceGrid = mk('div', 'saveModeGrid');
+
+    const imgBtn = mk('button', 'saveModeCard');
+    imgBtn.type = 'button';
+    imgBtn.id = 'saveChoiceImageBtn';
+    imgBtn.innerHTML = '<b>🖼️ เก็บเป็นภาพ (ทันที)</b><small>บันทึกรูปชีทคอร์ดต้นฉบับลงคลังเพลงและดูออฟไลน์ได้ทันที</small>';
+    imgBtn.onclick = () => {
+      saveCurrentSongDirect();
+      close();
+    };
+
+    const ocrBtn = mk('button', 'saveModeCard');
+    ocrBtn.type = 'button';
+    ocrBtn.id = 'saveChoiceOcrBtn';
+    ocrBtn.innerHTML = '<b>📝 แปลงเป็น Text (OCR)</b><small>สแกนคอร์ดและเนื้อร้องจากภาพ แล้วปรับแก้ข้อความก่อนบันทึกเข้าคลัง</small>';
+
+    choiceGrid.append(imgBtn, ocrBtn);
+
+    const statusEl = mk('div', 'muted small');
+    statusEl.id = 'saveOcrStatus';
+    statusEl.hidden = true;
+
+    const editorWrap = mk('div');
+    editorWrap.id = 'saveOcrEditorWrap';
+    editorWrap.hidden = true;
+    editorWrap.style.marginTop = '10px';
+
+    const metaRow = mk('div', 'row');
+    metaRow.style.gap = '8px';
+    metaRow.style.marginBottom = '8px';
+
+    const titleInp = mk('input', 'grow');
+    titleInp.id = 'saveOcrTitleInput';
+    titleInp.placeholder = 'ชื่อเพลง';
+    titleInp.value = song.title || '';
+
+    const artistInp = mk('input', 'grow');
+    artistInp.id = 'saveOcrArtistInput';
+    artistInp.placeholder = 'ศิลปิน';
+    artistInp.value = song.artist || '';
+
+    const keyInp = mk('input');
+    keyInp.id = 'saveOcrKeyInput';
+    keyInp.style.width = '76px';
+    keyInp.placeholder = 'คีย์';
+    keyInp.value = song.key || '';
+
+    metaRow.append(titleInp, artistInp, keyInp);
+
+    const textLabel = mk('label', null, '✏️ ปรับแก้คอร์ดและเนื้อเพลงหลังสแกน (Text):');
+    textLabel.style.display = 'block';
+    textLabel.style.marginBottom = '6px';
+    textLabel.style.fontSize = '0.86rem';
+
+    const ta = mk('textarea', 'saveOcrTextarea');
+    ta.id = 'saveOcrTextArea';
+    ta.placeholder = 'คอร์ดและเนื้อร้องที่สแกนได้จะแสดงที่นี่ สามารถแก้ไขได้ทันที...';
+
+    const keepImgLabel = mk('label');
+    keepImgLabel.style.display = 'inline-flex';
+    keepImgLabel.style.alignItems = 'center';
+    keepImgLabel.style.gap = '6px';
+    keepImgLabel.style.margin = '8px 0';
+    keepImgLabel.style.fontSize = '0.84rem';
+    const keepImgCb = mk('input');
+    keepImgCb.type = 'checkbox';
+    keepImgCb.id = 'saveOcrKeepImgCb';
+    keepImgCb.checked = true;
+    keepImgLabel.append(keepImgCb, document.createTextNode('เก็บภาพต้นฉบับแนบไว้ด้วย (สลับดูภาพ/ข้อความได้)'));
+
+    const actionRow = mk('div', 'row');
+    actionRow.style.gap = '8px';
+    actionRow.style.marginTop = '8px';
+
+    const saveTextBtn = btn('💾 บันทึก Text เข้าคลังเพลง', () => {
+      const editedText = ta.value.trim();
+      if (!editedText) {
+        toast('กรุณากรอกหรือสแกนข้อความคอร์ดก่อนบันทึก', true);
+        return;
+      }
+      const detectedKey = detectKey(editedText) || keyInp.value.trim() || song.key || '';
+      const keptImages = keepImgCb.checked ? (song.images || []) : [];
+      const updatedParsed = {
+        ...(song.parsedChordSheet || {}),
+        originalKey: detectedKey || 'C',
+        monospaceText: editedText,
+        updatedAt: Date.now()
+      };
+      const entry = {
+        id: song.id,
+        title: titleInp.value.trim() || song.title || 'ไม่ระบุชื่อเพลง',
+        artist: artistInp.value.trim(),
+        key: detectedKey,
+        text: editedText,
+        images: keptImages,
+        sections: song.sections || [],
+        parsedChordSheet: updatedParsed,
+        src: song.src || '',
+        shift: shift || 0,
+        savedAt: Date.now()
+      };
+      if (saveSongEntryToBook(entry, 'บันทึกคอร์ดแบบ Text เข้าคลังแล้ว ✔')) {
+        if (current && current.song && current.song.id === entry.id) {
+          openSong(entry, entry.shift || 0);
+        }
+        close();
+      }
+    }, 'primary grow');
+    saveTextBtn.id = 'saveOcrConfirmBtn';
+
+    const cancelBtn = btn('ยกเลิก', close, 'ghost');
+    actionRow.append(saveTextBtn, cancelBtn);
+    editorWrap.append(metaRow, textLabel, ta, keepImgLabel, actionRow);
+
+    ocrBtn.onclick = async () => {
+      statusEl.hidden = false;
+      ocrBtn.disabled = true;
+      try {
+        let initialText = '';
+        let detectedKey = song.key || '';
+
+        const cached = song.parsedChordSheet ||
+          (window.MellowChordParser && typeof window.MellowChordParser.getCachedParsedChord === 'function'
+            ? window.MellowChordParser.getCachedParsedChord(song)
+            : null);
+
+        if (cached && cached.monospaceText) {
+          initialText = cached.monospaceText;
+          detectedKey = cached.originalKey || detectedKey;
+          statusEl.textContent = '✅ โหลดผลแกะคอร์ดจากแคชแล้ว — คุณสามารถปรับแก้ข้อความด้านล่างได้เลย';
+        } else if (window.MellowChordParser && typeof window.MellowChordParser.parseImageToChords === 'function') {
+          statusEl.textContent = '⏳ กำลังโหลดภาพและสแกน OCR แปลงเป็น Text...';
+          const blob = await getSongFirstImageBlob(song);
+          const parsed = await window.MellowChordParser.parseImageToChords(blob, {
+            songId: song.id,
+            title: song.title,
+            onProgress: (p) => {
+              const pct = Math.round((p && p.progress ? p.progress : 0) * 100);
+              statusEl.textContent = `⏳ กำลังสแกนคอร์ดด้วย OCR... ${pct}%`;
+            }
+          });
+          initialText = (parsed && parsed.monospaceText) || '';
+          detectedKey = (parsed && parsed.originalKey) || detectedKey;
+          if (parsed) song.parsedChordSheet = parsed;
+          statusEl.textContent = initialText
+            ? '✅ สแกน OCR สำเร็จ! ตรวจสอบและปรับแก้คอร์ด/เนื้อเพลงด้านล่างก่อนบันทึก'
+            : '⚠️ ไม่พบข้อความชัดเจนจากภาพ — คุณสามารถพิมพ์หรือปรับแก้ในช่องด้านล่างได้ทันที';
+        } else {
+          statusEl.textContent = '⚠️ โมดูล OCR ไม่พร้อมใช้งาน — สามารถพิมพ์ข้อความคอร์ดด้านล่างได้เลย';
+        }
+
+        ta.value = initialText || song.text || '';
+        if (detectedKey && !keyInp.value) keyInp.value = detectedKey;
+        editorWrap.hidden = false;
+        ta.focus();
+      } catch (err) {
+        statusEl.textContent = '⚠️ สแกน OCR ไม่สำเร็จ (' + (err.message || err) + ') — คุณยังสามารถพิมพ์/วาง Text เพื่อบันทึกได้';
+        ta.value = song.text || '';
+        editorWrap.hidden = false;
+      } finally {
+        ocrBtn.disabled = false;
+      }
+    };
+
+    box.append(intro, choiceGrid, statusEl, editorWrap);
+  });
+}
+
+$('#saveBtn').onclick = () => {
+  if (!current || !current.song) return;
+  const { song, shift } = current;
+  const alreadySaved = loadBook().some(s => s.id === song.id);
+  const hasImages = Array.isArray(song.images) && song.images.length > 0;
+  const hasText = !!(song.text && song.text.trim());
+  // For unsaved image-based chords (e.g. fetched from home search), show Image vs OCR Text pop-up
+  if (!alreadySaved && hasImages && !hasText) {
+    openSaveChordModeModal(song, shift);
+    return;
+  }
+  saveCurrentSongDirect();
 };
+
+if ($('#saveOcrBtn')) {
+  $('#saveOcrBtn').onclick = () => {
+    if (!current || !current.song) return;
+    openSaveChordModeModal(current.song, current.shift || 0);
+  };
+}
 
 $('#deleteBtn').onclick = () => removeSong(current.song.id, current.song.title);
 $('#editBtn').onclick = () => openEditor(current.song);
@@ -3219,7 +3472,7 @@ $('#editorForm').onsubmit = async e => {
   toast('บันทึกเพลงเรียบร้อย ✔');
 };
 
-$('#addBtn').onclick = () => openEditor(null, $('#q').value.trim());
+if ($('#addBtn')) $('#addBtn').onclick = () => openEditor(null, $('#q').value.trim());
 $('#pasteBtn').onclick = async () => {
   const clip = navigator.clipboard && navigator.clipboard.readText ? navigator.clipboard.readText() : Promise.reject();
   openEditor(null, $('#q').value.trim());
@@ -5578,6 +5831,17 @@ function route() {
     return;
   }
 
+  if (location.hash === '#/friends') {
+    openFriendsView({ push: false });
+    return;
+  }
+
+  const liveMatch = location.hash.match(/^#\/live(?:\/([A-Za-z0-9_-]+))?/);
+  if (liveMatch) {
+    openLiveRoomView({ push: false, roomCode: liveMatch[1] || '' });
+    return;
+  }
+
   if (document.body.dataset.view === 'admin') {
     show('home', false);
   }
@@ -6204,8 +6468,13 @@ if (window.MellowChordDualView && typeof window.MellowChordDualView.createDualVi
 
 // 3) MIDI Footswitch Controller & Settings UI
 function navigateSongByMidi(direction) {
+  // Priority: Real-time Live Room MIDI Sync (Host broadcasts to all / Member locked or local)
+  if (document.body.dataset.view === 'live-room' && liveRoomUIInstance && liveRoomUIInstance.isInActiveRoom()) {
+    liveRoomUIInstance.handleMidiStep(direction);
+    return;
+  }
   if (document.body.dataset.view !== 'song') {
-    toast(direction > 0 ? '🎹 MIDI: เพลงถัดไป (เปิดหน้าเพลงเพื่อใช้งาน)' : '🎹 MIDI: เพลงก่อนหน้า (เปิดหน้าเพลงเพื่อใช้งาน)');
+    toast(direction > 0 ? '🎹 MIDI: เพลงถัดไป (เปิดหน้าเพลงหรือ Live Room เพื่อใช้งาน)' : '🎹 MIDI: เพลงก่อนหน้า (เปิดหน้าเพลงหรือ Live Room เพื่อใช้งาน)');
     return;
   }
   if (activeSetlistContext && Array.isArray(activeSetlistContext.songs) && activeSetlistContext.songs.length) {
@@ -6260,12 +6529,134 @@ if (window.MellowMidi && typeof window.MellowMidi.useMidiFootswitch === 'functio
   }
 }
 
+// 4) Friends, Band Groups & Real-time Live Room Integration
+let friendsServiceInstance = null;
+let friendsUIInstance = null;
+let liveRoomServiceInstance = null;
+let liveRoomUIInstance = null;
+
+function getCurrentUserSummary() {
+  if (user && user.id && !user.local) {
+    return {
+      id: user.id,
+      username: (profile && profile.username) || (user.email ? user.email.split('@')[0] : 'นักดนตรี'),
+      email: user.email || '',
+      isCloud: true
+    };
+  }
+  const localProfile = LS.get(K.localUser, null);
+  return {
+    id: (localProfile && localProfile.id) || 'local-me',
+    username: (localProfile && (localProfile.username || localProfile.name)) || 'นักดนตรี (Local)',
+    email: (localProfile && localProfile.email) || 'local@mellowchords.local',
+    isCloud: false
+  };
+}
+
+function getResolvedSetlistsForLiveRoom() {
+  const pls = getPls();
+  const book = loadBook();
+  const songMap = new Map(book.map(s => [s.id, s]));
+  return pls.map(p => {
+    const rawItems = Array.isArray(p.items) && p.items.length
+      ? p.items
+      : (Array.isArray(p.songIds) ? p.songIds.map(id => ({ songId: id })) : []);
+    const resolvedSongs = [];
+    rawItems.forEach(item => {
+      if (!item || item.type === 'break') return;
+      const found = songMap.get(item.songId);
+      if (found) {
+        resolvedSongs.push({
+          ...found,
+          targetKey: item.targetKey || found.targetKey || '',
+          shift: item.targetKey && found.key ? calcKeyShift(found.key, item.targetKey) : (found.shift || 0)
+        });
+      }
+    });
+    return { id: p.id, name: p.name, songs: resolvedSongs };
+  });
+}
+
+function openFriendsView(opts = {}) {
+  show('friends', opts.push !== false);
+  if (friendsUIInstance) {
+    friendsUIInstance.refresh();
+  }
+}
+
+function openLiveRoomView(opts = {}) {
+  show('live-room', opts.push !== false);
+  if (!liveRoomUIInstance) return;
+  if (opts.bandGroupId) {
+    liveRoomUIInstance.openWithBandGroup(opts.bandGroupId);
+  } else if (opts.roomCode) {
+    liveRoomUIInstance.joinByCodeAndEnter(opts.roomCode).catch(err => {
+      toast(err.message || 'ไม่พบห้อง Live Room นี้', true);
+      liveRoomUIInstance.refresh();
+    });
+  } else {
+    liveRoomUIInstance.refresh();
+  }
+}
+
+if (window.MellowFriendsService && window.MellowFriendsUI) {
+  friendsServiceInstance = window.MellowFriendsService.createService({
+    getSupabase: () => sb,
+    getCurrentUser: getCurrentUserSummary,
+    isCloudActive: () => cloudOn()
+  });
+
+  friendsUIInstance = window.MellowFriendsUI.createFriendsUI({
+    service: friendsServiceInstance,
+    onToast: (msg, isErr) => toast(msg, isErr),
+    onOpenLiveWithGroup: (groupId) => openLiveRoomView({ bandGroupId: groupId })
+  });
+
+  const friendsMount = $('#friendsMount');
+  if (friendsMount) friendsUIInstance.mount(friendsMount);
+}
+
+if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
+  liveRoomServiceInstance = window.MellowLiveRoomService.createService({
+    getSupabase: () => sb,
+    getCurrentUser: getCurrentUserSummary,
+    isCloudActive: () => cloudOn()
+  });
+
+  liveRoomUIInstance = window.MellowLiveRoomUI.createLiveRoomUI({
+    service: liveRoomServiceInstance,
+    friendsService: friendsServiceInstance,
+    getSetlists: getResolvedSetlistsForLiveRoom,
+    getSongbook: () => loadBook(),
+    transposeText: (txt) => txt,
+    transposeChord: (ch, sh) => transposeChord(ch, sh, preferFlat(ch, sh)),
+    renderChordHtml: (txt, sh) => {
+      const tmp = document.createElement('div');
+      const k = detectKey(txt);
+      renderSheet(tmp, txt, sh || 0, preferFlat(k, sh || 0));
+      return tmp.innerHTML;
+    },
+    onToast: (msg, isErr) => toast(msg, isErr)
+  });
+
+  const liveRoomMount = $('#liveRoomMount');
+  if (liveRoomMount) liveRoomUIInstance.mount(liveRoomMount);
+}
+
 window.__mellowModules = {
   setlistPicker: setlistPickerInstance,
   chordDualView: chordDualViewInstance,
   midi: midiControllerInstance,
+  friends: friendsUIInstance,
+  friendsService: friendsServiceInstance,
+  liveRoom: liveRoomUIInstance,
+  liveRoomService: liveRoomServiceInstance,
   openMidiSettings: openMidiSettingsModal,
-  openSetlistPicker: openSetlistSongPicker
+  openSetlistPicker: openSetlistSongPicker,
+  openFriendsView,
+  openLiveRoomView,
+  openSaveChordModeModal,
+  openEditor
 };
 
 /* ==============================================================================
