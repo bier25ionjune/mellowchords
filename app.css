@@ -998,13 +998,14 @@ section.block:first-child {
  * ============================================================================== */
 .focusTopBar {
   position: fixed;
-  top: calc(10px + env(safe-area-inset-top));
-  right: 12px;
-  left: 12px;
-  z-index: 35;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  z-index: 60;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   pointer-events: none;
 }
 
@@ -1012,25 +1013,42 @@ section.block:first-child {
   pointer-events: auto;
 }
 
+#stageQuickSearchBtn {
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+#stageQuickSearchBtn[hidden],
+#exitFocus[hidden],
+#wakeLockBadge[hidden] {
+  display: none !important;
+}
+
 #wakeLockBadge {
   background: rgba(15, 15, 18, 0.85);
   border: 1px solid rgba(245, 158, 11, 0.45);
   color: var(--accent);
-  padding: 5px 11px;
+  padding: 6px 12px;
   border-radius: 999px;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 700;
   backdrop-filter: blur(8px);
 }
 
 #exitFocus {
-  background: rgba(24, 24, 30, 0.9);
+  background: rgba(24, 24, 30, 0.92);
   border: 1.5px solid var(--line-light);
   color: var(--text);
-  min-height: 38px;
-  padding: 6px 14px;
+  min-height: 44px;
+  padding: 8px 16px;
   border-radius: 999px;
-  font-size: 0.86rem;
+  font-size: 0.88rem;
+  font-weight: 700;
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(8px);
 }
@@ -1047,12 +1065,15 @@ body.focus #bottomNav {
 }
 
 body.focus .app {
-  display: block;
-  max-width: 100%;
+  display: block !important;
+  grid-template-columns: 1fr !important;
+  max-width: 100% !important;
 }
 
 body.focus #pane {
-  padding: 12px 16px;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: calc(62px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) calc(92px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px)) !important;
 }
 
 body.focus .card {
@@ -1060,10 +1081,20 @@ body.focus .card {
   background: transparent;
   padding: 4px;
   box-shadow: none;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+body.focus #gallery img {
+  max-width: 100%;
+  width: auto;
+  max-height: calc(100dvh - 160px);
+  margin: 0 auto;
+  object-fit: contain;
 }
 
 body.focus .dock {
-  bottom: calc(10px + env(safe-area-inset-bottom));
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
 }
 
 /* ==============================================================================
@@ -2406,10 +2437,15 @@ button,
 }
 
 @media (min-width: 768px) and (max-width: 1180px) {
-  .app {
+  body:not(.focus) .app {
     display: grid;
-    grid-template-columns: 310px 1fr;
+    grid-template-columns: 300px 1fr;
     align-items: start;
+  }
+
+  body.focus .app {
+    display: block !important;
+    grid-template-columns: 1fr !important;
   }
 
   body[data-view="live-room"] .app,
@@ -2461,7 +2497,23 @@ button,
   }
 }
 
+/* iPad Landscape (1024px–1366px) & Desktop */
+@media (min-width: 1024px) and (orientation: landscape) {
+  body:not(.focus) .app {
+    grid-template-columns: 340px 1fr;
+  }
+  body.focus #pane {
+    padding-left: calc(28px + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(28px + env(safe-area-inset-right, 0px)) !important;
+  }
+}
+
 @media (min-width: 1181px) {
+  body.focus .app {
+    display: block !important;
+    grid-template-columns: 1fr !important;
+  }
+
   body[data-view="live-room"] .app,
   body[data-view="friends"] .app {
     grid-template-columns: 1fr;

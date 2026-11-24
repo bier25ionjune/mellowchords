@@ -594,6 +594,9 @@
                 '<div class="fr-user-sub" id="lrCurrentSongArtist">' + esc(curSong ? (curSong.artist || '') : '') + '</div>' +
               '</div>' +
               '<div class="lr-nav-controls">' +
+                (isHost && onAddSongRequest
+                  ? '<button type="button" class="small secondary lr-touch-btn" id="lrQuickSearchBtn">🔍 ค้นหาเพลงต่อไป</button>'
+                  : '') +
                 '<button type="button" class="small lr-touch-btn" id="lrPrevSongBtn"' + (!canControl || curIdx <= 0 ? ' disabled' : '') + '>⏮ ก่อนหน้า</button>' +
                 '<span class="badge dim" id="lrSongCounter">' + (curIdx + 1) + ' / ' + songs.length + '</span>' +
                 '<button type="button" class="small primary lr-touch-btn" id="lrNextSongBtn"' + (!canControl || curIdx >= songs.length - 1 ? ' disabled' : '') + '>ถัดไป ⏭</button>' +
@@ -645,15 +648,17 @@
       }
 
       var addSongBtn = rootEl.querySelector('#lrAddSongBtn');
-      if (addSongBtn && onAddSongRequest) {
-        addSongBtn.onclick = function () {
-          onAddSongRequest({
-            room: activeRoom,
-            existingSongs: getSnapshotSongs(),
-            onAddSong: function (song) { return hostAddSongToRoom(song); }
-          });
-        };
-      }
+      var quickSearchBtn = rootEl.querySelector('#lrQuickSearchBtn');
+      var openRoomPicker = function () {
+        if (!onAddSongRequest) return;
+        onAddSongRequest({
+          room: activeRoom,
+          existingSongs: getSnapshotSongs(),
+          onAddSong: function (song) { return hostAddSongToRoom(song); }
+        });
+      };
+      if (addSongBtn) addSongBtn.onclick = openRoomPicker;
+      if (quickSearchBtn) quickSearchBtn.onclick = openRoomPicker;
 
       rootEl.querySelectorAll('.lr-chord-img').forEach(function (img) {
         img.onerror = function () {

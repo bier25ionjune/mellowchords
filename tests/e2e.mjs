@@ -955,11 +955,68 @@ async function run() {
       console.log(`  PASS: Live Room (${roomCode}) Image-First, In-Room +Add Song Sync, iPad Wide-Stage, 2-tab Presence, Song/Key Sync & MIDI verified.`);
     }
 
+    // -------------------------------------------------------------------------
+    // Test 14: iPad Portrait (820x1180) & Landscape (1180x820) Fullscreen Stage Mode
+    // -------------------------------------------------------------------------
+    console.log('[Test 14] iPad Portrait & Landscape Stage/Focus Mode (#stageQuickSearchBtn & full-width)...');
+    {
+      const ipadCtx = await browser.newContext({ viewport: { width: 820, height: 1180 } });
+      const ipadPage = await ipadCtx.newPage();
+      const ipadErrs = [];
+      ipadPage.on('pageerror', err => ipadErrs.push(String(err)));
+      await ipadPage.goto(url, { waitUntil: 'domcontentloaded' });
+      await ipadPage.waitForSelector('#songbook', { timeout: 5000 });
+
+      await ipadPage.evaluate(() => {
+        openSong({
+          id: 'ipad-stage-1',
+          title: 'เพลงทดสอบ iPad เต็มจอ',
+          artist: 'iPad Band',
+          key: 'C',
+          text: '[Chorus]\nC   G   Am   F\nเต็มจอทั้งแนวตั้งและแนวนอน',
+          images: []
+        }, 0);
+      });
+      await ipadPage.waitForSelector('#focusBtn', { timeout: 4000 });
+      await ipadPage.click('#focusBtn');
+      await ipadPage.waitForSelector('#stageQuickSearchBtn:visible', { timeout: 4000 });
+
+      // Check iPad Portrait width
+      const portraitMetrics = await ipadPage.evaluate(() => ({
+        paneWidth: document.querySelector('#pane').getBoundingClientRect().width,
+        vw: window.innerWidth,
+        searchVisible: !document.querySelector('#stageQuickSearchBtn').hidden
+      }));
+      assert(portraitMetrics.searchVisible, 'Expected #stageQuickSearchBtn visible on iPad Portrait');
+      assert(portraitMetrics.paneWidth >= portraitMetrics.vw * 0.9,
+        `Expected full-width #pane on iPad Portrait, got ${portraitMetrics.paneWidth} / ${portraitMetrics.vw}`);
+
+      // Switch to iPad Landscape (1180x820)
+      await ipadPage.setViewportSize({ width: 1180, height: 820 });
+      await ipadPage.waitForTimeout(150);
+      const landscapeMetrics = await ipadPage.evaluate(() => ({
+        paneWidth: document.querySelector('#pane').getBoundingClientRect().width,
+        vw: window.innerWidth,
+        searchVisible: !document.querySelector('#stageQuickSearchBtn').hidden
+      }));
+      assert(landscapeMetrics.searchVisible, 'Expected #stageQuickSearchBtn visible on iPad Landscape');
+      assert(landscapeMetrics.paneWidth >= landscapeMetrics.vw * 0.9,
+        `Expected full-width #pane on iPad Landscape, got ${landscapeMetrics.paneWidth} / ${landscapeMetrics.vw}`);
+
+      // Clicking #stageQuickSearchBtn opens Quick Song Switcher modal cleanly
+      await ipadPage.click('#stageQuickSearchBtn');
+      await ipadPage.waitForSelector('.modal', { timeout: 4000 });
+
+      assert(ipadErrs.length === 0, `Page errors (Test 14): ${ipadErrs.join('; ')}`);
+      await ipadCtx.close();
+      console.log(`  PASS: iPad Portrait (${Math.round(portraitMetrics.paneWidth)}px) & Landscape (${Math.round(landscapeMetrics.paneWidth)}px) fullscreen & #stageQuickSearchBtn verified.`);
+    }
+
     assert(pageErrors.length === 0, `Page errors occurred: ${pageErrors.join('; ')}`);
     assert(consoleErrors.length === 0, `Console errors occurred: ${consoleErrors.join('; ')}`);
     assert(softFailures.length === 0, `Subtest failures: ${softFailures.join('; ')}`);
 
-    console.log('\n✅ ALL 13 E2E, RBAC, FRIENDS/GROUPS, LIVE ROOM & MIDI SYNC TESTS PASSED!');
+    console.log('\n✅ ALL 14 E2E, RBAC, FRIENDS/GROUPS, LIVE ROOM, MIDI & IPAD STAGE TESTS PASSED!');
   } finally {
     await browser.close();
     server.close();
