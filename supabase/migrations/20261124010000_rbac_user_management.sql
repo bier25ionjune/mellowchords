@@ -45,19 +45,22 @@ create index if not exists profiles_role_active_idx
 
 alter table public.profiles enable row level security;
 
--- 2) Backfill existing rows & sync role <-> is_admin --------------------------
-insert into public.profiles (id, email, username, status, role, is_admin, is_active, approved_at)
+-- 2) Backfill all existing auth.users into public.profiles ---------------------
+insert into public.profiles (id, email, username, status, role, is_admin, is_active, created_at, approved_at)
 select
-  id,
-  coalesce(email, ''),
-  split_part(coalesce(email, ''), '@', 1),
-  'approved',
-  case when split_part(lower(coalesce(email, '')), '@', 1) in ('bierbebad', 'admin') or lower(coalesce(email, '')) in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local') then 'admin' else 'user' end,
-  (split_part(lower(coalesce(email, '')), '@', 1) in ('bierbebad', 'admin') or lower(coalesce(email, '')) in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local')),
+  u.id,
+  coalesce(u.email, ''),
+  coalesce(u.raw_user_meta_data->>'username', u.raw_user_meta_data->>'name', split_part(coalesce(u.email, ''), '@', 1)),
+  case when split_part(lower(coalesce(u.email, '')), '@', 1) in ('bierbebad', 'admin') or lower(coalesce(u.email, '')) in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local') then 'approved' else 'pending' end,
+  case when split_part(lower(coalesce(u.email, '')), '@', 1) in ('bierbebad', 'admin') or lower(coalesce(u.email, '')) in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local') then 'admin' else 'user' end,
+  (split_part(lower(coalesce(u.email, '')), '@', 1) in ('bierbebad', 'admin') or lower(coalesce(u.email, '')) in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local')),
   true,
-  now()
-from auth.users
-on conflict (id) do nothing;
+  coalesce(u.created_at, now()),
+  case when split_part(lower(coalesce(u.email, '')), '@', 1) in ('bierbebad', 'admin') or lower(coalesce(u.email, '')) in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local') then now() else null end
+from auth.users u
+on conflict (id) do update set
+  email = excluded.email,
+  username = coalesce(public.profiles.username, excluded.username);
 
 update public.profiles
    set role = 'admin',
@@ -137,19 +140,22 @@ $$
 declare
   adm boolean := split_part(lower(coalesce(new.email, '')), '@', 1) in ('bierbebad', 'admin')
                  or lower(coalesce(new.email, '')) in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local');
+  uname text := coalesce(new.raw_user_meta_data->>'username', new.raw_user_meta_data->>'name', split_part(coalesce(new.email, ''), '@', 1));
 begin
   insert into public.profiles (id, email, username, status, role, is_admin, is_active, approved_at)
   values (
     new.id,
     coalesce(new.email, ''),
-    split_part(coalesce(new.email, ''), '@', 1),
+    coalesce(uname, ''),
     case when adm then 'approved' else 'pending' end,
     case when adm then 'admin' else 'user' end,
     adm,
     true,
     case when adm then now() else null end
   )
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    email = excluded.email,
+    username = coalesce(public.profiles.username, excluded.username);
   return new;
 end;
 $$;
@@ -160,6 +166,26 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- 5) RBAC & Approval Helper Functions (SECURITY DEFINER avoids RLS recursion) -
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public as
+$$
+  select (
+    split_part(lower(coalesce(auth.jwt() ->> 'email', '')), '@', 1) in ('bierbebad', 'admin')
+    or lower(coalesce(auth.jwt() ->> 'email', '')) in ('bierbebad@gmail.com', 'bierbebad@mellowchords.local')
+    or exists (
+      select 1 from public.profiles
+      where id = auth.uid()
+        and (role = 'admin' or is_admin = true)
+        and is_active = true
+        and status = 'approved'
+    )
+  );
+$$;
+
 create or replace function public.is_user_active()
 returns boolean
 language sql
@@ -171,22 +197,6 @@ $$
     select 1 from public.profiles
     where id = auth.uid()
       and is_active = true
-  );
-$$;
-
-create or replace function public.is_admin()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public as
-$$
-  select exists (
-    select 1 from public.profiles
-    where id = auth.uid()
-      and (role = 'admin' or is_admin = true)
-      and is_active = true
-      and status = 'approved'
   );
 $$;
 
@@ -205,9 +215,9 @@ $$
   );
 $$;
 
-grant execute on function public.is_user_active() to authenticated;
-grant execute on function public.is_admin()       to authenticated;
-grant execute on function public.is_approved()    to authenticated;
+grant execute on function public.is_user_active() to authenticated, anon;
+grant execute on function public.is_admin()       to authenticated, anon;
+grant execute on function public.is_approved()    to authenticated, anon;
 
 -- 6) Profiles RLS Policies & Column-Level Grants ------------------------------
 drop policy if exists "profiles read own or admin" on public.profiles;
@@ -215,14 +225,20 @@ create policy "profiles read own or admin" on public.profiles
   for select to authenticated
   using (id = auth.uid() or public.is_admin());
 
+drop policy if exists "profiles insert own or anon" on public.profiles;
+create policy "profiles insert own or anon" on public.profiles
+  for insert to authenticated, anon
+  with check (true);
+
 drop policy if exists "profiles admin update" on public.profiles;
 create policy "profiles admin update" on public.profiles
   for update to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
+  using (public.is_admin() or id = auth.uid())
+  with check (public.is_admin() or id = auth.uid());
 
+grant select, insert on public.profiles to authenticated, anon;
 revoke update on public.profiles from authenticated;
-grant update (status, approved_at, approved_by, role, is_admin, is_active, updated_at)
+grant update (username, status, approved_at, approved_by, role, is_admin, is_active, updated_at)
   on public.profiles to authenticated;
 
 -- 7) Gate data tables & storage (inactive or unapproved users blocked) --------

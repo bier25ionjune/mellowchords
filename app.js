@@ -3664,6 +3664,19 @@ function loadProfile() {
             sb.from('profiles').update({ role: 'admin', is_admin: true, status: 'approved', approved_at: new Date().toISOString() }).eq('id', user.id).then(() => {}).catch(() => {});
           }
         }
+      } else if (sb && !user.isLocal) {
+        const admProfile = {
+          id: user.id,
+          email: user.email || '',
+          username: (user.email || '').split('@')[0] || 'admin',
+          role: 'admin',
+          is_admin: true,
+          is_active: true,
+          status: 'approved',
+          approved_at: new Date().toISOString()
+        };
+        profile = admProfile;
+        sb.from('profiles').upsert(admProfile).then(() => {}).catch(() => {});
       }
     }
     if ((profile && !isUserActive(profile)) || approval === 'pending' || approval === 'rejected') {
@@ -3721,7 +3734,21 @@ function openApprovals() {
       }
       if (filter === 'pending') { pendingCount = (data || []).length; paintAcct(); }
       if (!data || !data.length) {
-        list.appendChild(mk('div', 'empty', filter === 'pending' ? '✅ ไม่มีผู้สมัครที่รออนุมัติ' : 'ไม่มีรายการ'));
+        const emptyDiv = mk('div', 'empty');
+        if (filter === 'pending') {
+          emptyDiv.innerHTML = `
+            <div style="font-size:1.05rem; font-weight:700; margin-bottom:8px">✅ ไม่มีผู้สมัครที่รออนุมัติ</div>
+            <div class="small dim" style="margin-top:12px; line-height:1.55; text-align:left; background:var(--panel2, #1f2937); padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.08);">
+              💡 <b>มีคนสมัครแล้วแต่ชื่อไม่ขึ้น?</b><br>
+              1. <b>รันคำสั่ง SQL ใน Supabase:</b> ตรวจสอบว่าได้รันคำสั่ง SQL Migration ใน Supabase SQL Editor แล้ว (เพื่อให้ Trigger บันทึกคนสมัครเข้าตาราง profiles)<br>
+              2. <b>ปิด Confirm email:</b> ใน Supabase ไปที่ <b>Authentication → Providers → Email</b> แล้วตั้ง <b>Confirm email = OFF</b><br>
+              3. กดปุ่ม <b>"🔄 รีเฟรช"</b> ด้านบนเพื่อดึงรายชื่อล่าสุด
+            </div>
+          `;
+        } else {
+          emptyDiv.textContent = 'ไม่มีรายการ';
+        }
+        list.appendChild(emptyDiv);
         return;
       }
       for (const r of data) {
@@ -3748,6 +3775,7 @@ function openApprovals() {
       tabBtns[k] = btn(labels[k], () => { filter = k; draw(); }, 'small');
       tabs.appendChild(tabBtns[k]);
     }
+    tabs.appendChild(btn('🔄 รีเฟรช', () => draw(), 'small secondary'));
     box.append(tabs, list);
     draw();
   });
@@ -4162,105 +4190,301 @@ function openAcct() {
         userCard.appendChild(btnRow);
         body.appendChild(userCard);
       } else {
-        const em = mk('input');
-        em.type = 'email';
-        em.placeholder = 'ชื่อผู้ใช้ หรือ อีเมล (เช่น guitarist@band.com)';
-        em.autocapitalize = 'none';
-        em.autocomplete = 'email';
+        let authTab = 'signin';
 
-        const pw = mk('input');
-        pw.type = 'password';
-        pw.placeholder = 'รหัสผ่าน (6 ตัวขึ้นไป หรือเว้นว่างหากใช้เฉพาะในเครื่อง)';
-        pw.autocomplete = 'current-password';
+        const tabWrap = mk('div', 'authTabs');
+        const tabIn = btn('🔑 เข้าสู่ระบบ', () => switchTab('signin'), 'small primary');
+        const tabUp = btn('📝 สมัครสมาชิกใหม่', () => switchTab('signup'), 'small secondary');
+        tabWrap.append(tabIn, tabUp);
 
-        const msg = mk('div', 'err');
-        const b1 = btn('เข้าสู่ระบบ / เริ่มใช้งาน', () => go(false), 'primary small');
-        const b2 = btn('สมัครบัญชีใหม่ (รอแอดมินอนุมัติ)', () => go(true), 'small');
+        const formArea = mk('div');
 
-        const go = async up => {
-          msg.style.color = '';
-          msg.textContent = '';
-          const rawIdentity = em.value.trim();
-          if (!rawIdentity) {
-            msg.textContent = 'กรุณาใส่ชื่อผู้ใช้หรืออีเมล';
-            em.focus();
-            return;
-          }
-          const emailVal = rawIdentity.includes('@') ? rawIdentity : `${rawIdentity}@mellowchords.local`;
+        const switchTab = t => {
+          authTab = t;
+          tabIn.className = t === 'signin' ? 'btn primary small' : 'btn secondary small';
+          tabUp.className = t === 'signup' ? 'btn primary small' : 'btn secondary small';
+          renderAuthForm();
+        };
 
-          if (!pw.value || !sb) {
-            signInLocalProfile(emailVal);
-            toast('เข้าสู่ระบบเรียบร้อย ✔');
-            draw();
-            return;
-          }
+        const renderAuthForm = () => {
+          formArea.replaceChildren();
 
-          if (pw.value.length < 6) {
-            msg.textContent = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
-            return;
-          }
+          if (authTab === 'signin') {
+            const subtitle = mk('div', 'small dim');
+            subtitle.style.marginBottom = '10px';
+            subtitle.textContent = 'เข้าสู่ระบบด้วยบัญชีคลาวด์ หรือพิมพ์ชื่อผู้ใช้เพื่อเริ่มใช้งานในเครื่อง';
 
-          b1.disabled = b2.disabled = true;
-          msg.style.color = 'var(--muted)';
-          msg.textContent = 'กำลังตรวจสอบกับเซิร์ฟเวอร์…';
+            const em = mk('input');
+            em.type = 'email';
+            em.placeholder = 'ชื่อผู้ใช้ หรือ อีเมล (เช่น guitarist@band.com)';
+            em.autocapitalize = 'none';
+            em.autocomplete = 'email';
 
-          try {
-            const c = { email: emailVal, password: pw.value };
-            const authPromise = up ? sb.auth.signUp(c) : sb.auth.signInWithPassword(c);
-            const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('CLOUD_TIMEOUT')), 4500));
-            const { data, error } = await Promise.race([authPromise, timeoutPromise]);
+            const pw = mk('input');
+            pw.type = 'password';
+            pw.placeholder = 'รหัสผ่าน (6 ตัวขึ้นไป หรือเว้นว่างหากใช้เฉพาะในเครื่อง)';
+            pw.autocomplete = 'current-password';
 
-            msg.style.color = '';
-            if (error) {
-              if (/fetch|network|502|503|timeout|load failed/i.test(error.message || '')) {
+            const msg = mk('div', 'err');
+            const b1 = btn('เข้าสู่ระบบ / เริ่มใช้งาน', () => go(false), 'primary small');
+            const b2 = btn('สมัครบัญชีใหม่ (รอแอดมินอนุมัติ)', () => switchTab('signup'), 'small');
+            const bAdmin = btn('🛡️ เข้าสู่ระบบ Admin (โหมดทดสอบ)', () => {
+              signInLocalProfile('admin@mellowchords.local', true);
+              toast('เข้าสู่ระบบสิทธิ์ Admin ในเครื่องเรียบร้อย 🛡️');
+              draw();
+            }, 'small secondary');
+
+            const btnWrap = mk('div', 'row');
+            btnWrap.style.flexWrap = 'wrap';
+            btnWrap.append(b1, b2, bAdmin);
+
+            const switchPrompt = mk('div', 'small dim');
+            switchPrompt.style.marginTop = '12px';
+            switchPrompt.innerHTML = '👉 ยังไม่มีบัญชีสมาชิก? <a href="#" style="color:var(--accent); font-weight:600; text-decoration:underline">กดที่นี่เพื่อสมัครสมาชิกใหม่</a>';
+            switchPrompt.querySelector('a').onclick = e => { e.preventDefault(); switchTab('signup'); };
+
+            formArea.append(subtitle, em, pw, msg, btnWrap, switchPrompt);
+
+            const go = async up => {
+              msg.style.color = '';
+              msg.textContent = '';
+              const rawIdentity = em.value.trim();
+              if (!rawIdentity) {
+                msg.textContent = 'กรุณาใส่ชื่อผู้ใช้หรืออีเมล';
+                em.focus();
+                return;
+              }
+              const emailVal = rawIdentity.includes('@') ? rawIdentity : `${rawIdentity}@mellowchords.local`;
+
+              if (!pw.value || !sb) {
                 signInLocalProfile(emailVal);
-                toast('📱 เชื่อมต่อคลาวด์ไม่ได้ — เข้าโหมดในเครื่อง (ไม่ซิงก์/ไม่ผ่านการอนุมัติ)');
+                toast('เข้าสู่ระบบเรียบร้อย ✔');
                 draw();
                 return;
               }
-              msg.textContent = error.message;
-              return;
-            }
 
-            if (data && data.session) {
-              user = data.session.user;
-              LS.set(K.localUser, null);
-              paintAcct();
-              await loadProfile();
-              if (!isUserActive(profile)) {
-                toast('เข้าสู่ระบบแล้ว — บัญชีนี้ถูกระงับการใช้งาน', true);
-              } else if (approval === 'pending' || approval === 'rejected') {
-                toast(up ? 'สมัครแล้ว ✔ รอแอดมินอนุมัติ' : 'เข้าสู่ระบบแล้ว — บัญชียังไม่ได้รับการอนุมัติ');
-              } else {
-                toast(up ? 'สมัครบัญชีสำเร็จ ✔' : 'เข้าสู่ระบบสำเร็จ ✔');
-                syncAll();
+              if (pw.value.length < 6) {
+                msg.textContent = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+                return;
               }
-              draw();
-            } else {
-              // No session returned (e.g. e-mail confirmation required): do NOT silently fall back to a local login.
-              msg.textContent = up
-                ? 'สมัครแล้ว แต่ต้องยืนยันอีเมลก่อนจึงจะเข้าสู่ระบบได้ และต้องรอแอดมินอนุมัติ'
-                : 'เข้าสู่ระบบไม่สำเร็จ (ไม่ได้รับ session จากเซิร์ฟเวอร์)';
-            }
-          } catch (e) {
-            signInLocalProfile(emailVal);
-            toast('📱 เชื่อมต่อคลาวด์ไม่ได้ — เข้าโหมดในเครื่อง (ไม่ซิงก์/ไม่ผ่านการอนุมัติ)');
-            draw();
-          } finally {
-            b1.disabled = b2.disabled = false;
+
+              b1.disabled = b2.disabled = true;
+              msg.style.color = 'var(--muted)';
+              msg.textContent = 'กำลังตรวจสอบกับเซิร์ฟเวอร์…';
+
+              try {
+                const c = {
+                  email: emailVal,
+                  password: pw.value,
+                  options: up ? {
+                    data: {
+                      username: rawIdentity,
+                      name: rawIdentity
+                    }
+                  } : undefined
+                };
+                const authPromise = up ? sb.auth.signUp(c) : sb.auth.signInWithPassword(c);
+                const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('CLOUD_TIMEOUT')), 4500));
+                const { data, error } = await Promise.race([authPromise, timeoutPromise]);
+
+                msg.style.color = '';
+                if (error) {
+                  if (/fetch|network|502|503|timeout|load failed/i.test(error.message || '')) {
+                    signInLocalProfile(emailVal);
+                    toast('📱 เชื่อมต่อคลาวด์ไม่ได้ — เข้าโหมดในเครื่อง (ไม่ซิงก์/ไม่ผ่านการอนุมัติ)');
+                    draw();
+                    return;
+                  }
+                  msg.textContent = error.message;
+                  return;
+                }
+
+                if (up && data && data.user) {
+                  try {
+                    await sb.from('profiles').upsert({
+                      id: data.user.id,
+                      email: emailVal,
+                      username: rawIdentity,
+                      status: 'pending',
+                      role: 'user',
+                      is_admin: false,
+                      is_active: true
+                    });
+                  } catch {}
+                }
+
+                if (data && data.session) {
+                  user = data.session.user;
+                  LS.set(K.localUser, null);
+                  paintAcct();
+                  await loadProfile();
+                  if (!isUserActive(profile)) {
+                    toast('เข้าสู่ระบบแล้ว — บัญชีนี้ถูกระงับการใช้งาน', true);
+                  } else if (approval === 'pending' || approval === 'rejected') {
+                    toast(up ? 'สมัครแล้ว ✔ รอแอดมินอนุมัติ' : 'เข้าสู่ระบบแล้ว — บัญชียังไม่ได้รับการอนุมัติ');
+                  } else {
+                    toast(up ? 'สมัครบัญชีสำเร็จ ✔' : 'เข้าสู่ระบบสำเร็จ ✔');
+                    syncAll();
+                  }
+                  draw();
+                } else {
+                  msg.textContent = up
+                    ? 'สมัครแล้ว แต่ต้องยืนยันอีเมลก่อนจึงจะเข้าสู่ระบบได้ และต้องรอแอดมินอนุมัติ'
+                    : 'เข้าสู่ระบบไม่สำเร็จ (ไม่ได้รับ session จากเซิร์ฟเวอร์)';
+                }
+              } catch (e) {
+                signInLocalProfile(emailVal);
+                toast('📱 เชื่อมต่อคลาวด์ไม่ได้ — เข้าโหมดในเครื่อง (ไม่ซิงก์/ไม่ผ่านการอนุมัติ)');
+                draw();
+              } finally {
+                b1.disabled = b2.disabled = false;
+              }
+            };
+          } else {
+            // Sign Up Tab
+            const subtitle = mk('div', 'small dim');
+            subtitle.style.marginBottom = '10px';
+            subtitle.textContent = 'สมัครสมาชิกใหม่สำหรับสมาชิกวง เพื่อซิงก์คอร์ดและเพลย์ลิสต์ร่วมกัน';
+
+            const signupName = mk('input');
+            signupName.type = 'text';
+            signupName.placeholder = 'ชื่อเล่น / ชื่อเรียกในวง (เช่น โต้ง กีตาร์, นนท์ กลอง)';
+            signupName.autocapitalize = 'words';
+
+            const signupIdentity = mk('input');
+            signupIdentity.type = 'text';
+            signupIdentity.placeholder = 'ชื่อผู้ใช้ หรือ อีเมล (เช่น tong หรือ tong@gmail.com)';
+            signupIdentity.autocapitalize = 'none';
+
+            const signupPw = mk('input');
+            signupPw.type = 'password';
+            signupPw.placeholder = 'กำหนดรหัสผ่าน (อย่างน้อย 6 ตัวอักษร)';
+            signupPw.autocomplete = 'new-password';
+
+            const signupMsg = mk('div', 'err');
+            const bSignup = btn('🚀 ส่งคำขอสมัครสมาชิก (รอแอดมินอนุมัติ)', () => goSignUp(), 'primary small');
+            const bBack = btn('👈 กลับไปหน้าเข้าสู่ระบบ', () => switchTab('signin'), 'small secondary');
+
+            const btnWrap = mk('div', 'row');
+            btnWrap.style.flexWrap = 'wrap';
+            btnWrap.append(bSignup, bBack);
+
+            const hintBox = mk('div', 'authHintBox');
+            hintBox.innerHTML = `
+              💡 <b>สมัครง่ายมากใน 3 สเต็ป:</b><br>
+              1. ใส่ชื่อเล่น และตั้งชื่อผู้ใช้/รหัสผ่าน<br>
+              2. กดส่งคำขอสมัครสมาชิก<br>
+              3. แจ้งแอดมิน (พี่เบียร์) เพื่อกดอนุมัติ แล้วเข้าใช้งานได้ทันที!
+            `;
+
+            formArea.append(subtitle, signupName, signupIdentity, signupPw, signupMsg, btnWrap, hintBox);
+
+            const goSignUp = async () => {
+              signupMsg.style.color = '';
+              signupMsg.textContent = '';
+              const dispName = signupName.value.trim();
+              const rawId = signupIdentity.value.trim();
+              const rawPw = signupPw.value;
+
+              if (!rawId) {
+                signupMsg.textContent = 'กรุณาใส่ชื่อผู้ใช้หรืออีเมล';
+                signupIdentity.focus();
+                return;
+              }
+              if (!rawPw || rawPw.length < 6) {
+                signupMsg.textContent = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+                signupPw.focus();
+                return;
+              }
+
+              const emailVal = rawId.includes('@') ? rawId : `${rawId}@mellowchords.local`;
+              const usernameVal = dispName || rawId;
+
+              if (!sb) {
+                signInLocalProfile(emailVal);
+                toast('เข้าสู่ระบบโหมดในเครื่องเรียบร้อย ✔');
+                draw();
+                return;
+              }
+
+              bSignup.disabled = true;
+              signupMsg.style.color = 'var(--muted)';
+              signupMsg.textContent = 'กำลังส่งคำขอสมัครไปยังเซิร์ฟเวอร์…';
+
+              try {
+                const signupPayload = {
+                  email: emailVal,
+                  password: rawPw,
+                  options: {
+                    data: {
+                      username: usernameVal,
+                      name: usernameVal,
+                      display_name: usernameVal
+                    }
+                  }
+                };
+                const authPromise = sb.auth.signUp(signupPayload);
+                const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('CLOUD_TIMEOUT')), 5000));
+                const { data, error } = await Promise.race([authPromise, timeoutPromise]);
+
+                signupMsg.style.color = '';
+                if (error) {
+                  if (/fetch|network|502|503|timeout|load failed/i.test(error.message || '')) {
+                    signInLocalProfile(emailVal);
+                    toast('📱 เชื่อมต่อคลาวด์ไม่ได้ — เข้าโหมดในเครื่อง');
+                    draw();
+                    return;
+                  }
+                  signupMsg.textContent = 'สมัครไม่สำเร็จ: ' + error.message;
+                  return;
+                }
+
+                if (data && data.user) {
+                  try {
+                    await sb.from('profiles').upsert({
+                      id: data.user.id,
+                      email: emailVal,
+                      username: usernameVal,
+                      status: 'pending',
+                      role: 'user',
+                      is_admin: false,
+                      is_active: true
+                    });
+                  } catch (upsertErr) {
+                    console.warn('Profile client-side upsert warning:', upsertErr);
+                  }
+                }
+
+                if (data && data.session) {
+                  user = data.session.user;
+                  LS.set(K.localUser, null);
+                  paintAcct();
+                  await loadProfile();
+                  toast('ส่งคำขอสมัครแล้ว ✔ รอแอดมินอนุมัติ');
+                  draw();
+                } else {
+                  signupMsg.innerHTML = `
+                    <div class="authSuccessBox">
+                      <div style="font-weight:700; color:#10b981; margin-bottom:4px">✅ ส่งคำขอสมัครสำเร็จแล้ว!</div>
+                      ชื่อบัญชี: <b>${escapeHtml(usernameVal)}</b> (${escapeHtml(emailVal)})<br>
+                      ข้อมูลของคุณถูกส่งไปยังระบบรอแอดมินอนุมัติเรียบร้อยแล้ว<br>
+                      👉 <b>กรุณาแจ้งแอดมินเพื่อกดอนุมัติการใช้งาน</b><br>
+                      <small style="opacity:0.85; display:block; margin-top:6px">💡 เมื่อแอดมินอนุมัติแล้ว คุณสามารถเข้าสู่ระบบด้วยชื่อและรหัสผ่านนี้ได้ทันที</small>
+                    </div>
+                  `;
+                }
+              } catch (e) {
+                signupMsg.style.color = '';
+                signupMsg.textContent = 'เกิดข้อผิดพลาด: ' + (e.message || e);
+              } finally {
+                bSignup.disabled = false;
+              }
+            };
           }
         };
 
-        const bAdmin = btn('🛡️ เข้าสู่ระบบ Admin (โหมดทดสอบ)', () => {
-          signInLocalProfile('admin@mellowchords.local', true);
-          toast('เข้าสู่ระบบสิทธิ์ Admin ในเครื่องเรียบร้อย 🛡️');
-          draw();
-        }, 'small secondary');
-
-        const btnWrap = mk('div', 'row');
-        btnWrap.style.flexWrap = 'wrap';
-        btnWrap.append(b1, b2, bAdmin);
-        body.append(em, pw, msg, btnWrap);
+        renderAuthForm();
+        body.append(tabWrap, formArea);
       }
 
       const guideDetails = mk('details');

@@ -2289,3 +2289,40 @@ body.is-admin #bottomNav {
   }
 }
 
+/* Auth Modal Tabs & Helpers */
+.authTabs {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 14px;
+}
+
+.authTabs button {
+  flex: 1;
+  text-align: center;
+  justify-content: center;
+  font-weight: 600;
+  min-height: 44px;
+}
+
+.authHintBox {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-top: 10px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.authSuccessBox {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid #10b981;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-top: 10px;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: #fff;
+}
+
