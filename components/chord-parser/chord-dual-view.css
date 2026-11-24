@@ -1,0 +1,513 @@
+/* ==============================================================================
+ * Mellow Chords — Dual View (Image <-> Aligned Text Chord Sheet)
+ * Scoped with .cdv-* prefix | Dark Glassmorphism & Stage Readability
+ * ============================================================================== */
+
+.cdv-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  background: rgba(22, 22, 27, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--line, #2a2a33);
+  border-radius: var(--radius-md, 14px);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.35));
+}
+
+.cdv-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-elev, #121216);
+  border: 1px solid var(--line, #2a2a33);
+  border-radius: var(--radius-sm, 10px);
+}
+
+.cdv-seg-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted, #9898a6);
+  font-size: 0.92rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.cdv-seg-btn:hover {
+  color: var(--text, #f4f4f6);
+}
+
+.cdv-seg-btn.is-active {
+  background: var(--accent, #f59e0b);
+  color: #09090b;
+  font-weight: 700;
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.32);
+}
+
+.cdv-toolbar-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cdv-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.cdv-badge-done {
+  background: var(--ok-bg, rgba(34, 197, 94, 0.14));
+  color: var(--ok, #22c55e);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.cdv-badge-working {
+  background: var(--accent-bg, rgba(245, 158, 11, 0.14));
+  color: var(--accent-hover, #fbbf24);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.cdv-quick-parse-btn {
+  appearance: none;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  background: var(--accent-bg, rgba(245, 158, 11, 0.14));
+  color: var(--chord, #fcd34d);
+  font-size: 0.86rem;
+  font-weight: 700;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm, 10px);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, transform 0.12s ease;
+}
+
+.cdv-quick-parse-btn:hover {
+  background: rgba(245, 158, 11, 0.24);
+}
+
+.cdv-quick-parse-btn:active {
+  transform: scale(0.97);
+}
+
+/* ==============================================================================
+ * Main Dual Text View Panel
+ * ============================================================================== */
+
+.cdv-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Key & Transpose Control Bar */
+.cdv-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(22, 22, 27, 0.86);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--line, #2a2a33);
+  border-radius: var(--radius-md, 14px);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.35));
+}
+
+.cdv-key-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.cdv-key-info {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cdv-key-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: var(--panel2, #1f1f27);
+  border: 1px solid var(--line, #2a2a33);
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+
+.cdv-key-chip.is-current {
+  border-color: rgba(252, 211, 77, 0.4);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.cdv-key-label {
+  color: var(--muted, #9898a6);
+}
+
+.cdv-key-val {
+  color: var(--chord, #fcd34d);
+  font-weight: 800;
+}
+
+.cdv-shift-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: var(--panel3, #2a2a35);
+  color: var(--muted, #9898a6);
+}
+
+.cdv-shift-badge.is-shifted {
+  background: var(--accent, #f59e0b);
+  color: #09090b;
+}
+
+.cdv-transpose-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cdv-tr-btn {
+  appearance: none;
+  min-width: 38px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line-light, #3a3a46);
+  background: var(--panel2, #1f1f27);
+  color: var(--text, #f4f4f6);
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.cdv-tr-btn:hover:not(:disabled) {
+  background: var(--panel3, #2a2a35);
+  border-color: var(--accent, #f59e0b);
+  color: var(--chord, #fcd34d);
+}
+
+.cdv-tr-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.cdv-tr-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cdv-tr-reset {
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+/* Format Toggle & Re-parse Row */
+.cdv-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line, #2a2a33);
+}
+
+.cdv-format-toggle {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cdv-fmt-btn {
+  appearance: none;
+  border: 1px solid var(--line, #2a2a33);
+  background: var(--bg-elev, #121216);
+  color: var(--muted, #9898a6);
+  font-size: 0.84rem;
+  font-weight: 600;
+  padding: 6px 11px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cdv-fmt-btn:hover {
+  color: var(--text, #f4f4f6);
+  border-color: var(--line-light, #3a3a46);
+}
+
+.cdv-fmt-btn.is-active {
+  background: var(--accent-bg, rgba(245, 158, 11, 0.14));
+  border-color: rgba(245, 158, 11, 0.5);
+  color: var(--chord, #fcd34d);
+  font-weight: 700;
+}
+
+.cdv-reparse-btn {
+  appearance: none;
+  border: 1px solid var(--line-light, #3a3a46);
+  background: transparent;
+  color: var(--muted, #9898a6);
+  font-size: 0.84rem;
+  font-weight: 600;
+  padding: 6px 11px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cdv-reparse-btn:hover {
+  color: var(--text, #f4f4f6);
+  border-color: var(--accent, #f59e0b);
+  background: var(--panel2, #1f1f27);
+}
+
+/* ==============================================================================
+ * State Cards (Progress / Empty / Error)
+ * ============================================================================== */
+
+.cdv-state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 28px 20px;
+  background: var(--panel, #16161b);
+  border: 1px solid var(--line, #2a2a33);
+  border-radius: var(--radius-lg, 20px);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.35));
+}
+
+.cdv-state-card.is-error {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.08), var(--panel, #16161b));
+}
+
+.cdv-state-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text, #f4f4f6);
+}
+
+.cdv-state-msg {
+  font-size: 0.92rem;
+  color: var(--muted, #9898a6);
+  max-width: 460px;
+  line-height: 1.5;
+}
+
+.cdv-progress-track {
+  width: 100%;
+  max-width: 340px;
+  height: 10px;
+  background: var(--panel2, #1f1f27);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--line, #2a2a33);
+}
+
+.cdv-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent, #f59e0b), var(--chord, #fcd34d));
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.cdv-progress-pct {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--chord, #fcd34d);
+}
+
+.cdv-primary-btn {
+  appearance: none;
+  border: none;
+  background: var(--accent, #f59e0b);
+  color: #09090b;
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: var(--radius-sm, 10px);
+  cursor: pointer;
+  margin-top: 4px;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
+  transition: background-color 0.15s ease, transform 0.12s ease;
+}
+
+.cdv-primary-btn:hover {
+  background: var(--accent-hover, #fbbf24);
+}
+
+.cdv-primary-btn:active {
+  transform: scale(0.97);
+}
+
+/* ==============================================================================
+ * Sheet Renderer (Stage-Ready Monospace & ChordPro)
+ * ============================================================================== */
+
+.cdv-sheet-wrap {
+  background: var(--panel, #16161b);
+  border: 1px solid var(--line, #2a2a33);
+  border-radius: var(--radius-lg, 20px);
+  padding: 18px 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.35));
+}
+
+.cdv-sheet {
+  color: var(--text, #f4f4f6);
+  font-size: clamp(0.96rem, 2.6vw, 1.15rem);
+  line-height: 1.55;
+}
+
+.cdv-sheet.is-monospace {
+  font-family: ui-monospace, 'SFMono-Regular', 'Consolas', 'Noto Sans Thai', monospace;
+}
+
+.cdv-line {
+  min-height: 1.2em;
+}
+
+.cdv-sheet.is-monospace .cdv-line-chord,
+.cdv-sheet.is-monospace .cdv-line-lyric,
+.cdv-sheet.is-monospace .cdv-line-mixed {
+  white-space: pre;
+}
+
+.cdv-line-blank {
+  height: 0.85em;
+}
+
+.cdv-line-section {
+  display: inline-block;
+  margin: 10px 0 4px;
+  padding: 2px 10px;
+  border-radius: 6px;
+  background: var(--panel2, #1f1f27);
+  border-left: 3px solid var(--accent, #f59e0b);
+  color: var(--accent-hover, #fbbf24);
+  font-family: "Sarabun", "Noto Sans Thai", system-ui, sans-serif;
+  font-size: 0.9em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.cdv-line-chord {
+  color: var(--chord, #fcd34d);
+  font-weight: 700;
+  margin-top: 6px;
+  line-height: 1.35;
+}
+
+.cdv-line-lyric {
+  color: var(--text, #f4f4f6);
+  line-height: 1.55;
+  margin-bottom: 2px;
+}
+
+.cdv-line-chordpro {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 2;
+  margin-bottom: 4px;
+}
+
+/* Clickable Chord Token — zero horizontal padding in monospace so column alignment stays exact */
+.cdv-chord-token {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--chord, #fcd34d);
+  font: inherit;
+  font-weight: 800;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.cdv-chord-token:hover {
+  background: var(--accent-bg, rgba(245, 158, 11, 0.18));
+  color: #fff3b0;
+}
+
+.cdv-chord-token.is-inline {
+  display: inline-block;
+  padding: 0 6px;
+  margin: 0 2px;
+  border-radius: 6px;
+  background: var(--accent-bg, rgba(245, 158, 11, 0.16));
+  border: 1px solid rgba(252, 211, 77, 0.35);
+  font-family: ui-monospace, 'SFMono-Regular', 'Consolas', monospace;
+  font-size: 0.92em;
+  line-height: 1.45;
+  vertical-align: baseline;
+}
+
+.cdv-chord-token.is-inline:hover {
+  background: rgba(245, 158, 11, 0.28);
+}
+
+/* ==============================================================================
+ * Responsive Tweaks
+ * ============================================================================== */
+
+@media (max-width: 600px) {
+  .cdv-toolbar {
+    padding: 8px;
+  }
+
+  .cdv-segmented {
+    width: 100%;
+  }
+
+  .cdv-seg-btn {
+    flex: 1 1 50%;
+    text-align: center;
+    padding: 8px 10px;
+    font-size: 0.88rem;
+  }
+
+  .cdv-toolbar-status {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .cdv-controls {
+    padding: 10px 12px;
+  }
+
+  .cdv-sheet-wrap {
+    padding: 14px 12px;
+  }
+}

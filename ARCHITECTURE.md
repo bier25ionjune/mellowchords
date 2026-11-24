@@ -23,8 +23,22 @@
 mellowchords/
 ├── index.html                                              # โครงสร้าง SPA Shell, Header, Views (#editorView, #songView, #plView, #adminView), Bottom Nav
 ├── app.css                                                 # ระบบสไตล์ Dark Glassmorphism, Responsive 2-Pane/Mobile, Stage Mode, Admin UI & RBAC rules
-├── app.js                                                  # ลอจิกหลักทั้งหมด (Music Theory, Scraper, <5s Image Pipeline, OCR, Storage, Auth/RBAC, Admin UI, Sync)
-├── sw.js                                                   # Service Worker สำหรับแคชไฟล์หลักและรูปภาพจาก Proxy
+├── app.js                                                  # ลอจิกหลักทั้งหมด (Music Theory, Scraper, <5s Image Pipeline, OCR, Storage, Auth/RBAC, Admin UI, Sync, Module Wiring)
+├── components/
+│   ├── setlist-picker/                                     # โมดูลเลือกเพลงจากคลังและค้นหาออนไลน์เข้าเซ็ตลิสต์
+│   │   ├── setlist-picker.service.js                       # ลอจิกกรองคลังเพลง, ตรวจจับเพลงซ้ำ 4 ระดับ, และ Online Auto-Add
+│   │   ├── setlist-picker.js                               # UI Side Panel (เดสก์ท็อป) / Bottom Drawer (มือถือ) พร้อม 2 แท็บ (คลังเพลง & ออนไลน์)
+│   │   └── setlist-picker.css                              # สไตล์แบบ Scoped (.sp-*) รองรับ Responsive
+│   └── chord-parser/                                       # โมดูลแกะคอร์ดจากรูปภาพและสลับโหมด Image/Text
+│       ├── chord-parser.service.js                         # ระบบแกะคอร์ดจากภาพ (Canvas Preprocess + Tesseract BBox Alignment + Transpose + DB/Local Cache)
+│       ├── chord-dual-view.js                              # ปุ่มสลับ Image View <-> Text View พร้อมแถบแสดงคีย์, ปุ่ม +/- ทดคีย์ และโหมด Monospace/ChordPro
+│       └── chord-dual-view.css                             # สไตล์แบบ Scoped (.cdv-*) สำหรับการอ่านบนเวที
+├── features/
+│   └── midi/                                               # โมดูลควบคุมการเปลี่ยนเพลงด้วย MIDI Footswitch
+│       ├── midi-footswitch.js                              # Hook/Controller (useMidiFootswitch) ใช้ Web MIDI API, Debounce, MIDI Learn, LocalStorage & Simulator
+│       ├── midi-settings.js                                # หน้าต่างตั้งค่า MIDI Settings, ปุ่ม MIDI Learn, ปุ่มจำลองสัญญาณ และสถานะการเชื่อมต่อ
+│       └── midi-settings.css                               # สไตล์แบบ Scoped (.midi-*) พร้อมแอนิเมชันสถานะ MIDI Learn
+├── sw.js                                                   # Service Worker (v21) สำหรับแคช App Shell, โมดูลทั้งหมด และรูปภาพจาก Proxy
 ├── manifest.webmanifest                                    # PWA Web Manifest
 ├── supabase/
 │   └── migrations/
@@ -142,11 +156,47 @@ mellowchords/
 
 ---
 
-## 6. การตรวจสอบและชุดทดสอบอัตโนมัติ (Verification)
+## 6. โมดูลฟีเจอร์เสริมแบบแยกส่วน (Modular Feature Architecture)
 
-1. **ตรวจไวยากรณ์ JavaScript:**
+ระบบแบ่งฟีเจอร์ใหม่เป็นโมดูลอิสระ (Vanilla ES6 IIFE + Scoped CSS) ที่โหลดผ่าน `index.html`, แคชออฟไลน์ใน `sw.js` (`mellowchords-v21`), และเชื่อมเข้ากับหน้าหลักผ่านส่วน `14B) Modular Feature Integration` ใน `app.js`:
+
+### 6.1 Songbook Picker & Online Auto-Add (`components/setlist-picker/`)
+- **Namespace:** `window.MellowSetlistPickerService`, `window.MellowSetlistPicker`
+- **จุดเชื่อมต่อ:** ปุ่ม `➕ เพิ่มเพลงเข้าเซ็ต` (`#plAddSongPickerBtn`) ในหน้า Setlist (`#plView`)
+- **การทำงาน:**
+  - แสดงผลแบบ Responsive: **Side Panel** ด้านขวา (`420px`) บนเดสก์ท็อป (`>= 960px`) และ **Bottom Drawer** บนมือถือ (`< 960px`)
+  - **แท็บคลังเพลง:** ค้นหา/กรอง (`ทั้งหมด`, `ยังไม่ในเซ็ต`, `อยู่ในเซ็ตแล้ว`, `⭐ โปรด`) และแสดง Badge `✓ อยู่ในเซ็ตแล้ว` พร้อมเพิ่ม/นำออกได้ทันที
+  - **แท็บค้นหาออนไลน์:** ดึงคอร์ด/รูปภาพจากเว็บ -> ตรวจจับเพลงซ้ำ 4 ระดับ (`id`, `chordtabsId`, `url`, `title+artist`) -> บันทึกเข้าคลังเพลงอัตโนมัติ -> เพิ่มเข้าเซ็ตเพลงทันที
+
+### 6.2 Image-to-Text Chord Parser & Dual View (`components/chord-parser/`)
+- **Namespace:** `window.MellowChordParser`, `window.MellowChordDualView`
+- **จุดเชื่อมต่อ:** คอนเทนเนอร์ `#chordDualViewToolbar` และ `#chordDualViewText` ในหน้าดูคอร์ด (`#songView`)
+- **การทำงาน:**
+  - แกะเนื้อเพลงและคอร์ดจากภาพด้วย `<canvas>` Preprocessing + Tesseract.js (`tha+eng`) พร้อม Spatial BBox Alignment จัดตำแหน่งคอร์ดให้ตรงกับคำร้อง (รองรับสระลอย/วรรณยุกต์ภาษาไทย)
+  - สร้างข้อมูลทั้งแบบ **Monospace** และ **ChordPro**, วิเคราะห์ `originalKey` อัตโนมัติ, และบันทึกลงอ็อบเจกต์เพลง (`song.parsedChordSheet`) + แคช `localStorage` (`mellowchords.parsedChords.v1`) เพื่อไม่ต้องแกะซ้ำ
+  - ปุ่มสลับ **🖼️ แบบรูปภาพ (Image View)** <-> **📝 แบบข้อความ (Text View)** พร้อมตัวแสดงคีย์และปุ่มทดคีย์ `−` / `รีเซ็ต` / `+` ที่ซิงก์กับ Floating Dock
+
+### 6.3 MIDI Footswitch Hook & Settings UI (`features/midi/`)
+- **Namespace:** `window.MellowMidi` (`useMidiFootswitch`, `openSettingsModal`, `renderSettingsPanel`, `createStatusBadge`)
+- **จุดเชื่อมต่อ:** ปุ่มสถานะ `🎹 MIDI` บน Header (`#midiHeaderSlot`), เมนูในหน้าตั้งค่าบัญชี (`openAcct()`), และ Callback เปลี่ยนเพลง (`navigateSongByMidi`) ในหน้าเล่นเพลง (`#songView`)
+- **การทำงาน:**
+  - ใช้ **Web MIDI API** ตรวจจับและ Hot-plug อุปกรณ์อัตโนมัติ รองรับข้อความ **CC**, **PC**, และ **Note On** พร้อม **Debounce** ป้องกันเหยียบเบิ้ล
+  - มีโหมด **MIDI Learn** สำหรับกดตั้งค่าแล้วเหยียบแป้นเพื่อจำปุ่ม บันทึกลง `localStorage` (`mellowchords.midi.settings.v1`)
+  - มี **MIDI Event Simulator** (ปุ่มจำลองเพลงก่อนหน้า/ถัดไป และส่งสัญญาณกำหนดเอง) สำหรับทดสอบเมื่อไม่มีอุปกรณ์จริง
+
+---
+
+## 7. การตรวจสอบและชุดทดสอบอัตโนมัติ (Verification)
+
+1. **ตรวจไวยากรณ์ JavaScript ทั้งหมด:**
    ```bash
-   node --check app.js && node --check sw.js && node --check tests/e2e.mjs
+   node --check app.js && node --check sw.js && node --check tests/e2e.mjs \
+     && node --check components/setlist-picker/setlist-picker.service.js \
+     && node --check components/setlist-picker/setlist-picker.js \
+     && node --check components/chord-parser/chord-parser.service.js \
+     && node --check components/chord-parser/chord-dual-view.js \
+     && node --check features/midi/midi-footswitch.js \
+     && node --check features/midi/midi-settings.js
    ```
 2. **รันชุดทดสอบ E2E ทั้งหมด (Playwright):**
    ```bash
@@ -156,3 +206,4 @@ mellowchords/
    - การเรนเดอร์คลังเพลง, เซ็ตลิสต์, การทดคีย์, Lightbox, Editor/OCR, และความเร็วโหลดภาพคอร์ด `< 5000ms` (Tests 1–8)
    - ระบบอนุมัติผู้สมัครและ Graceful Degradation กรณียังไม่รัน Migration (Tests 9a–9d)
    - ระบบ RBAC: การซ่อนเมนูจาก Guest/User, การพิมพ์ URL `#/admin` ตรงๆ แล้วถูก Redirect กลับหน้าหลัก, การบล็อกบัญชีที่ `is_active = false`, และการจัดการผู้ใช้โดย Admin (ค้นหา, กรอง, เปลี่ยน Role, เปิด/ปิดบัญชี, ป้องกันแก้สิทธิ์ตัวเอง, และออกจากระบบ) (Tests 10a–10c)
+   - โมดูลเสริมทั้ง 3 ส่วน: Setlist Picker + Online Auto-Add Deduplication, Image-to-Text Chord Parser + Dual View + Cache + Transpose, และ MIDI Footswitch Settings + MIDI Learn + Debounce + Simulator Navigation

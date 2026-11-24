@@ -24,8 +24,11 @@
 <link rel="preconnect" href="https://wsrv.nl" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap" rel="stylesheet">
 
-<!-- App Stylesheet -->
+<!-- App Stylesheet & Modular Feature Styles -->
 <link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="components/setlist-picker/setlist-picker.css">
+<link rel="stylesheet" href="components/chord-parser/chord-dual-view.css">
+<link rel="stylesheet" href="features/midi/midi-settings.css">
 </head>
 <body data-view="home">
 
@@ -38,6 +41,7 @@
     </div>
     <div class="row" style="gap:6px">
       <button id="hdrSearchBtn" class="small ghost" type="button" title="ค้นหาเพลงด่วน (ทุกหน้า)">🔍 ค้นเพลง</button>
+      <span id="midiHeaderSlot"></span>
       <button id="adminNavBtn" class="small secondary adminOnly" type="button" title="จัดการผู้ใช้งาน (เฉพาะ Admin)" hidden>🛡️ จัดการผู้ใช้</button>
       <button id="pwaInstallHeaderBtn" class="small primary" hidden>📲 ติดตั้งแอป</button>
       <button id="acct" class="small" type="button" aria-label="บัญชีและการซิงก์">👤 เข้าสู่ระบบ</button>
@@ -301,6 +305,10 @@
       <!-- All Chords Used in This Song (Tap to hear strum & view diagram) -->
       <div id="songChordsBar" class="songChordsBar meta" hidden></div>
 
+      <!-- Dual View Mode Switcher & Image-to-Text Parsed Chord View -->
+      <div id="chordDualViewToolbar" class="meta"></div>
+      <div id="chordDualViewText" hidden></div>
+
       <!-- Rendered Chord Sheet & Chordtabs Images (With Stage Dark Mode Invert) -->
       <div id="galleryWrap" class="galleryWrap" hidden>
         <div class="galleryToolbar meta">
@@ -438,8 +446,14 @@
 <!-- Toast Feedback -->
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-<!-- Supabase SDK & App Logic -->
+<!-- Supabase SDK, Feature Modules & App Logic -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="components/setlist-picker/setlist-picker.service.js"></script>
+<script src="components/setlist-picker/setlist-picker.js"></script>
+<script src="components/chord-parser/chord-parser.service.js"></script>
+<script src="components/chord-parser/chord-dual-view.js"></script>
+<script src="features/midi/midi-footswitch.js"></script>
+<script src="features/midi/midi-settings.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

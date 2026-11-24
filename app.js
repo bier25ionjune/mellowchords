@@ -1598,6 +1598,10 @@ function show(name, push = true) {
 
   updateBottomNav(name);
 
+  if (name !== 'playlist' && typeof setlistPickerInstance !== 'undefined' && setlistPickerInstance && setlistPickerInstance.isOpen()) {
+    setlistPickerInstance.close();
+  }
+
   if (name !== 'song') {
     setFocus(false);
     setScroll(false);
@@ -2367,10 +2371,19 @@ function renderSong(reload = true) {
   if (!current) return;
   const { song, shift } = current;
   const hasImages = !!(song.images && song.images.length);
-  // ถ้ามีภาพคอร์ด ให้ตัดเนื้อเพลงที่แนบมาออก ไม่แสดงเนื้อเพลงใต้รูป
+  // ถ้ามีภาพคอร์ด ให้ตัดเนื้อเพลงที่แนบมาออก ไม่แสดงเนื้อเพลงใต้รูป (สามารถสลับดูแบบข้อความได้ผ่าน Dual View)
   const hasText = !hasImages && !!(song.text && song.text.trim());
 
-  const key = detectKey(song.text) || song.key;
+  if (typeof chordDualViewInstance !== 'undefined' && chordDualViewInstance) {
+    if (reload) chordDualViewInstance.setSong(song, shift);
+    else chordDualViewInstance.setShift(shift);
+  }
+  const isDualTextActive = hasImages && typeof chordDualViewInstance !== 'undefined' && chordDualViewInstance && chordDualViewInstance.getMode() === 'text';
+
+  const cachedParsed = (!song.parsedChordSheet && window.MellowChordParser && typeof window.MellowChordParser.getCachedParsedChord === 'function')
+    ? window.MellowChordParser.getCachedParsedChord(song)
+    : song.parsedChordSheet;
+  const key = detectKey(song.text) || (cachedParsed && cachedParsed.originalKey) || song.key;
   const flat = preferFlat(key, shift);
   const now = key ? transposeChord(key, shift, flat) : '-';
 
@@ -2412,7 +2425,7 @@ function renderSong(reload = true) {
   }
 
   $('#sheet').hidden = !hasText;
-  $('#tpGrp').hidden = !hasText;
+  $('#tpGrp').hidden = !hasText && !isDualTextActive;
   if (hasText) {
     renderSheet($('#sheet'), song.text, shift, flat);
     applyLyricsVisibility();
@@ -2420,6 +2433,9 @@ function renderSong(reload = true) {
   const lyricsToggleBtn = $('#toggleLyricsBtn');
   if (lyricsToggleBtn) lyricsToggleBtn.hidden = !hasText;
   if (reload) loadGallery(song);
+  if (isDualTextActive && $('#galleryWrap')) {
+    $('#galleryWrap').hidden = true;
+  }
   renderSongRoadmap(song);
 
   const saved = loadBook().some(s => s.id === song.id);
@@ -2665,6 +2681,7 @@ $('#saveBtn').onclick = () => {
     text: song.text || '',
     images: song.images || [],
     sections: song.sections || [],
+    parsedChordSheet: song.parsedChordSheet || undefined,
     src: song.src || '',
     shift,
     savedAt: Date.now()
@@ -4183,6 +4200,19 @@ function openAcct() {
       );
       body.appendChild(pwaBox);
 
+      if (typeof openMidiSettingsModal === 'function') {
+        const midiBox = mk('div', 'installBanner');
+        midiBox.style.marginTop = '8px';
+        midiBox.append(
+          mk('div', null, '🎹 ตั้งค่า MIDI Footswitch (เหยียบเปลี่ยนเพลง / MIDI Learn / จำลองสัญญาณ)'),
+          btn('⚙️ ตั้งค่า MIDI', () => {
+            close();
+            openMidiSettingsModal();
+          }, 'small')
+        );
+        body.appendChild(midiBox);
+      }
+
       const accTitle = mk('label', null, '👤 บัญชีผู้ใช้งาน');
       accTitle.style.marginTop = '4px';
       body.appendChild(accTitle);
@@ -4986,7 +5016,13 @@ function renderPlView() {
       bar.append(playBtn);
     }
 
+    const addFromPickerBtn = btn('➕ เพิ่มเพลงเข้าเซ็ต', () => {
+      if (typeof openSetlistSongPicker === 'function') openSetlistSongPicker(p);
+    }, 'primary small');
+    addFromPickerBtn.id = 'plAddSongPickerBtn';
+
     bar.append(
+      addFromPickerBtn,
       btn('📢 + เพิ่มช่วงพูด/พักเบรก', () => openAddBreakModal(p.id), 'small'),
       btn('📦 ส่งสคริปต์ให้เพื่อนในวง', () => exportBandScriptPackage(p.id), 'small primary'),
       btn('✏️ เปลี่ยนชื่อ', () => {
@@ -4999,6 +5035,11 @@ function renderPlView() {
       btn(p.shared ? '🔗 แชร์อยู่' : '🔗 สร้างลิงก์แชร์', () => sharePlaylist(p.id), 'small'),
       btn('🗑 ลบเซ็ต', () => delPlaylist(p.id), 'danger small')
     );
+
+    if (typeof setlistPickerInstance !== 'undefined' && setlistPickerInstance && setlistPickerInstance.isOpen()) {
+      const currentIds = items.filter(it => it.type !== 'break').map(it => it.songId).filter(Boolean);
+      setlistPickerInstance.update({ setlistId: p.id, setlistName: p.name, currentSongIds: currentIds });
+    }
 
     if (p.shared) {
       const encodedData = encodePlaylistSharePayload(p.name, playableOnly, items);
@@ -5985,6 +6026,247 @@ if ($('#liveCueNextRow')) {
     }
   };
 }
+
+/* ==============================================================================
+ * 14B) Modular Feature Integration (Setlist Picker, Chord Dual View, MIDI)
+ * ============================================================================== */
+let setlistPickerInstance = null;
+let chordDualViewInstance = null;
+let midiControllerInstance = null;
+
+function upsertSongToBookForModules(song) {
+  if (!song || !song.title) return song;
+  const book = loadBook();
+  const id = song.id || ('s-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6));
+  const normalized = {
+    id,
+    title: song.title,
+    artist: song.artist || '',
+    key: detectKey(song.text) || (song.parsedChordSheet && song.parsedChordSheet.originalKey) || song.key || '',
+    text: song.text || '',
+    images: Array.isArray(song.images) ? song.images : [],
+    sections: Array.isArray(song.sections) ? song.sections : [],
+    parsedChordSheet: song.parsedChordSheet || undefined,
+    src: song.src || song.sourceUrl || song.url || '',
+    shift: typeof song.shift === 'number' ? song.shift : 0,
+    savedAt: song.savedAt || Date.now()
+  };
+  const idx = book.findIndex(s => s.id === normalized.id);
+  if (idx >= 0) {
+    book[idx] = { ...book[idx], ...normalized };
+  } else {
+    book.push(normalized);
+  }
+  saveBook(book);
+  renderSongbook();
+  if (cloudOn()) syncAll();
+  return idx >= 0 ? book[idx] : normalized;
+}
+
+// 1) Setlist Songbook Picker & Online Auto-Add
+if (window.MellowSetlistPicker && typeof window.MellowSetlistPicker.createPicker === 'function') {
+  setlistPickerInstance = window.MellowSetlistPicker.createPicker({
+    getSongbook: () => loadBook(),
+    getFavIds: () => [...favs()],
+    searchOnline: (query, signal) => searchRealWebChords(query, signal),
+    loadOnlineSong: (item, allResults) => loadRealWebChordResult(item, allResults),
+    saveSongToBook: song => upsertSongToBookForModules(song),
+    addSongToSetlist: (setlistId, song) => {
+      if (!setlistId || !song || !song.id) return false;
+      let added = false;
+      mutPl(setlistId, x => {
+        x.songIds = Array.isArray(x.songIds) ? x.songIds : [];
+        const exists = x.songIds.some(raw => {
+          const it = normalizePlItem(raw);
+          return it.type !== 'break' && it.songId === song.id;
+        });
+        if (!exists) {
+          x.songIds.push({
+            id: 'pi-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6),
+            type: 'song',
+            songId: song.id,
+            targetKey: '',
+            singer: '',
+            bpm: '',
+            cue: ''
+          });
+          added = true;
+        }
+      });
+      return added;
+    },
+    removeSongFromSetlist: (setlistId, songId) => {
+      if (!setlistId || !songId) return false;
+      let removed = false;
+      mutPl(setlistId, x => {
+        if (!Array.isArray(x.songIds)) return;
+        const idx = x.songIds.findIndex(raw => {
+          const it = normalizePlItem(raw);
+          return it.type !== 'break' && it.songId === songId;
+        });
+        if (idx >= 0) {
+          x.songIds.splice(idx, 1);
+          removed = true;
+        }
+      });
+      return removed;
+    },
+    onChanged: () => {
+      renderPlaylists();
+      if (document.body.dataset.view === 'playlist') renderPlView();
+    },
+    onToast: (msg, isErr) => toast(msg, isErr)
+  });
+}
+
+function openSetlistSongPicker(playlist) {
+  if (!setlistPickerInstance || !playlist) return;
+  const items = (playlist.songIds || []).map(normalizePlItem);
+  const currentSongIds = items.filter(it => it.type !== 'break').map(it => it.songId).filter(Boolean);
+  setlistPickerInstance.open({
+    setlistId: playlist.id,
+    setlistName: playlist.name,
+    currentSongIds
+  });
+}
+
+// 2) Image-to-Text Chord Parser & Dual View
+if (window.MellowChordDualView && typeof window.MellowChordDualView.createDualView === 'function') {
+  chordDualViewInstance = window.MellowChordDualView.createDualView({
+    onModeChange: (mode) => {
+      if (!current) return;
+      const hasImages = !!(current.song.images && current.song.images.length);
+      const hasText = !hasImages && !!(current.song.text && current.song.text.trim());
+      if (mode === 'text' && hasImages) {
+        if ($('#galleryWrap')) $('#galleryWrap').hidden = true;
+        if ($('#sheet')) $('#sheet').hidden = true;
+        if ($('#tpGrp')) $('#tpGrp').hidden = false;
+      } else {
+        if ($('#galleryWrap')) $('#galleryWrap').hidden = !hasImages;
+        if ($('#sheet')) $('#sheet').hidden = !hasText;
+        if ($('#tpGrp')) $('#tpGrp').hidden = !hasText;
+      }
+    },
+    onShiftChange: (newShift) => {
+      if (!current) return;
+      current.shift = normShift(newShift);
+      renderSong(false);
+    },
+    onParsedSaved: (songId, parsedData) => {
+      if (!parsedData) return;
+      if (current && current.song && current.song.id === songId) {
+        current.song.parsedChordSheet = parsedData;
+        if (!current.song.key && parsedData.originalKey) {
+          current.song.key = parsedData.originalKey;
+        }
+      }
+      const book = loadBook();
+      const idx = book.findIndex(s => s.id === songId);
+      if (idx >= 0) {
+        book[idx] = {
+          ...book[idx],
+          parsedChordSheet: parsedData,
+          key: book[idx].key || parsedData.originalKey || ''
+        };
+        saveBook(book);
+        renderSongbook();
+        if (cloudOn()) syncAll();
+      }
+      if (current && current.song && current.song.id === songId) {
+        renderSong(false);
+      }
+    },
+    onChordClick: (chordName) => {
+      if (typeof showChordPopup === 'function') showChordPopup(chordName);
+    },
+    getImageBlob: async (song) => {
+      if (!song || !Array.isArray(song.images) || !song.images.length) {
+        throw new Error('ไม่พบรูปภาพคอร์ดในเพลงนี้');
+      }
+      const first = song.images[0];
+      if (typeof first === 'string' && /^(https?:|data:|blob:)/i.test(first)) {
+        return fetchImageBlobForOcr(first);
+      }
+      const idbBlob = await getImg(first);
+      if (idbBlob instanceof Blob) return idbBlob;
+      if (typeof first === 'string') return fetchImageBlobForOcr(first);
+      throw new Error('ไม่สามารถโหลดรูปภาพสำหรับแกะคอร์ดได้');
+    },
+    onToast: (msg, isErr) => toast(msg, isErr)
+  });
+
+  const dualToolbarEl = $('#chordDualViewToolbar');
+  const dualTextEl = $('#chordDualViewText');
+  if (dualToolbarEl && dualTextEl) {
+    chordDualViewInstance.mount(dualToolbarEl, dualTextEl);
+  }
+}
+
+// 3) MIDI Footswitch Controller & Settings UI
+function navigateSongByMidi(direction) {
+  if (document.body.dataset.view !== 'song') {
+    toast(direction > 0 ? '🎹 MIDI: เพลงถัดไป (เปิดหน้าเพลงเพื่อใช้งาน)' : '🎹 MIDI: เพลงก่อนหน้า (เปิดหน้าเพลงเพื่อใช้งาน)');
+    return;
+  }
+  if (activeSetlistContext && Array.isArray(activeSetlistContext.songs) && activeSetlistContext.songs.length) {
+    const nextIdx = activeSetlistContext.index + direction;
+    if (nextIdx < 0 || nextIdx >= activeSetlistContext.songs.length) {
+      toast(direction > 0 ? '🎹 ถึงเพลงสุดท้ายของเซ็ตแล้ว' : '🎹 อยู่ที่เพลงแรกของเซ็ตแล้ว');
+      return;
+    }
+    activeSetlistContext.index = nextIdx;
+    const target = activeSetlistContext.songs[nextIdx];
+    let startShift = typeof target.shift === 'number' && !isNaN(target.shift) ? target.shift : 0;
+    if (target.targetKey && target.key) {
+      startShift = calcKeyShift(target.key, target.targetKey);
+    }
+    openSong(target, startShift);
+    toast(`🎹 MIDI ${direction > 0 ? '⏭' : '⏮'} ${target.title}`);
+    return;
+  }
+  // Fallback: step through Songbook when playing outside a setlist
+  const book = loadBook();
+  if (!book.length || !current) return;
+  const curIdx = book.findIndex(s => s.id === current.song.id);
+  if (curIdx < 0) return;
+  const targetIdx = curIdx + direction;
+  if (targetIdx < 0 || targetIdx >= book.length) {
+    toast(direction > 0 ? '🎹 ถึงเพลงสุดท้ายในคลังแล้ว' : '🎹 อยู่ที่เพลงแรกในคลังแล้ว');
+    return;
+  }
+  const target = book[targetIdx];
+  openSong(target, target.shift || 0);
+  toast(`🎹 MIDI ${direction > 0 ? '⏭' : '⏮'} ${target.title}`);
+}
+
+function openMidiSettingsModal() {
+  if (!window.MellowMidi || !midiControllerInstance) return;
+  window.MellowMidi.openSettingsModal(midiControllerInstance, {
+    onToast: (msg, isErr) => toast(msg, isErr)
+  });
+}
+
+if (window.MellowMidi && typeof window.MellowMidi.useMidiFootswitch === 'function') {
+  midiControllerInstance = window.MellowMidi.useMidiFootswitch({
+    onNextSong: () => navigateSongByMidi(1),
+    onPrevSong: () => navigateSongByMidi(-1)
+  });
+  midiControllerInstance.init();
+
+  const midiSlot = $('#midiHeaderSlot');
+  if (midiSlot && typeof window.MellowMidi.createStatusBadge === 'function') {
+    const badge = window.MellowMidi.createStatusBadge(midiControllerInstance, openMidiSettingsModal);
+    midiSlot.appendChild(badge);
+  }
+}
+
+window.__mellowModules = {
+  setlistPicker: setlistPickerInstance,
+  chordDualView: chordDualViewInstance,
+  midi: midiControllerInstance,
+  openMidiSettings: openMidiSettingsModal,
+  openSetlistPicker: openSetlistSongPicker
+};
 
 /* ==============================================================================
  * 15) การเริ่มต้นระบบ (Initialization)

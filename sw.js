@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'mellowchords-v20';
+const CACHE_NAME = 'mellowchords-v21';
 const IMG_CACHE_NAME = 'mellowchords-imgs-v1';
 const MAX_IMG_CACHE = 150;
 const STATIC_ASSETS = [
@@ -8,6 +8,15 @@ const STATIC_ASSETS = [
   './index.html',
   './app.css',
   './app.js',
+  './components/setlist-picker/setlist-picker.css',
+  './components/setlist-picker/setlist-picker.service.js',
+  './components/setlist-picker/setlist-picker.js',
+  './components/chord-parser/chord-dual-view.css',
+  './components/chord-parser/chord-parser.service.js',
+  './components/chord-parser/chord-dual-view.js',
+  './features/midi/midi-settings.css',
+  './features/midi/midi-footswitch.js',
+  './features/midi/midi-settings.js',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
