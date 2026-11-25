@@ -461,10 +461,6 @@
     { pattern: /(?:อินโทร)/gi, replace: 'Intro' },
 
     // Complex chords & fixes
-    { pattern: /\{comment:\s*Intro[:\s]*[”"'\^]?\s*\}/gi, replace: '{comment: Intro}\n[| F |]' },
-    { pattern: /(?:\/[ \t]*[”"'\^][ \t]*\/)/gi, replace: '/ F /' },
-    { pattern: /\bIntro[ \t]*[:/][ \t]*[”"'\^][ \t]*(?:\/|$)/gi, replace: 'Intro / F /' },
-    { pattern: /\bIntro[ \t]+[”"'\^](?=[ \t\r\n/]|$)/gi, replace: 'Intro / F /' },
     { pattern: /\bFn[ \t]*['"”’‘]?\b/gi, replace: 'F' },
     { pattern: /_([A-G][#b]?(?:m|maj|min|sus|dim|add|aug|7|\d+)?)\b/g, replace: '$1' },
     { pattern: /(?:๑[ \t]*ท|๑ท)(?=[ \t\r\n/|\]]|$)/g, replace: 'Gm' },
