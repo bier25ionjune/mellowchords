@@ -127,7 +127,10 @@ async function callGeminiVision(
       ],
       generationConfig: {
         temperature: 0.1,
-        responseMimeType: 'application/json'
+        responseMimeType: 'application/json',
+        thinkingConfig: {
+          thinkingBudget: 1024
+        }
       }
     })
   });
@@ -272,7 +275,7 @@ Deno.serve(async (req: Request) => {
     let provider = '';
 
     if (geminiKey) {
-      provider = Deno.env.get('GEMINI_VISION_MODEL') || 'gemini-2.5-flash';
+      provider = Deno.env.get('GEMINI_VISION_MODEL') || 'gemini-3.8-flash';
       parsed = await callGeminiVision(geminiKey, provider, systemPrompt, imageBase64, mimeType);
     } else if (openAiKey) {
       provider = Deno.env.get('OPENAI_VISION_MODEL') || 'gpt-4o-mini';

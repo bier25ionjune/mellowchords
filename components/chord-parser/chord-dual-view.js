@@ -687,6 +687,30 @@
         ? Parser.getCachedParsedChord(currentSong)
         : null;
 
+      // If song is already verified, default to text mode
+      if (parsedData && (parsedData.is_verified || (currentSong && currentSong.is_verified))) {
+        currentMode = 'text';
+      }
+
+      const visionCfg = (Parser && typeof Parser.getVisionConfig === 'function')
+        ? Parser.getVisionConfig()
+        : null;
+      const shouldAutoParse = Boolean(
+        visionCfg &&
+        visionCfg.autoParseOnOpen !== false &&
+        currentSong &&
+        hasSongImages(currentSong) &&
+        !parsedData
+      );
+
+      if (shouldAutoParse) {
+        setTimeout(function () {
+          if (!destroyed && !parsedData && !isParsing && currentSong === song) {
+            triggerParse(false);
+          }
+        }, 150);
+      }
+
       renderToolbar();
       renderView();
       notifyModeChange();

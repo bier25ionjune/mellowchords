@@ -132,17 +132,18 @@
 
   function getVisionConfig() {
     try {
-      if (typeof localStorage === 'undefined') return { provider: 'auto', apiKey: '', model: '' };
+      if (typeof localStorage === 'undefined') return { provider: 'auto', apiKey: '', model: 'gemini-3.8-flash', autoParseOnOpen: true };
       const raw = localStorage.getItem(VISION_CFG_KEY);
-      if (!raw) return { provider: 'auto', apiKey: '', model: '' };
+      if (!raw) return { provider: 'auto', apiKey: '', model: 'gemini-3.8-flash', autoParseOnOpen: true };
       const parsed = JSON.parse(raw);
       return {
         provider: (parsed && parsed.provider) || 'auto', // 'auto' | 'gemini' | 'openai' | 'edge' | 'ocr'
         apiKey: (parsed && parsed.apiKey) || '',
-        model: (parsed && parsed.model) || ''
+        model: (parsed && parsed.model) || 'gemini-3.8-flash',
+        autoParseOnOpen: parsed && typeof parsed.autoParseOnOpen === 'boolean' ? parsed.autoParseOnOpen : true
       };
     } catch (_e) {
-      return { provider: 'auto', apiKey: '', model: '' };
+      return { provider: 'auto', apiKey: '', model: 'gemini-3.8-flash', autoParseOnOpen: true };
     }
   }
 
@@ -152,7 +153,8 @@
       const next = {
         provider: (cfg && cfg.provider) || 'auto',
         apiKey: String((cfg && cfg.apiKey) || '').trim(),
-        model: String((cfg && cfg.model) || '').trim()
+        model: String((cfg && cfg.model) || '').trim() || 'gemini-3.8-flash',
+        autoParseOnOpen: typeof (cfg && cfg.autoParseOnOpen) === 'boolean' ? cfg.autoParseOnOpen : true
       };
       localStorage.setItem(VISION_CFG_KEY, JSON.stringify(next));
     } catch (_e) {}
@@ -1277,7 +1279,7 @@
 
   async function invokeDirectVisionApi(cfg, systemPrompt, base64Data, mimeType) {
     if (cfg.provider === 'gemini') {
-      const model = cfg.model || 'gemini-2.5-flash';
+      const model = cfg.model || 'gemini-3.8-flash';
       const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
         encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(cfg.apiKey);
       const res = await fetch(url, {
@@ -1292,7 +1294,13 @@
               { text: 'Transcribe this Thai chord sheet image into the exact ChordPro JSON schema.' }
             ]
           }],
-          generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: 'application/json',
+            thinkingConfig: {
+              thinkingBudget: 1024
+            }
+          }
         })
       });
       if (!res.ok) throw new Error('Gemini API error (' + res.status + ')');

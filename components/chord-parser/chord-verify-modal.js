@@ -135,8 +135,8 @@
     const provSelect = el('select', 'cvm-select');
     provSelect.id = 'cvmVisionProviderSelect';
     [
-      { v: 'auto', t: 'Auto (Supabase Edge Vision AI -> Spatial OCR Fallback)' },
-      { v: 'gemini', t: 'Google Gemini Vision API (gemini-2.5-flash)' },
+      { v: 'auto', t: 'Auto (Supabase Edge Vision AI - Gemini 3.8 Flash Low)' },
+      { v: 'gemini', t: 'Google Gemini 3.8 Flash (Low Thinking / Ultra-fast)' },
       { v: 'openai', t: 'OpenAI Vision API (gpt-4o-mini / gpt-4o)' },
       { v: 'ocr', t: 'Offline Spatial OCR + Learned Memory Rules' }
     ].forEach(function (opt) {
@@ -156,19 +156,31 @@
     apiKeyInp.value = visionCfg.apiKey || '';
     keyWrap.appendChild(apiKeyInp);
 
+    const autoParseWrap = el('div', 'cvm-field cvm-field-checkbox');
+    const autoParseLabel = el('label', 'cvm-label cvm-check-inline');
+    const autoParseInp = el('input', 'cvm-checkbox');
+    autoParseInp.type = 'checkbox';
+    autoParseInp.id = 'cvmAutoParseCheckbox';
+    autoParseInp.checked = visionCfg.autoParseOnOpen !== false;
+    autoParseLabel.appendChild(autoParseInp);
+    autoParseLabel.appendChild(document.createTextNode(' ⚡ แกะคอร์ดอัตโนมัติเมื่อเปิดเพลง (Auto-Parse on Open)'));
+    autoParseWrap.appendChild(autoParseLabel);
+
     const saveCfgBtn = el('button', 'cvm-btn cvm-btn-secondary', '💾 บันทึกตั้งค่า AI');
     saveCfgBtn.type = 'button';
     saveCfgBtn.addEventListener('click', function () {
       Parser.setVisionConfig({
         provider: provSelect.value,
         apiKey: apiKeyInp.value.trim(),
-        model: visionCfg.model || ''
+        model: visionCfg.model || 'gemini-3.8-flash',
+        autoParseOnOpen: autoParseInp.checked
       });
       onToast('บันทึกการตั้งค่า Vision AI เรียบร้อยแล้ว ✔', false);
     });
 
     cfgRow.appendChild(provWrap);
     cfgRow.appendChild(keyWrap);
+    cfgRow.appendChild(autoParseWrap);
     cfgRow.appendChild(saveCfgBtn);
 
     const promptLabel = el('div', 'cvm-label', '📜 System Prompt ปัจจุบัน (พร้อม Dynamic Few-Shot & กฎจาก chord_parser_memory):');
