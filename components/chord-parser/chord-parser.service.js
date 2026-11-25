@@ -1523,36 +1523,74 @@
 
   async function invokeDirectVisionApi(cfg, systemPrompt, base64Data, mimeType) {
     if (cfg.provider === 'gemini') {
-      const model = cfg.model || 'gemini-3.8-flash';
-      const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
-        encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(cfg.apiKey);
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{
-            role: 'user',
-            parts: [
-              { inlineData: { mimeType: mimeType || 'image/png', data: base64Data } },
-              { text: 'Transcribe this Thai chord sheet image into the exact ChordPro JSON schema.' }
-            ]
-          }],
-          generationConfig: {
-            temperature: 0.1,
-            responseMimeType: 'application/json',
-            thinkingConfig: {
-              thinkingBudget: 1024
+      const preferred = cfg.model || 'gemini-2.5-flash';
+      const modelsToTry = [
+        preferred,
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-1.5-flash',
+        'gemini-3.8-flash'
+      ].filter(function (m, i, arr) { return m && arr.indexOf(m) === i; });
+
+      let lastErr = null;
+
+      for (let mi = 0; mi < modelsToTry.length; mi++) {
+        const model = modelsToTry[mi];
+        for (const withThinking of [true, false]) {
+          try {
+            const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+              encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(cfg.apiKey);
+            
+            const genConfig = {
+              temperature: 0.1,
+              responseMimeType: 'application/json'
+            };
+            if (withThinking && (model.includes('3.8') || model.includes('2.5') || model.includes('2.0'))) {
+              genConfig.thinkingConfig = { thinkingBudget: 1024 };
             }
+
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents: [{
+                  role: 'user',
+                  parts: [
+                    { inlineData: { mimeType: mimeType || 'image/png', data: base64Data } },
+                    { text: 'Transcribe this Thai chord sheet image into the exact ChordPro JSON schema.' }
+                  ]
+                }],
+                generationConfig: genConfig
+              })
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              const txt = data && data.candidates && data.candidates[0] &&
+                data.candidates[0].content && data.candidates[0].content.parts &&
+                data.candidates[0].content.parts[0] ? data.candidates[0].content.parts[0].text : '';
+              const payload = extractJsonPayload(txt);
+              payload.modelUsed = model;
+              return payload;
+            }
+
+            const errBody = await res.text();
+            console.warn('[Gemini API ' + model + ' (thinking:' + withThinking + ') error ' + res.status + ']: ' + errBody.slice(0, 150));
+            lastErr = new Error('Gemini API error (' + res.status + ' on ' + model + '): ' + errBody.slice(0, 180));
+
+            // If 503 (High demand) or 404 (Not found) or 429 (Rate limit), skip thinking toggle and try next model
+            if (res.status === 503 || res.status === 404 || res.status === 429) {
+              break;
+            }
+          } catch (e) {
+            lastErr = e;
+            break;
           }
-        })
-      });
-      if (!res.ok) throw new Error('Gemini API error (' + res.status + ')');
-      const data = await res.json();
-      const txt = data && data.candidates && data.candidates[0] &&
-        data.candidates[0].content && data.candidates[0].content.parts &&
-        data.candidates[0].content.parts[0] ? data.candidates[0].content.parts[0].text : '';
-      return extractJsonPayload(txt);
+        }
+      }
+
+      throw lastErr || new Error('All Gemini models failed');
     }
 
     if (cfg.provider === 'openai') {
@@ -1622,11 +1660,16 @@
       const activeCfg = Object.assign({}, cfg, {
         provider: effectiveProvider,
         apiKey: trimmedKey,
-        model: cfg.model || (effectiveProvider === 'gemini' ? 'gemini-3.8-flash' : 'gpt-4o-mini')
+        model: cfg.model || (effectiveProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini')
       });
-      context.onProgress('กำลังส่งภาพให้ Vision AI (' + (effectiveProvider === 'gemini' ? 'Gemini 3.8 Flash' : 'OpenAI') + ') แกะเป็น ChordPro...', 45);
+      context.onProgress('กำลังส่งภาพให้ Vision AI (' + (effectiveProvider === 'gemini' ? 'Gemini Flash' : 'OpenAI') + ') แกะเป็น ChordPro...', 45);
       const base64 = await blobToBase64(imageBlob);
-      return await invokeDirectVisionApi(activeCfg, context.systemPrompt, base64, imageBlob.type || 'image/png');
+      try {
+        return await invokeDirectVisionApi(activeCfg, context.systemPrompt, base64, imageBlob.type || 'image/png');
+      } catch (directErr) {
+        context.lastVisionError = directErr && directErr.message ? directErr.message : String(directErr);
+        console.warn('[Direct Vision AI error]', directErr);
+      }
     }
 
     // 3) Supabase Edge Function `parse-chord-image`
@@ -1650,6 +1693,7 @@
           }
         });
         if (res.error) {
+          context.lastVisionError = res.error && res.error.message ? res.error.message : JSON.stringify(res.error);
           console.warn('[Vision AI Edge Function Warning]', res.error);
         }
         if (!res.error && res.data) {
@@ -1657,8 +1701,12 @@
           if (payload && payload.chordpro_content) {
             return payload;
           }
+          if (res.data.error) {
+            context.lastVisionError = typeof res.data.error === 'string' ? res.data.error : JSON.stringify(res.data.error);
+          }
         }
       } catch (_edgeErr) {
+        context.lastVisionError = _edgeErr && _edgeErr.message ? _edgeErr.message : String(_edgeErr);
         console.warn('[Vision AI Network/Edge exception]', _edgeErr);
         // Fallback smoothly to local Spatial OCR + ChordPro converter
       }
@@ -2392,16 +2440,20 @@
     }
 
     // Try Vision AI first unless caller explicitly supplied a custom ocrRunner
+    let lastVisionError = null;
     if (!opts.ocrRunner) {
       try {
-        const visionJson = await tryVisionAiChordPro(imageBlob, {
+        const vCtx = {
           systemPrompt: systemPrompt,
           sourceDomain: sourceDomain,
           memory: memory,
           songId: opts.songId,
           visionRunner: opts.visionRunner,
-          onProgress: onProgress
-        });
+          onProgress: onProgress,
+          lastVisionError: null
+        };
+        const visionJson = await tryVisionAiChordPro(imageBlob, vCtx);
+        if (vCtx.lastVisionError) lastVisionError = vCtx.lastVisionError;
 
         if (visionJson && typeof visionJson.chordpro_content === 'string' && visionJson.chordpro_content.trim()) {
           onProgress('กำลังตรวจสอบความแม่นยำ ChordPro...', 94);
@@ -2428,6 +2480,8 @@
             lineCount: cleanedCp.split('\n').length,
             source: 'vision-ai',
             isFallbackOcr: false,
+            provider: visionJson.modelUsed || 'vision-ai',
+            modelUsed: visionJson.modelUsed || 'vision-ai',
             systemPromptUsed: systemPrompt,
             memoryApplied: {
               rulesCount: memory.correctionRules.length,
@@ -2437,6 +2491,7 @@
           };
         }
       } catch (_visionErr) {
+        lastVisionError = _visionErr && _visionErr.message ? _visionErr.message : String(_visionErr);
         // If explicit visionRunner threw in test or Vision API failed, fall through only if fallback not disabled
         if (opts.strictVision) throw _visionErr;
       }
@@ -2484,6 +2539,7 @@
       lineCount: postLearnedCp ? postLearnedCp.split('\n').length : 0,
       source: 'fallback-ocr',
       isFallbackOcr: true,
+      visionError: lastVisionError,
       systemPromptUsed: systemPrompt,
       memoryApplied: {
         rulesCount: memory.correctionRules.length,

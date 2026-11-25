@@ -96,53 +96,84 @@ function extractJsonObject(raw: string): Record<string, unknown> {
 
 async function callGeminiVision(
   apiKey: string,
-  model: string,
+  preferredModel: string,
   systemPrompt: string,
   imageBase64: string,
   mimeType: string
-) {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: systemPrompt }]
-      },
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              inlineData: {
-                mimeType: mimeType || 'image/png',
-                data: imageBase64
-              }
-            },
-            {
-              text: 'Transcribe this Thai chord sheet image into the exact ChordPro JSON schema.'
-            }
-          ]
-        }
-      ],
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
-        thinkingConfig: {
-          thinkingBudget: 1024
-        }
-      }
-    })
-  });
+): Promise<{ parsed: Record<string, unknown>; modelUsed: string }> {
+  const modelsToTry = [
+    preferredModel || 'gemini-2.5-flash',
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-3.8-flash'
+  ].filter((m, i, arr) => m && arr.indexOf(m) === i);
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Gemini Vision error (${res.status}): ${errText.slice(0, 300)}`);
+  let lastError: Error | null = null;
+
+  for (const model of modelsToTry) {
+    for (const withThinking of [true, false]) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const genConfig: Record<string, unknown> = {
+          temperature: 0.1,
+          responseMimeType: 'application/json'
+        };
+
+        if (withThinking && (model.includes('3.8') || model.includes('2.5') || model.includes('2.0'))) {
+          genConfig.thinkingConfig = { thinkingBudget: 1024 };
+        }
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [{ text: systemPrompt }]
+            },
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: mimeType || 'image/png',
+                      data: imageBase64
+                    }
+                  },
+                  {
+                    text: 'Transcribe this Thai chord sheet image into the exact ChordPro JSON schema.'
+                  }
+                ]
+              }
+            ],
+            generationConfig: genConfig
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          const parsed = extractJsonObject(text);
+          return { parsed, modelUsed: model };
+        }
+
+        const errText = await res.text();
+        console.warn(`[Gemini Vision model ${model} (thinking: ${withThinking}) returned ${res.status}]: ${errText.slice(0, 150)}`);
+        lastError = new Error(`Gemini Vision error (${res.status} on ${model}): ${errText.slice(0, 200)}`);
+
+        // If 503 (High demand) or 404 (Not found) or 429 (Rate limit), don't retry withThinking=false on same model; move to next model
+        if (res.status === 503 || res.status === 404 || res.status === 429) {
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+        break;
+      }
+    }
   }
 
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  return extractJsonObject(text);
+  throw lastError || new Error('All Gemini Vision models failed');
 }
 
 async function callOpenAiVision(
@@ -279,8 +310,10 @@ Deno.serve(async (req: Request) => {
     let provider = '';
 
     if (geminiKey) {
-      provider = Deno.env.get('GEMINI_VISION_MODEL') || 'gemini-3.8-flash';
-      parsed = await callGeminiVision(geminiKey, provider, systemPrompt, imageBase64, mimeType);
+      provider = Deno.env.get('GEMINI_VISION_MODEL') || 'gemini-2.5-flash';
+      const gemResult = await callGeminiVision(geminiKey, provider, systemPrompt, imageBase64, mimeType);
+      parsed = gemResult.parsed;
+      provider = gemResult.modelUsed;
     } else if (openAiKey) {
       provider = Deno.env.get('OPENAI_VISION_MODEL') || 'gpt-4o-mini';
       parsed = await callOpenAiVision(openAiKey, provider, systemPrompt, imageBase64, mimeType);

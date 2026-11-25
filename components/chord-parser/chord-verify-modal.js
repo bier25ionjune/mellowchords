@@ -160,6 +160,14 @@
     apiKeyInp.id = 'cvmVisionApiKeyInput';
     apiKeyInp.placeholder = 'วาง Gemini API Key ที่นี่ (ขึ้นต้นด้วย AIza...)';
     apiKeyInp.value = visionCfg.apiKey || '';
+    apiKeyInp.addEventListener('input', function () {
+      const val = apiKeyInp.value.trim();
+      const current = Parser.getVisionConfig();
+      Parser.setVisionConfig({
+        apiKey: val,
+        provider: current.provider === 'auto' && val ? (val.startsWith('sk-') ? 'openai' : 'gemini') : current.provider
+      });
+    });
     keyWrap.appendChild(apiKeyInp);
 
     const autoParseWrap = el('div', 'cvm-field cvm-field-checkbox');
@@ -184,7 +192,7 @@
       Parser.setVisionConfig({
         provider: chosenProv,
         apiKey: enteredKey,
-        model: visionCfg.model || (chosenProv === 'gemini' ? 'gemini-3.8-flash' : 'gpt-4o-mini'),
+        model: visionCfg.model || (chosenProv === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini'),
         autoParseOnOpen: autoParseInp.checked
       });
       onToast('บันทึกการตั้งค่า Vision AI เรียบร้อยแล้ว ✔', false);
@@ -562,6 +570,17 @@
           throw new Error('ไม่พบรูปภาพต้นฉบับสำหรับลองแกะใหม่');
         }
 
+        const currentInpKey = (apiKeyInp.value || '').trim();
+        if (currentInpKey) {
+          const cfg = Parser.getVisionConfig();
+          if (cfg.apiKey !== currentInpKey) {
+            Parser.setVisionConfig({
+              apiKey: currentInpKey,
+              provider: cfg.provider === 'auto' ? (currentInpKey.startsWith('sk-') ? 'openai' : 'gemini') : cfg.provider
+            });
+          }
+        }
+
         const result = await Parser.parseChordImage(imgSource, {
           songId: song.id,
           song: song,
@@ -592,14 +611,23 @@
 
         const applied = result.memoryApplied || { rulesCount: 0, examplesCount: 0 };
         if (result.source === 'fallback-ocr' || result.isFallbackOcr) {
-          const warnMsg =
-            '⚠️ ฟังก์ชัน Edge ยังไม่เปิดใช้งาน และยังไม่ได้ใส่ Gemini API Key ในระบบ (กำลังใช้ Offline OCR สำรอง + ล้างอักขระเพี้ยนอัตโนมัติ)\n' +
-            '👉 กดที่ปุ่ม "⚙️ Vision AI & Prompt" ด้านบนขวา แล้วใส่ Google Gemini API Key เพื่อให้ระบบใช้โมเดล Gemini 3.8 Flash แกะตรงจากภาพได้อย่างแม่นยำ 100%!';
-          showBanner(warnMsg, 'error');
-          onToast('⚠️ กำลังใช้ Offline OCR สำรอง — แนะนำใส่ Gemini API Key ใน ⚙️ Vision AI & Prompt เพื่อความแม่นยำสูงสุด', true);
+          if (result.visionError) {
+            const warnMsg =
+              '⚠️ เชื่อมต่อ Google Gemini Vision AI ไม่สำเร็จ: ' + result.visionError + '\n' +
+              '👉 ระบบได้สลับมาใช้ Offline OCR สำรองและล้างคอร์ดให้อัตโนมัติ (สามารถเปิดดูการตั้งค่าใน "⚙️ Vision AI & Prompt")';
+            showBanner(warnMsg, 'error');
+            onToast('⚠️ Gemini Vision: ' + result.visionError, true);
+          } else {
+            const warnMsg =
+              '⚠️ ฟังก์ชัน Edge ยังไม่เปิดใช้งาน และยังไม่ได้ใส่ Gemini API Key ในระบบ (กำลังใช้ Offline OCR สำรอง + ล้างอักขระเพี้ยนอัตโนมัติ)\n' +
+              '👉 กดที่ปุ่ม "⚙️ Vision AI & Prompt" ด้านบนขวา แล้วใส่ Google Gemini API Key เพื่อให้ระบบใช้โมเดล Gemini Flash แกะตรงจากภาพได้อย่างแม่นยำ 100%!';
+            showBanner(warnMsg, 'error');
+            onToast('⚠️ กำลังใช้ Offline OCR สำรอง — แนะนำใส่ Gemini API Key ใน ⚙️ Vision AI & Prompt เพื่อความแม่นยำสูงสุด', true);
+          }
         } else {
+          const modelTag = result.modelUsed || result.provider || 'Gemini Flash';
           const summaryMsg =
-            '✅ ลองแกะใหม่สำเร็จด้วย Gemini 3.8 Flash! (ใช้ความจำจาก "' + domainSelect.value +
+            '✅ ลองแกะใหม่สำเร็จด้วย ' + modelTag + '! (ใช้ความจำจาก "' + domainSelect.value +
             '" กฎแก้คำผิด ' + applied.rulesCount + ' ข้อ + ตัวอย่าง Verified ' +
             applied.examplesCount + ' รายการ)';
           showBanner(summaryMsg, 'success');
