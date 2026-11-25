@@ -3,12 +3,20 @@
 
   /**
    * ============================================================================
-   * Mellow Chords — Image-to-Text Chord Parser Service
-   * Self-contained music theory, transposition, spatial OCR alignment & caching.
+   * Mellow Chords — Precision Chord Parser + Dynamic Learning Memory Service
+   * - Standardized ChordPro output (`original_key`, `chordpro_content`,
+   *   `source_domain`, `is_verified`)
+   * - Vision AI client (Supabase Edge Function + Gemini/OpenAI direct + custom)
+   *   with Dynamic Few-Shot Prompting from `chord_parser_memory`
+   * - Diff-based OCR & Thai syllable alignment learning + auto-pruning (max 10)
+   * - Spatial OCR + Thai-syllable ChordPro fallback for 100% offline resilience
    * ============================================================================
    */
 
   const CACHE_KEY = 'mellowchords.parsedChords.v1';
+  const MEMORY_KEY = 'mellowchords.parserMemory.v1';
+  const VISION_CFG_KEY = 'mellowchords.visionConfig.v1';
+  const MAX_MEMORY_PER_DOMAIN = 10;
   const TESSERACT_CDN_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js';
 
   const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -16,16 +24,16 @@
   const BASE   = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
   const FLAT_KEYS = [5, 10, 3, 8, 1]; // F, Bb, Eb, Ab, Db
 
-  // Strict chord regex: matches standard chords (C#m7, Bb/D, F#m, Gadd9, Em7, Bm7b5, Asus4, etc.)
-  // while avoiding common English words like "And", "Bad", "Fade", "Bridge", "Chorus".
+  // Strict chord regex: matches standard, slash & complex chords (C#m7, G/B, F#m7b5, Asus4, C6/9)
   const CHORD_RE =
-    /^[A-G][#b]?(?:(?:maj|min|dim|aug|sus|add|m|M)(?:2|4|5|6|7|9|11|13)?|(?:2|4|5|6|7|9|11|13)|[+\-°])*(?:[#b](?:5|9|11|13))?(?:\((?:add|sus|maj|min|dim|aug|no)?[#b+\-\d,]+\))?(?:\/[A-G][#b]?)?$/;
+    /^[A-G][#b]?(?:(?:maj|min|dim|aug|sus|add|m|M)(?:2|4|5|6|7|9|11|13)?|(?:2|4|5|6|7|9|11|13)|(?:6\/9)|[+\-°])*(?:[#b](?:5|9|11|13))*(?:\((?:add|sus|maj|min|dim|aug|no)?[#b+\-\d,/]+\))?(?:\/[A-G][#b]?)?$/;
 
   // Thai combining characters (vowels/tone marks that have 0 visual width above/below base consonants)
   const THAI_COMBINING_RE = /[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/;
   const THAI_CHAR_RE = /[\u0E00-\u0E7F]/;
 
-  // Section header patterns
+  // Section header patterns (including ChordPro {comment: ...})
+  const CHORDPRO_COMMENT_RE = /^\s*\{\s*(?:comment|c|section)\s*:\s*([^}]+)\}\s*$/i;
   const SECTION_ONLY_RE =
     /^\s*[\[\(\*]*\s*(?:intro|verse\s*\d*|pre[\s-]*chorus\s*\d*|chorus\s*\d*|hook\s*\d*|solo\s*\d*|bridge\s*\d*|outro|ending|interlude|instru(?:ment(?:al)?)?|coda|tag|rap|ท่อน\s*(?:ฮุค|แยก|จบ|อินโทร|โซโล่)?|อินโทร|ฮุค|โซโล่|จบ)\s*[\]\)\*:]*\s*$/i;
 
@@ -41,8 +49,117 @@
   // Non-chord punctuation tokens commonly seen on chord lines (bar lines, repeat markers)
   const CHORD_LINE_DECOR_RE = /^[\|\[\]\(\)\/\\\-–—•·.,:;*~xX0-9]+$/;
 
+  // Exact Vision AI System Prompt Template
+  const VISION_SYSTEM_PROMPT_TEMPLATE = [
+    'You are an expert Thai music transcriber and OCR specialist.',
+    'Your task is to convert the provided chord sheet image into accurate JSON containing the original key and lyrics in ChordPro format.',
+    '',
+    'STRICT RULES:',
+    '1. Alignment: Place every chord in square brackets `[Chord]` IMMEDIATELY BEFORE the exact Thai syllable or character it sits above in the image.',
+    '   - Example: If "G" is above the word "รัก", write `[G]รัก` (NOT `[G] รัก` unless there is an actual instrumental pause).',
+    '2. Instrumental sections: For Intro, Solo, Interlude, or Outro, keep chords in brackets separated by spaces or bar lines, e.g., `[| C | G/B | Am7 | F |]`',
+    '3. Sections: Preserve section headers clearly using `{comment: Intro}`, `{comment: Verse}`, `{comment: Chorus}`, etc.',
+    '4. Accuracy: Pay close attention to similar-looking characters in chord sheets:',
+    '   - Distinguish `m` vs `M` (minor vs major), `#` vs `b`, `7` vs `1`, `B` vs `8`, `F#m` vs `F#rn`.',
+    '   - Do NOT invent, guess, or autocorrect chords that are not visible in the image.',
+    '5. Output ONLY valid JSON in this exact schema:',
+    '{',
+    '  "title": "string",',
+    '  "artist": "string",',
+    '  "original_key": "string (e.g. C, Gm, F#)",',
+    '  "chordpro_content": "string (multiline ChordPro text)"',
+    '}',
+    '',
+    '{{DYNAMIC_LEARNED_RULES_AND_EXAMPLES_FROM_DB}}'
+  ].join('\n');
+
+  // Optional Supabase backend hooks configured by app.js
+  let backendDeps = {
+    getSupabase: function () { return null; },
+    getCurrentUser: function () { return null; },
+    isCloudActive: function () { return false; }
+  };
+
+  function configureBackend(deps) {
+    if (!deps || typeof deps !== 'object') return;
+    if (typeof deps.getSupabase === 'function') backendDeps.getSupabase = deps.getSupabase;
+    if (typeof deps.getCurrentUser === 'function') backendDeps.getCurrentUser = deps.getCurrentUser;
+    if (typeof deps.isCloudActive === 'function') backendDeps.isCloudActive = deps.isCloudActive;
+  }
+
   /* ============================================================================
-   * 1) Music Theory & Transposition Helpers
+   * 1) Source Domain Detection & Vision Config
+   * ============================================================================ */
+
+  function detectSourceDomain(songOrSource) {
+    if (!songOrSource) return 'chordtabs';
+    if (typeof songOrSource === 'object') {
+      if (songOrSource.source_domain && songOrSource.source_domain !== 'unknown') {
+        return String(songOrSource.source_domain).trim().toLowerCase();
+      }
+      if (songOrSource.parsedChordSheet && songOrSource.parsedChordSheet.source_domain && songOrSource.parsedChordSheet.source_domain !== 'unknown') {
+        return String(songOrSource.parsedChordSheet.source_domain).trim().toLowerCase();
+      }
+    }
+
+    const candidates = [];
+    if (typeof songOrSource === 'string') {
+      candidates.push(songOrSource);
+    } else if (typeof songOrSource === 'object') {
+      if (songOrSource.src) candidates.push(String(songOrSource.src));
+      if (songOrSource.url) candidates.push(String(songOrSource.url));
+      if (songOrSource.sourceUrl) candidates.push(String(songOrSource.sourceUrl));
+      if (songOrSource._ctSongId) return 'chordtabs';
+      if (Array.isArray(songOrSource.images)) {
+        for (let i = 0; i < songOrSource.images.length; i++) {
+          const im = String(songOrSource.images[i] || '');
+          if (im.startsWith('ct-img-')) return 'chordtabs';
+          candidates.push(im);
+        }
+      }
+    }
+
+    const joined = candidates.join(' ').toLowerCase();
+    if (joined.includes('chordtabs')) return 'chordtabs';
+    if (joined.includes('dochord')) return 'dochord';
+    if (joined.includes('chordzaa')) return 'chordzaa';
+    if (joined.includes('siamchord')) return 'siamchord';
+    if (joined.includes('guitarthai')) return 'guitarthai';
+    if (joined.includes('musicatm')) return 'musicatm';
+    if (/^img-|^data:|^blob:/.test(joined)) return 'upload';
+    return 'chordtabs';
+  }
+
+  function getVisionConfig() {
+    try {
+      if (typeof localStorage === 'undefined') return { provider: 'auto', apiKey: '', model: '' };
+      const raw = localStorage.getItem(VISION_CFG_KEY);
+      if (!raw) return { provider: 'auto', apiKey: '', model: '' };
+      const parsed = JSON.parse(raw);
+      return {
+        provider: (parsed && parsed.provider) || 'auto', // 'auto' | 'gemini' | 'openai' | 'edge' | 'ocr'
+        apiKey: (parsed && parsed.apiKey) || '',
+        model: (parsed && parsed.model) || ''
+      };
+    } catch (_e) {
+      return { provider: 'auto', apiKey: '', model: '' };
+    }
+  }
+
+  function setVisionConfig(cfg) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const next = {
+        provider: (cfg && cfg.provider) || 'auto',
+        apiKey: String((cfg && cfg.apiKey) || '').trim(),
+        model: String((cfg && cfg.model) || '').trim()
+      };
+      localStorage.setItem(VISION_CFG_KEY, JSON.stringify(next));
+    } catch (_e) {}
+  }
+
+  /* ============================================================================
+   * 2) Music Theory & Transposition Helpers
    * ============================================================================ */
 
   function noteIndex(note) {
@@ -57,7 +174,8 @@
   function isChordToken(token) {
     if (!token || typeof token !== 'string') return false;
     const cleaned = token.trim();
-    if (!cleaned || cleaned.length > 16) return false;
+    if (!cleaned || cleaned.length > 20) return false;
+    if (/^(Intro|Verse|Chorus|Hook|Solo|Bridge|Outro|Interlude|End|Fine)$/i.test(cleaned)) return false;
     return CHORD_RE.test(cleaned);
   }
 
@@ -70,14 +188,12 @@
     let t = token.trim();
     if (!t) return '';
 
-    // Normalize Unicode musical accidentals & fullwidth symbols
     t = t
       .replace(/[♯＃]/g, '#')
       .replace(/♭/g, 'b')
       .replace(/[–—]/g, '-')
       .replace(/[／]/g, '/');
 
-    // Strip surrounding brackets/pipes/punctuation (keep internal parentheses like Cadd9 or C(add9))
     t = t.replace(/^[\|\[\{\.,;:*~•·]+/, '').replace(/[\|\]\}\.,;:*~•·]+$/, '');
     if (t.startsWith('(') && t.endsWith(')') && !t.slice(1, -1).includes('(')) {
       const inner = t.slice(1, -1).trim();
@@ -89,34 +205,31 @@
 
     let candidate = t;
 
-    // Fix lowercase root when followed by explicit sharp accidental (e.g. c#m -> C#m, f#m7 -> F#m7)
     if (/^[a-g]#/.test(candidate)) {
       candidate = candidate[0].toUpperCase() + candidate.slice(1);
     }
 
-    // Fix OCR "rn" misread for "m" after a valid chord root (Arn -> Am, C#rn -> C#m, F#rn7 -> F#m7, Crnaj7 -> Cmaj7)
+    // Fix OCR "rn" misread for "m" (Arn -> Am, F#rn -> F#m, Crnaj7 -> Cmaj7)
     candidate = candidate.replace(/^([A-G][#b]?)rn(aj)?/i, function (_m, root, aj) {
       const normRoot = root[0].toUpperCase() + (root[1] || '');
       return normRoot + 'm' + (aj ? aj.toLowerCase() : '');
     });
 
-    // Fix OCR "rn" in slash chord bass or quality (rare, e.g. G/B stays G/B)
-    // Fix OCR "6" misread for "G" ONLY when followed by a clear chord quality suffix or slash bass
+    // Fix OCR "6" misread for "G" when followed by chord quality or slash bass
     if (/^6(?:[#b]|m(?:aj|in)?|sus|add|dim|aug|\/[A-G])/i.test(candidate)) {
       candidate = 'G' + candidate.slice(1);
     }
 
-    // Fix OCR "8" misread for "B" ONLY when followed by a clear chord quality suffix or slash bass
+    // Fix OCR "8" misread for "B" when followed by chord quality or slash bass
     if (/^8(?:b|m(?:aj|in)?|sus|add|dim|aug|\/[A-G])/i.test(candidate)) {
       candidate = 'B' + candidate.slice(1);
     }
 
-    // Fix OCR trailing "l" misread for "7" on minor/major chords (e.g. Aml -> Am7, Eml -> Em7) — only if followed by nothing
-    if (/^[A-G][#b]?m[lI]$/.test(candidate)) {
+    // Fix OCR trailing "l", "I", or "1" misread for "7" on chords (e.g. Aml -> Am7, F#m1 -> F#m7)
+    if (/^[A-G][#b]?(?:m|maj|min|sus|dim)?[lI1]$/.test(candidate)) {
       candidate = candidate.slice(0, -1) + '7';
     }
 
-    // Fix uppercase accidental B -> b in flat chords like BB -> Bb, EB -> Eb? No, too risky.
     // Fix lowercase slash bass when root is valid (e.g. G/b -> G/B, D/f# -> D/F#)
     candidate = candidate.replace(/\/([a-g])([#b]?)$/, function (_m, bass, acc) {
       return '/' + bass.toUpperCase() + acc;
@@ -127,32 +240,30 @@
 
   function transposeChord(chord, shift, useFlat) {
     if (!chord || typeof chord !== 'string') return chord || '';
-    const s = ((parseInt(shift, 10) || 0) % 12 + 12) % 12;
+    const s = (((parseInt(shift, 10) || 0) % 12) + 12) % 12;
     if (s === 0) return chord;
 
-    const m = chord.match(/^([A-G][#b]?)([^\/]*)(?:\/([A-G][#b]?))?$/);
+    const m = chord.replace(/♯/g, '#').replace(/♭/g, 'b').match(/^([A-G][#b]?)(.*?)(?:\/([A-G][#b]?))?$/);
     if (!m) return chord;
 
     const scale = useFlat ? FLATS : SHARPS;
     const tr = function (n) {
       return scale[(noteIndex(n) + s) % 12];
     };
-    return tr(m[1]) + m[2] + (m[3] ? '/' + tr(m[3]) : '');
+    return tr(m[1]) + (m[2] || '') + (m[3] ? '/' + tr(m[3]) : '');
   }
 
   function preferFlat(key, shift) {
-    const m = String(key || '').trim().match(/^([A-G][#b]?)(.*)$/);
+    const m = String(key || '').trim().match(/^([A-G][#b♯♭]?)(.*)$/);
     if (!m) return false;
-    const isMinor = /^m(?!aj)/.test(m[2]);
-    const s = ((parseInt(shift, 10) || 0) % 12 + 12) % 12;
+    const isMinor = /^m(?!aj)/i.test(m[2]);
+    const s = (((parseInt(shift, 10) || 0) % 12) + 12) % 12;
     const target = (noteIndex(m[1]) + s) % 12;
-    return FLAT_KEYS.includes(isMinor ? (target + 3) % 12 : target);
+    const majorEq = isMinor ? (target + 3) % 12 : target;
+    if (majorEq === 6) return m[1].includes('b') || m[1].includes('♭');
+    return FLAT_KEYS.includes(majorEq);
   }
 
-  /**
-   * Detects original key from explicit Key:/คีย์: labels first, then diatonic triad scoring
-   * with first/last chord weighting.
-   */
   function detectOriginalKey(chordList, rawText) {
     if (rawText) {
       const explicitMatch = String(rawText).match(EXPLICIT_KEY_RE);
@@ -163,6 +274,8 @@
           if (km) return km[1] + (km[2] || '');
         }
       }
+      const dirKey = String(rawText).match(/\{\s*(?:key|k)\s*:\s*([A-G][#b]?m?)\s*\}/i);
+      if (dirKey && dirKey[1]) return dirKey[1];
     }
 
     const valid = (chordList || [])
@@ -182,7 +295,6 @@
 
     if (!parsed.length) return valid[0];
 
-    // Major scale diatonic triads: I(0,Maj), ii(2,min), iii(4,min), IV(5,Maj), V(7,Maj), vi(9,min)
     const DIATONIC = [
       { offset: 0, minor: false, weight: 3.0 },
       { offset: 2, minor: true,  weight: 1.5 },
@@ -233,7 +345,7 @@
   }
 
   /* ============================================================================
-   * 2) Line Classification & Visual Width Helpers
+   * 3) Line Classification & Thai Visual Width Helpers
    * ============================================================================ */
 
   function countVisualChars(str) {
@@ -245,10 +357,6 @@
     return count;
   }
 
-  /**
-   * Maps a visual column index (0-based, ignoring zero-width Thai combining marks)
-   * to the actual UTF-16 string index in `str`.
-   */
   function visualColToStringIndex(str, targetCol) {
     if (!str || targetCol <= 0) return 0;
     let col = 0;
@@ -260,20 +368,30 @@
       }
       col++;
     }
+    // Snap before Thai leading vowel (เ แ โ ใ ไ) if target landed right on the consonant after it
+    if (idx > 0 && /[\u0E40-\u0E44]/.test(str[idx - 1]) && /[\u0E01-\u0E2E]/.test(str[idx] || '')) {
+      idx = idx - 1;
+    }
     return idx;
+  }
+
+  function normalizeThaiLeadingVowelChords(chordProText) {
+    if (!chordProText) return '';
+    return String(chordProText).replace(
+      /([\u0E40-\u0E44])(\[[^\[\]\r\n]+\])([\u0E01-\u0E2E])/g,
+      '$2$1$3'
+    );
   }
 
   function classifyTextLine(line) {
     const trimmed = String(line || '').trim();
     if (!trimmed) return 'blank';
-    if (SECTION_ONLY_RE.test(trimmed)) return 'section';
+    if (CHORDPRO_COMMENT_RE.test(trimmed) || SECTION_ONLY_RE.test(trimmed)) return 'section';
 
-    // Check inline ChordPro tags e.g. "[G]ค่ำคืนนี้[Em]เย็น"
-    if (/\[[A-G][#b]?[^\]]*\]/.test(trimmed)) {
+    if (/\[[^\]]+\]/.test(trimmed)) {
       return 'mixed';
     }
 
-    // Check section prefix followed by chords e.g. "Intro: G Em C D"
     const secPref = trimmed.match(SECTION_PREFIX_RE);
     if (secPref) {
       const restTokens = secPref[2].trim().split(/\s+/).filter(Boolean);
@@ -284,7 +402,6 @@
       return 'section';
     }
 
-    // Lines containing Thai characters are lyrics (unless inline ChordPro handled above)
     if (THAI_CHAR_RE.test(trimmed)) {
       return 'lyric';
     }
@@ -300,20 +417,11 @@
       if (CHORD_LINE_DECOR_RE.test(tok)) continue;
       meaningfulCount++;
       const norm = normalizeOcrChordToken(tok);
-      if (isChordToken(norm)) {
-        chordCount++;
-      }
+      if (isChordToken(norm)) chordCount++;
     }
 
     if (meaningfulCount === 0) return 'lyric';
-
-    // Avoid classifying single-letter English sentence starts or words as chord lines
-    // If all meaningful tokens are >= 60% valid chords, it's a chord line
     if (chordCount > 0 && chordCount / meaningfulCount >= 0.6) {
-      // Extra guard: if there's only 1 token and it's "A" or "I", require no surrounding prose
-      if (meaningfulCount === 1 && chordCount === 1 && rawTokens[0] === 'A') {
-        return 'chord';
-      }
       return 'chord';
     }
 
@@ -333,10 +441,13 @@
         let m;
         let foundInline = false;
         while ((m = inlineRe.exec(line)) !== null) {
-          const norm = normalizeOcrChordToken(m[1]);
-          if (isChordToken(norm)) {
-            chords.push(norm);
-            foundInline = true;
+          const innerParts = m[1].split(/[\s|]+/).filter(Boolean);
+          for (let p = 0; p < innerParts.length; p++) {
+            const norm = normalizeOcrChordToken(innerParts[p]);
+            if (isChordToken(norm)) {
+              chords.push(norm);
+              foundInline = true;
+            }
           }
         }
         if (!foundInline) {
@@ -374,12 +485,9 @@
   }
 
   /* ============================================================================
-   * 3) Monospace <-> ChordPro Conversion & Transposition
+   * 4) Monospace <-> ChordPro Conversion & Transposition
    * ============================================================================ */
 
-  /**
-   * Extracts { chord, col } tokens from a monospace chord line.
-   */
   function extractChordPositions(chordLine) {
     const positions = [];
     const re = /\S+/g;
@@ -395,10 +503,15 @@
     return positions;
   }
 
-  /**
-   * Converts chord-over-lyric monospace text into ChordPro format (`[G]ค่ำคืนนี้ลม[Em]เย็น`),
-   * preserving exact character index alignment.
-   */
+  function cleanSectionName(rawSection) {
+    const dir = String(rawSection || '').match(CHORDPRO_COMMENT_RE);
+    if (dir) return dir[1].trim();
+    return String(rawSection || '')
+      .replace(/^[\[\(\*\s]+/, '')
+      .replace(/[\]\)\*:\s]+$/, '')
+      .trim();
+  }
+
   function convertMonospaceToChordPro(monospaceText) {
     const lines = String(monospaceText || '').replace(/\r\n/g, '\n').split('\n');
     const out = [];
@@ -407,16 +520,23 @@
       const line = lines[i];
       const type = classifyTextLine(line);
 
+      if (type === 'section') {
+        if (CHORDPRO_COMMENT_RE.test(line)) {
+          out.push(line.trim());
+        } else {
+          const secLabel = cleanSectionName(line);
+          out.push(secLabel ? '{comment: ' + secLabel + '}' : line);
+        }
+        continue;
+      }
+
       if (type === 'chord') {
         const chordPositions = extractChordPositions(line);
         const nextLine = i + 1 < lines.length ? lines[i + 1] : null;
         const nextType = nextLine !== null ? classifyTextLine(nextLine) : 'blank';
 
         if (nextType === 'lyric' && chordPositions.length > 0) {
-          // Pair chord line with lyric line below it
-          // Use visual column index so Thai combining marks don't shift chords
           let result = nextLine;
-          // Insert from right to left so earlier indices remain valid
           const insertions = chordPositions.map(function (cp) {
             return {
               chord: cp.chord,
@@ -440,31 +560,32 @@
             }
           }
 
-          out.push((result + trailingChords).replace(/\s+$/, ''));
-          i++; // Consume paired lyric line
+          out.push(normalizeThaiLeadingVowelChords((result + trailingChords).replace(/\s+$/, '')));
+          i++;
         } else if (chordPositions.length > 0) {
-          // Standalone chord progression line (e.g. Intro/Solo)
-          const formatted = line.replace(/\S+/g, function (tok) {
-            if (CHORD_LINE_DECOR_RE.test(tok)) return tok;
-            const norm = normalizeOcrChordToken(tok);
-            return isChordToken(norm) ? '[' + norm + ']' : tok;
-          });
-          out.push(formatted.trim());
+          // Standalone instrumental progression -> [| C | G/B | Am7 | F |]
+          const barChords = chordPositions.map(function (cp) { return cp.chord; }).join(' | ');
+          out.push('[| ' + barChords + ' |]');
         } else {
           out.push(line);
         }
       } else if (type === 'mixed') {
-        // Already contains [Chord] or section: chords
         const secPref = line.match(SECTION_PREFIX_RE);
-        if (secPref && !/\[[A-G]/.test(line)) {
-          const rest = secPref[2].replace(/\S+/g, function (tok) {
-            if (CHORD_LINE_DECOR_RE.test(tok)) return tok;
+        if (secPref && !/\[[A-G|#b]/.test(line)) {
+          const progChords = [];
+          secPref[2].replace(/\S+/g, function (tok) {
             const norm = normalizeOcrChordToken(tok);
-            return isChordToken(norm) ? '[' + norm + ']' : tok;
+            if (isChordToken(norm)) progChords.push(norm);
+            return tok;
           });
-          out.push(secPref[1] + ': ' + rest.trim());
+          if (progChords.length > 0) {
+            out.push('{comment: ' + secPref[1].trim() + '}');
+            out.push('[| ' + progChords.join(' | ') + ' |]');
+          } else {
+            out.push(line);
+          }
         } else {
-          out.push(line);
+          out.push(normalizeThaiLeadingVowelChords(line));
         }
       } else {
         out.push(line);
@@ -475,10 +596,80 @@
   }
 
   /**
-   * Transposes a single monospace chord line while preserving column spacing.
+   * Converts ChordPro (`[C]เธอทำให้ฉัน[Em7]รู้สึก`) back into 2-line monospace format
+   * for backward compatibility with legacy monospace viewers & plain text exports.
    */
+  function convertChordProToMonospace(chordProText) {
+    const lines = String(chordProText || '').replace(/\r\n/g, '\n').split('\n');
+    const out = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const rawLine = lines[i];
+      const trimmed = rawLine.trim();
+
+      if (!trimmed) {
+        out.push('');
+        continue;
+      }
+
+      const commentMatch = trimmed.match(CHORDPRO_COMMENT_RE);
+      if (commentMatch) {
+        out.push('[' + commentMatch[1].trim() + ']');
+        continue;
+      }
+
+      if (/^\{\s*(?:title|t|artist|subtitle|key|k)\s*:/i.test(trimmed)) {
+        continue;
+      }
+
+      // Instrumental bracket block e.g. [| C | G/B | Am7 | F |]
+      const instruBlock = trimmed.match(/^\[([^\[\]]+)\](?:\s*(x\d+))?$/i);
+      if (instruBlock && !isChordToken(instruBlock[1].trim()) && /[|\s]/.test(instruBlock[1])) {
+        out.push(instruBlock[1].trim() + (instruBlock[2] ? ' ' + instruBlock[2] : ''));
+        continue;
+      }
+
+      if (!/\[[^\]]+\]/.test(rawLine)) {
+        out.push(rawLine);
+        continue;
+      }
+
+      let lyricLine = '';
+      const positioned = [];
+      const re = /\[([^\]]+)\]/g;
+      let lastIdx = 0;
+      let m;
+
+      while ((m = re.exec(rawLine)) !== null) {
+        const chunk = rawLine.slice(lastIdx, m.index);
+        lyricLine += chunk;
+        const inner = m[1].trim();
+        if (isChordToken(inner)) {
+          positioned.push({ chord: inner, col: countVisualChars(lyricLine) });
+        } else {
+          lyricLine += m[0];
+        }
+        lastIdx = re.lastIndex;
+      }
+      lyricLine += rawLine.slice(lastIdx);
+
+      if (positioned.length > 0) {
+        const chordLine = renderPositionedChords(positioned);
+        if (lyricLine.trim()) {
+          out.push(chordLine);
+          out.push(lyricLine);
+        } else {
+          out.push(chordLine);
+        }
+      } else {
+        out.push(lyricLine);
+      }
+    }
+
+    return out.join('\n');
+  }
+
   function transposeChordLinePreservingColumns(line, shift, useFlat) {
-    // Match token + following spaces
     return line.replace(/(\S+)([ \t]*)/g, function (full, tok, spaces) {
       if (CHORD_LINE_DECOR_RE.test(tok)) return full;
       const norm = normalizeOcrChordToken(tok);
@@ -487,23 +678,16 @@
       const transposed = transposeChord(norm, shift, useFlat);
       const diff = transposed.length - tok.length;
 
-      if (diff === 0 || !spaces) {
-        return transposed + spaces;
-      }
+      if (diff === 0 || !spaces) return transposed + spaces;
       if (diff > 0) {
-        // Chord got longer: absorb from trailing spaces while keeping at least 1 space
         const removable = Math.max(0, spaces.length - 1);
         const removeCount = Math.min(diff, removable);
         return transposed + spaces.slice(removeCount);
       }
-      // Chord got shorter: pad with spaces to keep next chord aligned
       return transposed + spaces + ' '.repeat(-diff);
     });
   }
 
-  /**
-   * Transposes every chord token in chord lines and inline [Chord] tokens while preserving column spacing.
-   */
   function transposeMonospaceText(text, shift, originalKey) {
     const s = parseInt(shift, 10) || 0;
     if (!text || s === 0) return text || '';
@@ -519,11 +703,8 @@
           return transposeChordLinePreservingColumns(line, s, useFlat);
         }
         if (type === 'mixed') {
-          if (/\[[A-G][#b]?[^\]]*\]/.test(line)) {
-            return line.replace(/\[([^\]]+)\]/g, function (full, inner) {
-              const norm = normalizeOcrChordToken(inner);
-              return isChordToken(norm) ? '[' + transposeChord(norm, s, useFlat) + ']' : full;
-            });
+          if (/\[[^\]]+\]/.test(line)) {
+            return transposeChordProText(line, s, key);
           }
           const secPref = line.match(SECTION_PREFIX_RE);
           if (secPref) {
@@ -536,32 +717,690 @@
       .join('\n');
   }
 
-  /**
-   * Transposes every [Chord] token in ChordPro format.
-   */
-  function transposeChordProText(text, shift, originalKey) {
+  function transposeChordProText(text, shift, originalKey, accidentalMode) {
+    if (global.MellowChordTextViewer && typeof global.MellowChordTextViewer.transposeChordPro === 'function') {
+      return global.MellowChordTextViewer.transposeChordPro(text, shift, originalKey, accidentalMode || 'auto');
+    }
     const s = parseInt(shift, 10) || 0;
     if (!text || s === 0) return text || '';
 
     const key = originalKey || detectOriginalKey(extractChordsFromText(text), text);
-    const useFlat = preferFlat(key, s);
+    const useFlat = accidentalMode === 'flat' ? true : (accidentalMode === 'sharp' ? false : preferFlat(key, s));
 
     return String(text).replace(/\[([^\]]+)\]/g, function (full, inner) {
-      const norm = normalizeOcrChordToken(inner);
-      if (!isChordToken(norm)) return full;
-      return '[' + transposeChord(norm, s, useFlat) + ']';
+      const trimmed = inner.trim();
+      if (isChordToken(trimmed)) {
+        return '[' + transposeChord(trimmed, s, useFlat) + ']';
+      }
+      // Handle instrumental bar blocks [| C | G/B | Am7 | F |]
+      let changed = false;
+      const mapped = inner.replace(/[A-G][#b]?[^\s|\]]*/g, function (tok) {
+        const norm = normalizeOcrChordToken(tok);
+        if (isChordToken(norm)) {
+          changed = true;
+          return transposeChord(norm, s, useFlat);
+        }
+        return tok;
+      });
+      return changed ? '[' + mapped + ']' : full;
     });
   }
 
   /* ============================================================================
-   * 4) Spatial OCR Alignment Engine
+   * 5) Dynamic Learning Memory (`chord_parser_memory`) & System Prompt Builder
+   * ============================================================================ */
+
+  function readLocalMemory() {
+    try {
+      if (typeof localStorage === 'undefined') return [];
+      const raw = localStorage.getItem(MEMORY_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  function writeLocalMemory(entries) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(MEMORY_KEY, JSON.stringify(entries));
+    } catch (_e) {}
+  }
+
+  function pruneLocalMemoryList(entries) {
+    const grouped = Object.create(null);
+    for (let i = 0; i < entries.length; i++) {
+      const item = entries[i];
+      if (!item || !item.entry_type) continue;
+      const k = (item.source_domain || 'chordtabs') + '::' + item.entry_type;
+      if (!grouped[k]) grouped[k] = [];
+      grouped[k].push(item);
+    }
+
+    const out = [];
+    const keys = Object.keys(grouped);
+    for (let k = 0; k < keys.length; k++) {
+      const bucket = grouped[keys[k]];
+      bucket.sort(function (a, b) {
+        const qDiff = (b.quality_score || 0) - (a.quality_score || 0);
+        if (qDiff !== 0) return qDiff;
+        return (Date.parse(b.updated_at || 0) || 0) - (Date.parse(a.updated_at || 0) || 0);
+      });
+      const kept = bucket.slice(0, MAX_MEMORY_PER_DOMAIN);
+      for (let j = 0; j < kept.length; j++) out.push(kept[j]);
+    }
+    return out;
+  }
+
+  /**
+   * Builds the dynamic section injected into {{DYNAMIC_LEARNED_RULES_AND_EXAMPLES_FROM_DB}}
+   */
+  function buildDynamicMemorySection(sourceDomain, correctionRules, verifiedExamples) {
+    const domain = sourceDomain || 'chordtabs';
+    const rules = Array.isArray(correctionRules) ? correctionRules : [];
+    const examples = Array.isArray(verifiedExamples) ? verifiedExamples : [];
+    const lines = [];
+
+    if (rules.length > 0) {
+      lines.push('LEARNED CORRECTION RULES (from previously verified "' + domain + '" sheets — DO NOT repeat these mistakes):');
+      const cappedRules = rules.slice(0, 15);
+      for (let i = 0; i < cappedRules.length; i++) {
+        const r = cappedRules[i];
+        const reasonSuffix = r.reason ? ' (' + r.reason + ')' : '';
+        lines.push('- Mistake #' + (i + 1) + ': "' + r.wrong + '" -> MUST be "' + r.right + '"' + reasonSuffix);
+      }
+    }
+
+    if (examples.length > 0) {
+      if (lines.length > 0) lines.push('');
+      lines.push('VERIFIED FEW-SHOT CHORDPRO EXAMPLES (style reference for "' + domain + '"):');
+      const cappedExamples = examples.slice(0, 3);
+      for (let j = 0; j < cappedExamples.length; j++) {
+        const ex = cappedExamples[j];
+        lines.push(
+          'Example #' + (j + 1) + ' [Source: ' + (ex.source_domain || domain) +
+          ', Key: ' + (ex.original_key || 'C') + ']:\n' +
+          String(ex.verified_chordpro || '').trim()
+        );
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Generates the full Vision AI System Prompt with dynamic rules & verified examples injected.
+   */
+  function buildVisionSystemPrompt(memoryContext) {
+    const ctx = memoryContext || {};
+    const dynamicSection = buildDynamicMemorySection(
+      ctx.sourceDomain || 'chordtabs',
+      ctx.correctionRules || [],
+      ctx.verifiedExamples || []
+    );
+    return VISION_SYSTEM_PROMPT_TEMPLATE.replace(
+      '{{DYNAMIC_LEARNED_RULES_AND_EXAMPLES_FROM_DB}}',
+      dynamicSection
+    ).trim();
+  }
+
+  /**
+   * Fetches learned rules and verified few-shot examples from Supabase `chord_parser_memory`
+   * merged with local offline memory for `sourceDomain`.
+   */
+  async function fetchParserMemory(sourceDomain) {
+    const domain = String(sourceDomain || 'chordtabs').trim().toLowerCase() || 'chordtabs';
+    let rows = readLocalMemory().filter(function (r) {
+      return r && (r.source_domain === domain || r.source_domain === 'general');
+    });
+
+    const sb = backendDeps.getSupabase();
+    if (sb && backendDeps.isCloudActive()) {
+      try {
+        const res = await sb
+          .from('chord_parser_memory')
+          .select('*')
+          .in('source_domain', [domain, 'general'])
+          .order('quality_score', { ascending: false })
+          .order('updated_at', { ascending: false })
+          .limit(20);
+
+        if (!res.error && Array.isArray(res.data) && res.data.length > 0) {
+          // Merge remote + local by id / song_id+entry_type
+          const mergedMap = new Map();
+          res.data.concat(rows).forEach(function (item) {
+            const key = item.id || ((item.song_id || '') + ':' + item.entry_type + ':' + (item.verified_chordpro || '').slice(0, 40));
+            if (!mergedMap.has(key)) mergedMap.set(key, item);
+          });
+          rows = Array.from(mergedMap.values());
+        }
+      } catch (_err) {
+        // Graceful fallback to local memory when offline or table unmigrated
+      }
+    }
+
+    rows.sort(function (a, b) {
+      const qDiff = (b.quality_score || 0) - (a.quality_score || 0);
+      if (qDiff !== 0) return qDiff;
+      return (Date.parse(b.updated_at || 0) || 0) - (Date.parse(a.updated_at || 0) || 0);
+    });
+
+    const ruleSeen = Object.create(null);
+    const correctionRules = [];
+    const verifiedExamples = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (Array.isArray(row.correction_rules)) {
+        for (let r = 0; r < row.correction_rules.length; r++) {
+          const rule = row.correction_rules[r];
+          if (rule && rule.wrong && rule.right && rule.wrong !== rule.right) {
+            const sig = rule.wrong + '=>' + rule.right;
+            if (!ruleSeen[sig]) {
+              ruleSeen[sig] = true;
+              correctionRules.push(rule);
+            }
+          }
+        }
+      }
+      if (row.entry_type === 'few_shot_example' && row.verified_chordpro && row.verified_chordpro.trim()) {
+        verifiedExamples.push({
+          id: row.id,
+          source_domain: row.source_domain || domain,
+          song_id: row.song_id || '',
+          song_title: row.song_title || '',
+          original_key: row.original_key || 'C',
+          verified_chordpro: row.verified_chordpro.trim(),
+          quality_score: row.quality_score || 100
+        });
+      }
+    }
+
+    return {
+      sourceDomain: domain,
+      correctionRules: correctionRules.slice(0, 15),
+      verifiedExamples: verifiedExamples.slice(0, 3),
+      allDomainExamplesCount: verifiedExamples.length,
+      entries: rows
+    };
+  }
+
+  function stripChordsFromChordProLine(line) {
+    return String(line || '')
+      .replace(/\[[^\[\]]+\]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Computes character overlap similarity (0..1) to pair raw vs verified lines.
+   */
+  function textSimilarity(a, b) {
+    if (!a && !b) return 1;
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    const bigramsA = new Set();
+    for (let i = 0; i < a.length - 1; i++) bigramsA.add(a.slice(i, i + 2));
+    if (bigramsA.size === 0) return a === b ? 1 : 0;
+    let hits = 0;
+    let totalB = 0;
+    for (let j = 0; j < b.length - 1; j++) {
+      totalB++;
+      if (bigramsA.has(b.slice(j, j + 2))) hits++;
+    }
+    return totalB === 0 ? 0 : (2 * hits) / (bigramsA.size + totalB);
+  }
+
+  /**
+   * Extracts structured OCR & Thai alignment correction rules + best verified few-shot excerpt
+   * by diffing `rawChordPro` against user-verified `verifiedChordPro`.
+   */
+  function extractLearningDiff(rawChordPro, verifiedChordPro) {
+    const rawLines = String(rawChordPro || '').replace(/\r\n/g, '\n').split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+    const verLines = String(verifiedChordPro || '').replace(/\r\n/g, '\n').split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+
+    const rules = [];
+    const seen = Object.create(null);
+
+    function addRule(wrong, right, type, reason) {
+      const w = String(wrong || '').trim();
+      const r = String(right || '').trim();
+      if (!w || !r || w === r || w.length > 90 || r.length > 90) return;
+      const key = w + '->' + r;
+      if (seen[key]) return;
+      seen[key] = true;
+      rules.push({ wrong: w, right: r, type: type, reason: reason });
+    }
+
+    const usedRaw = Object.create(null);
+
+    for (let v = 0; v < verLines.length; v++) {
+      const vLine = verLines[v];
+      const vLyric = stripChordsFromChordProLine(vLine);
+
+      let bestIdx = -1;
+      let bestSim = 0;
+
+      for (let r = 0; r < rawLines.length; r++) {
+        if (usedRaw[r]) continue;
+        const rLine = rawLines[r];
+        if (rLine === vLine) {
+          bestIdx = r;
+          bestSim = 1;
+          break;
+        }
+        const rLyric = stripChordsFromChordProLine(rLine);
+        const sim = vLyric && rLyric ? textSimilarity(rLyric, vLyric) : textSimilarity(rLine, vLine);
+        if (sim > bestSim) {
+          bestSim = sim;
+          bestIdx = r;
+        }
+      }
+
+      if (bestIdx < 0 || bestSim < 0.45) continue;
+      usedRaw[bestIdx] = true;
+
+      const rLine = rawLines[bestIdx];
+      if (rLine === vLine) continue;
+
+      const rLyric = stripChordsFromChordProLine(rLine);
+      const rBrackets = (rLine.match(/\[[^\[\]]+\]/g) || []);
+      const vBrackets = (vLine.match(/\[[^\[\]]+\]/g) || []);
+
+      // 1) Chord symbol OCR correction (same bracket count, chord text fixed e.g. [F#rn] -> [F#m])
+      if (rBrackets.length === vBrackets.length && rBrackets.length > 0) {
+        for (let b = 0; b < rBrackets.length; b++) {
+          if (rBrackets[b] !== vBrackets[b]) {
+            addRule(rBrackets[b], vBrackets[b], 'chord_ocr', 'Chord symbol OCR correction');
+          }
+        }
+      }
+
+      // 2) Thai syllable / space alignment correction (lyrics identical, [Chord] position shifted!)
+      if (rLyric && rLyric === vLyric && rLine !== vLine) {
+        addRule(rLine, vLine, 'thai_alignment', 'Exact Thai syllable chord placement');
+      } else if (rLyric && vLyric && rLyric !== vLyric) {
+        // 3) Lyric word OCR correction
+        const rWords = rLyric.split(/\s+/);
+        const vWords = vLyric.split(/\s+/);
+        if (rWords.length === vWords.length) {
+          for (let w = 0; w < rWords.length; w++) {
+            if (rWords[w] !== vWords[w] && rWords[w].length <= 32 && vWords[w].length <= 32) {
+              addRule(rWords[w], vWords[w], 'lyric_ocr', 'Thai lyric OCR correction');
+            }
+          }
+        } else {
+          addRule(rLine, vLine, 'line_correction', 'Verified line & chord correction');
+        }
+      }
+    }
+
+    // Extract best 4-8 line verified snippet for Few-Shot prompting & compute quality score
+    const snippetLines = [];
+    let hasSection = false;
+    let chordBearingCount = 0;
+    let thaiLyricCount = 0;
+
+    for (let i = 0; i < verLines.length && snippetLines.length < 8; i++) {
+      const l = verLines[i];
+      if (CHORDPRO_COMMENT_RE.test(l)) {
+        hasSection = true;
+        snippetLines.push(l);
+      } else if (/\[[^\[\]]+\]/.test(l)) {
+        chordBearingCount++;
+        if (THAI_CHAR_RE.test(l)) thaiLyricCount++;
+        snippetLines.push(l);
+      }
+    }
+
+    const bestSnippet = (snippetLines.length >= 2 ? snippetLines : verLines.slice(0, 8)).join('\n');
+    let qualityScore = 75;
+    if (thaiLyricCount >= 2) qualityScore += 10;
+    if (chordBearingCount >= 3) qualityScore += 10;
+    if (hasSection) qualityScore += 5;
+    qualityScore = Math.min(100, qualityScore);
+
+    return {
+      correctionRules: rules.slice(0, 12),
+      bestSnippet: bestSnippet,
+      qualityScore: qualityScore
+    };
+  }
+
+  /**
+   * Applies learned correction rules to a parsed ChordPro text (used as post-processor
+   * for offline/fallback OCR and safety guard against known recurring OCR errors).
+   */
+  function applyLearnedCorrectionRules(chordProText, correctionRules) {
+    if (!chordProText || !Array.isArray(correctionRules) || !correctionRules.length) {
+      return chordProText || '';
+    }
+    let out = String(chordProText);
+    for (let i = 0; i < correctionRules.length; i++) {
+      const rule = correctionRules[i];
+      if (!rule || !rule.wrong || !rule.right || rule.wrong === rule.right) continue;
+      if (out.indexOf(rule.wrong) !== -1) {
+        out = out.split(rule.wrong).join(rule.right);
+      }
+    }
+    return normalizeThaiLeadingVowelChords(out);
+  }
+
+  /**
+   * Saves user-verified ChordPro to the song (`is_verified = true`) AND stores
+   * extracted correction rules + verified few-shot snippet in `chord_parser_memory`
+   * (capped to top 10 per source_domain).
+   */
+  async function saveVerifiedAndTeach(params) {
+    const p = params || {};
+    const song = p.song || {};
+    const sourceDomain = detectSourceDomain(p.sourceDomain || song);
+    const verifiedChordPro = normalizeThaiLeadingVowelChords(String(p.verifiedChordPro || '').trim());
+    if (!verifiedChordPro) {
+      throw new Error('กรุณากรอกเนื้อหา ChordPro ก่อนบันทึกและสอนระบบ');
+    }
+
+    const rawChordPro = String(
+      p.rawChordPro ||
+      (song.parsedChordSheet && (song.parsedChordSheet.rawAiOutput || song.parsedChordSheet.chordpro_content || song.parsedChordSheet.chordPro)) ||
+      ''
+    ).trim();
+
+    const chords = uniqueChords(extractChordsFromText(verifiedChordPro));
+    const originalKey = String(p.originalKey || '').trim() || detectOriginalKey(chords, verifiedChordPro) || song.key || 'C';
+    const alignedMonospace = convertChordProToMonospace(verifiedChordPro);
+
+    const updatedParsed = {
+      original_key: originalKey,
+      originalKey: originalKey,
+      chordpro_content: verifiedChordPro,
+      chordPro: verifiedChordPro,
+      alignedText: alignedMonospace,
+      monospaceText: alignedMonospace,
+      source_domain: sourceDomain,
+      sourceDomain: sourceDomain,
+      is_verified: true,
+      rawAiOutput: rawChordPro || verifiedChordPro,
+      chords: chords,
+      lineCount: verifiedChordPro.split('\n').length,
+      source: 'verified',
+      parsedAt: Date.now(),
+      verifiedAt: Date.now()
+    };
+
+    saveParsedChord(song, updatedParsed, p.onSongUpdated);
+
+    const diff = extractLearningDiff(rawChordPro, verifiedChordPro);
+    const nowIso = new Date().toISOString();
+    const user = backendDeps.getCurrentUser();
+    const userId = user && user.id && !user.local && user.isCloud !== false ? user.id : null;
+
+    const exampleEntry = {
+      id: 'mem-ex-' + (song.id || Date.now().toString(36)),
+      source_domain: sourceDomain,
+      entry_type: 'few_shot_example',
+      song_id: song.id || null,
+      song_title: song.title || '',
+      original_key: originalKey,
+      raw_ai_output: rawChordPro,
+      verified_chordpro: diff.bestSnippet,
+      correction_rules: diff.correctionRules,
+      quality_score: diff.qualityScore,
+      usage_count: 1,
+      created_by: userId,
+      created_at: nowIso,
+      updated_at: nowIso
+    };
+
+    // 1) Save & auto-prune in local memory (max 10 per domain + entry_type)
+    const localList = readLocalMemory().filter(function (item) {
+      return !(item && item.song_id && song.id && item.song_id === song.id && item.entry_type === 'few_shot_example');
+    });
+    localList.unshift(exampleEntry);
+
+    if (diff.correctionRules.length > 0) {
+      localList.unshift({
+        id: 'mem-rule-' + Date.now().toString(36),
+        source_domain: sourceDomain,
+        entry_type: 'correction_rule',
+        song_id: song.id || null,
+        song_title: song.title || '',
+        original_key: originalKey,
+        raw_ai_output: rawChordPro.slice(0, 1000),
+        verified_chordpro: diff.bestSnippet,
+        correction_rules: diff.correctionRules,
+        quality_score: 95,
+        usage_count: 1,
+        created_by: userId,
+        created_at: nowIso,
+        updated_at: nowIso
+      });
+    }
+
+    const prunedLocal = pruneLocalMemoryList(localList);
+    writeLocalMemory(prunedLocal);
+
+    // 2) Sync to Supabase `public.chord_parser_memory` when cloud is active
+    let cloudSaved = false;
+    const sb = backendDeps.getSupabase();
+    if (sb && backendDeps.isCloudActive() && userId) {
+      try {
+        const rowsToInsert = [
+          {
+            source_domain: sourceDomain,
+            entry_type: 'few_shot_example',
+            song_id: song.id || null,
+            song_title: song.title || '',
+            original_key: originalKey,
+            raw_ai_output: rawChordPro,
+            verified_chordpro: diff.bestSnippet,
+            correction_rules: diff.correctionRules,
+            quality_score: diff.qualityScore,
+            created_by: userId
+          }
+        ];
+        if (diff.correctionRules.length > 0) {
+          rowsToInsert.push({
+            source_domain: sourceDomain,
+            entry_type: 'correction_rule',
+            song_id: song.id || null,
+            song_title: song.title || '',
+            original_key: originalKey,
+            raw_ai_output: rawChordPro.slice(0, 1500),
+            verified_chordpro: diff.bestSnippet,
+            correction_rules: diff.correctionRules,
+            quality_score: 95,
+            created_by: userId
+          });
+        }
+        const ins = await sb.from('chord_parser_memory').insert(rowsToInsert);
+        if (!ins.error) cloudSaved = true;
+      } catch (_cloudErr) {
+        // Local memory already persisted
+      }
+    }
+
+    const domainExamplesCount = prunedLocal.filter(function (x) {
+      return x.source_domain === sourceDomain && x.entry_type === 'few_shot_example';
+    }).length;
+
+    return {
+      updatedParsed: updatedParsed,
+      rulesLearned: diff.correctionRules,
+      exampleSaved: diff.bestSnippet,
+      qualityScore: diff.qualityScore,
+      totalDomainExamples: domainExamplesCount,
+      cloudSaved: cloudSaved
+    };
+  }
+
+  /* ============================================================================
+   * 6) Vision AI Runner (Edge Function / Gemini / OpenAI)
+   * ============================================================================ */
+
+  function blobToBase64(blob) {
+    return new Promise(function (resolve, reject) {
+      if (typeof FileReader !== 'undefined') {
+        const reader = new FileReader();
+        reader.onloadend = function () {
+          const res = String(reader.result || '');
+          const comma = res.indexOf(',');
+          resolve(comma >= 0 ? res.slice(comma + 1) : res);
+        };
+        reader.onerror = function (err) { reject(err || new Error('Failed to encode image')); };
+        reader.readAsDataURL(blob);
+        return;
+      }
+      reject(new Error('FileReader unavailable'));
+    });
+  }
+
+  function extractJsonPayload(rawText) {
+    const cleaned = String(rawText || '')
+      .trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+    try {
+      return JSON.parse(cleaned);
+    } catch (_e) {
+      const first = cleaned.indexOf('{');
+      const last = cleaned.lastIndexOf('}');
+      if (first >= 0 && last > first) {
+        return JSON.parse(cleaned.slice(first, last + 1));
+      }
+      throw new Error('Vision AI response is not valid JSON');
+    }
+  }
+
+  async function invokeDirectVisionApi(cfg, systemPrompt, base64Data, mimeType) {
+    if (cfg.provider === 'gemini') {
+      const model = cfg.model || 'gemini-2.5-flash';
+      const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+        encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(cfg.apiKey);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{
+            role: 'user',
+            parts: [
+              { inlineData: { mimeType: mimeType || 'image/png', data: base64Data } },
+              { text: 'Transcribe this Thai chord sheet image into the exact ChordPro JSON schema.' }
+            ]
+          }],
+          generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
+        })
+      });
+      if (!res.ok) throw new Error('Gemini API error (' + res.status + ')');
+      const data = await res.json();
+      const txt = data && data.candidates && data.candidates[0] &&
+        data.candidates[0].content && data.candidates[0].content.parts &&
+        data.candidates[0].content.parts[0] ? data.candidates[0].content.parts[0].text : '';
+      return extractJsonPayload(txt);
+    }
+
+    if (cfg.provider === 'openai') {
+      const model = cfg.model || 'gpt-4o-mini';
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + cfg.apiKey
+        },
+        body: JSON.stringify({
+          model: model,
+          temperature: 0.1,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Transcribe this Thai chord sheet image into the exact ChordPro JSON schema.' },
+                { type: 'image_url', image_url: { url: 'data:' + (mimeType || 'image/png') + ';base64,' + base64Data, detail: 'high' } }
+              ]
+            }
+          ]
+        })
+      });
+      if (!res.ok) throw new Error('OpenAI API error (' + res.status + ')');
+      const data = await res.json();
+      const txt = data && data.choices && data.choices[0] && data.choices[0].message
+        ? data.choices[0].message.content : '';
+      return extractJsonPayload(txt);
+    }
+
+    return null;
+  }
+
+  async function tryVisionAiChordPro(imageBlob, context) {
+    const cfg = getVisionConfig();
+    if (cfg.provider === 'ocr') return null;
+
+    // 1) Custom injected visionRunner (e.g. unit/E2E tests or custom host adapter)
+    if (typeof context.visionRunner === 'function') {
+      const customOut = await context.visionRunner(imageBlob, {
+        systemPrompt: context.systemPrompt,
+        sourceDomain: context.sourceDomain,
+        memory: context.memory,
+        songId: context.songId,
+        onProgress: context.onProgress
+      });
+      if (customOut && typeof customOut === 'object' && customOut.chordpro_content) {
+        return customOut;
+      }
+      if (typeof customOut === 'string') {
+        return extractJsonPayload(customOut);
+      }
+    }
+
+    if (!(typeof Blob !== 'undefined' && imageBlob instanceof Blob)) return null;
+
+    // 2) Direct Gemini / OpenAI Vision API if user configured an API key
+    if ((cfg.provider === 'gemini' || cfg.provider === 'openai') && cfg.apiKey) {
+      context.onProgress('กำลังส่งภาพให้ Vision AI แกะเป็น ChordPro...', 45);
+      const base64 = await blobToBase64(imageBlob);
+      return await invokeDirectVisionApi(cfg, context.systemPrompt, base64, imageBlob.type || 'image/png');
+    }
+
+    // 3) Supabase Edge Function `parse-chord-image` when cloud is connected
+    const sb = backendDeps.getSupabase();
+    if (sb && sb.functions && typeof sb.functions.invoke === 'function' && backendDeps.isCloudActive()) {
+      try {
+        context.onProgress('กำลังส่งภาพไปยัง Vision AI (Edge Function)...', 40);
+        const base64 = await blobToBase64(imageBlob);
+        const res = await sb.functions.invoke('parse-chord-image', {
+          body: {
+            imageBase64: base64,
+            mimeType: imageBlob.type || 'image/png',
+            sourceDomain: context.sourceDomain,
+            correctionRules: context.memory.correctionRules,
+            verifiedExamples: context.memory.verifiedExamples
+          }
+        });
+        if (!res.error && res.data && res.data.chordpro_content) {
+          return res.data;
+        }
+      } catch (_edgeErr) {
+        // Fallback smoothly to local Spatial OCR + ChordPro converter
+      }
+    }
+
+    return null;
+  }
+
+  /* ============================================================================
+   * 7) Spatial OCR Alignment Engine (Fallback & Hybrid Preprocessor)
    * ============================================================================ */
 
   function isWatermarkOrHeaderLine(text) {
     const trimmed = String(text || '').trim();
     if (!trimmed) return false;
     if (WATERMARK_LINE_RE.test(trimmed)) {
-      // Do not strip if it actually contains multiple valid chords and no URL/website name
       const hasSite = /(?:chordtabs|chordzaa|dochord|siamchord|guitarthai|http|www\.|\.in\.th|\.com)/i.test(trimmed);
       if (hasSite) return true;
       if (/^(?:คอร์ดเพลง|ศิลปิน|อัลบั้ม|ต้นฉบับ|จังหวะ|tempo|tuning|capo|key|คีย์|ตั้งสาย)/i.test(trimmed)) {
@@ -571,9 +1410,6 @@
     return false;
   }
 
-  /**
-   * Extracts structured OCR lines from Tesseract v5 output (data.lines or blocks->paragraphs->lines).
-   */
   function extractOcrLines(ocrData) {
     if (!ocrData || typeof ocrData !== 'object') return null;
     const data = ocrData.data && typeof ocrData.data === 'object' ? ocrData.data : ocrData;
@@ -615,10 +1451,6 @@
     return validLines > 0;
   }
 
-  /**
-   * Reconstructs a lyric line from OCR words, recording each word's visual start column
-   * and bounding box for precise chord-to-lyric spatial mapping.
-   */
   function buildLyricWordMap(words, avgCharWidth) {
     const sorted = words
       .filter(function (w) {
@@ -640,7 +1472,6 @@
 
       if (prev && prev.bbox && w.bbox) {
         const gapPx = w.bbox.x0 - prev.bbox.x1;
-        // Thai words often have no space between them unless there's a noticeable gap
         const prevIsThai = THAI_CHAR_RE.test(prev.text);
         const curIsThai = THAI_CHAR_RE.test(wText);
         if (gapPx > avgCharWidth * 1.35) {
@@ -673,10 +1504,6 @@
     return { text: text, words: map, totalVisualCols: currentVisualCol };
   }
 
-  /**
-   * Maps a chord word's x0 pixel coordinate onto a visual character column
-   * using the paired lyric line's word bounding boxes (or fallback avgCharWidth).
-   */
   function mapChordXToLyricCol(chordX, lyricMap, pageLeftX, avgCharWidth) {
     if (!lyricMap || !lyricMap.words.length) {
       return Math.max(0, Math.round((chordX - pageLeftX) / avgCharWidth));
@@ -686,9 +1513,7 @@
     const first = words[0];
     const last = words[words.length - 1];
 
-    if (chordX <= first.x0) {
-      return 0;
-    }
+    if (chordX <= first.x0) return 0;
 
     for (let i = 0; i < words.length; i++) {
       const w = words[i];
@@ -707,15 +1532,10 @@
       }
     }
 
-    // Past the last lyric word
     const extraCols = Math.round((chordX - last.x1) / avgCharWidth);
     return Math.max(last.colEnd, last.colEnd + Math.min(extraCols, 12));
   }
 
-  /**
-   * Builds a monospace chord line string from positioned { chord, col } items,
-   * ensuring chords never overlap.
-   */
   function renderPositionedChords(items) {
     if (!items.length) return '';
     const sorted = items.slice().sort(function (a, b) {
@@ -736,9 +1556,6 @@
     return line;
   }
 
-  /**
-   * Fallback parser when only plain text (no bounding boxes) is available.
-   */
   function parseRawTextToAlignedSheet(rawText) {
     const raw = String(rawText || '').replace(/\r\n/g, '\n');
     const rawLines = raw.split('\n');
@@ -766,15 +1583,12 @@
         continue;
       }
 
-      if (isWatermarkOrHeaderLine(trimmed)) {
-        continue;
-      }
+      if (isWatermarkOrHeaderLine(trimmed)) continue;
 
       consecutiveBlanks = 0;
       const type = classifyTextLine(line);
 
       if (type === 'chord') {
-        // Normalize OCR chord tokens while preserving column spacing
         const normalizedLine = line.replace(/\S+/g, function (tok) {
           if (CHORD_LINE_DECOR_RE.test(tok)) return tok;
           const norm = normalizeOcrChordToken(tok);
@@ -794,6 +1608,23 @@
             hasInline = true;
             allChords.push(norm);
             return '[' + norm + ']';
+          }
+          // Check instrumental bar block [| C | G/B |]
+          let barHit = false;
+          const barMapped = inner.split(/(\s+|\|+)/).map(function (part) {
+            const pTrim = part.trim();
+            if (!pTrim || /^\|+$/.test(pTrim)) return part;
+            const n2 = normalizeOcrChordToken(pTrim);
+            if (isChordToken(n2)) {
+              barHit = true;
+              allChords.push(n2);
+              return n2;
+            }
+            return part;
+          }).join('');
+          if (barHit) {
+            hasInline = true;
+            return '[' + barMapped + ']';
           }
           return full;
         });
@@ -821,29 +1652,31 @@
       }
     }
 
-    // Trim trailing blank lines
     while (cleanedLines.length && cleanedLines[cleanedLines.length - 1] === '') {
       cleanedLines.pop();
     }
 
-    const alignedText = cleanedLines.join('\n');
-    const chordPro = convertMonospaceToChordPro(alignedText);
+    const joined = cleanedLines.join('\n');
+    const isAlreadyChordPro = /\[[A-G|#b][^\]]*\]/.test(joined) || CHORDPRO_COMMENT_RE.test(joined);
+    const chordPro = isAlreadyChordPro
+      ? normalizeThaiLeadingVowelChords(joined)
+      : convertMonospaceToChordPro(joined);
+    const alignedText = isAlreadyChordPro ? convertChordProToMonospace(chordPro) : joined;
     const originalKey = explicitKey || detectOriginalKey(allChords, raw);
 
     return {
       alignedText: alignedText,
+      monospaceText: alignedText,
       chordPro: chordPro,
+      chordpro_content: chordPro,
       originalKey: originalKey,
+      original_key: originalKey,
       chords: uniqueChords(allChords),
       lineCount: cleanedLines.length,
       source: 'text'
     };
   }
 
-  /**
-   * Aligns Tesseract v5 OCR output (with word bounding boxes) into a column-aligned
-   * monospace chord sheet & ChordPro sheet. Falls back cleanly to plain text mode.
-   */
   function alignOcrDataToChordSheet(ocrData) {
     if (typeof ocrData === 'string') {
       return parseRawTextToAlignedSheet(ocrData);
@@ -851,11 +1684,35 @@
     if (!ocrData || typeof ocrData !== 'object') {
       return {
         alignedText: '',
+        monospaceText: '',
         chordPro: '',
+        chordpro_content: '',
         originalKey: '',
+        original_key: '',
         chords: [],
         lineCount: 0,
         source: 'text'
+      };
+    }
+
+    // Direct JSON Vision AI response object
+    if (typeof ocrData.chordpro_content === 'string' && ocrData.chordpro_content.trim()) {
+      const cp = normalizeThaiLeadingVowelChords(ocrData.chordpro_content.trim());
+      const mono = convertChordProToMonospace(cp);
+      const chords = uniqueChords(extractChordsFromText(cp));
+      const origKey = ocrData.original_key || detectOriginalKey(chords, cp) || 'C';
+      return {
+        alignedText: mono,
+        monospaceText: mono,
+        chordPro: cp,
+        chordpro_content: cp,
+        originalKey: origKey,
+        original_key: origKey,
+        title: ocrData.title || '',
+        artist: ocrData.artist || '',
+        chords: chords,
+        lineCount: cp.split('\n').length,
+        source: 'vision-ai'
       };
     }
 
@@ -867,7 +1724,6 @@
       return parseRawTextToAlignedSheet(rawText);
     }
 
-    // Extract explicit Key metadata before stripping header lines
     let explicitKey = '';
     const explicitMatch = rawText.match(EXPLICIT_KEY_RE);
     if (explicitMatch && explicitMatch[1]) {
@@ -875,7 +1731,6 @@
       if (isChordToken(normK)) explicitKey = normK;
     }
 
-    // Sort lines top-to-bottom by bbox.y0
     const sortedLines = ocrLines
       .filter(function (l) {
         return l && ((l.text && l.text.trim()) || (Array.isArray(l.words) && l.words.length > 0));
@@ -887,7 +1742,6 @@
         return ay - by;
       });
 
-    // Estimate page left margin & average character width from word bboxes
     let pageLeftX = Infinity;
     let totalCharPx = 0;
     let totalVisualChars = 0;
@@ -907,7 +1761,6 @@
 
       if (!lineText) continue;
 
-      // Capture explicit key from line if not found yet
       if (!explicitKey) {
         const km = lineText.match(EXPLICIT_KEY_RE);
         if (km && km[1]) {
@@ -952,7 +1805,6 @@
     if (!isFinite(pageLeftX)) pageLeftX = 0;
     const avgCharWidth = totalVisualChars > 0 ? Math.max(6, totalCharPx / totalVisualChars) : 12;
 
-    // Estimate median line height for detecting stanza/paragraph breaks
     const heights = prepared.map(function (p) { return p.height; }).sort(function (a, b) { return a - b; });
     const medianHeight = heights[Math.floor(heights.length / 2)] || 24;
 
@@ -962,7 +1814,6 @@
     for (let i = 0; i < prepared.length; i++) {
       const cur = prepared[i];
 
-      // Insert blank line on large vertical stanza gap
       if (i > 0) {
         const prev = prepared[i - 1];
         const vGap = cur.y0 - prev.y1;
@@ -988,7 +1839,6 @@
 
         const lyricMap = isPairedWithLyric ? buildLyricWordMap(next.words, avgCharWidth) : null;
 
-        // Build positioned chord items using word bounding boxes
         const positioned = [];
         const sortedWords = cur.words.slice().sort(function (a, b) {
           return (a.bbox ? a.bbox.x0 : 0) - (b.bbox ? b.bbox.x0 : 0);
@@ -1007,9 +1857,7 @@
           }
 
           const norm = normalizeOcrChordToken(rawTok);
-          if (isChordToken(norm)) {
-            allChords.push(norm);
-          }
+          if (isChordToken(norm)) allChords.push(norm);
           const col = word.bbox
             ? mapChordXToLyricCol(word.bbox.x0, lyricMap, pageLeftX, avgCharWidth)
             : w * 4;
@@ -1017,13 +1865,11 @@
         }
 
         const chordLineStr = renderPositionedChords(positioned);
-        if (chordLineStr) {
-          outputLines.push(chordLineStr);
-        }
+        if (chordLineStr) outputLines.push(chordLineStr);
 
         if (isPairedWithLyric && lyricMap) {
           outputLines.push(lyricMap.text);
-          i++; // Consumed paired lyric line
+          i++;
         }
         continue;
       }
@@ -1055,7 +1901,6 @@
         continue;
       }
 
-      // Standalone lyric line
       const lyricMap = buildLyricWordMap(cur.words, avgCharWidth);
       outputLines.push(lyricMap.text || cur.text);
     }
@@ -1070,8 +1915,11 @@
 
     return {
       alignedText: alignedText,
+      monospaceText: alignedText,
       chordPro: chordPro,
+      chordpro_content: chordPro,
       originalKey: originalKey,
+      original_key: originalKey,
       chords: uniqueChords(allChords),
       lineCount: outputLines.length,
       source: 'bbox'
@@ -1079,14 +1927,9 @@
   }
 
   /* ============================================================================
-   * 5) Image Preprocessing & OCR Runner
+   * 8) Image Preprocessing & Main Parse Pipeline (Vision AI + Memory + OCR)
    * ============================================================================ */
 
-  /**
-   * Upscales small images (minWidth: 1200) and converts to high-contrast grayscale
-   * to sharpen chord symbols and Thai glyphs for Tesseract OCR.
-   * Falls back cleanly to the original blob if canvas is unavailable or fails.
-   */
   async function preprocessImageForOcr(blob, opts) {
     if (!blob || typeof document === 'undefined' || typeof Blob === 'undefined') {
       return blob;
@@ -1102,15 +1945,9 @@
       if (!srcW || !srcH) return blob;
 
       let scale = 1;
-      if (srcW < minWidth) {
-        scale = minWidth / srcW;
-      }
-      if (srcW * scale > maxDim) {
-        scale = maxDim / srcW;
-      }
-      if (srcH * scale > maxDim) {
-        scale = Math.min(scale, maxDim / srcH);
-      }
+      if (srcW < minWidth) scale = minWidth / srcW;
+      if (srcW * scale > maxDim) scale = maxDim / srcW;
+      if (srcH * scale > maxDim) scale = Math.min(scale, maxDim / srcH);
 
       const dstW = Math.max(1, Math.round(srcW * scale));
       const dstH = Math.max(1, Math.round(srcH * scale));
@@ -1121,7 +1958,6 @@
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) return blob;
 
-      // White fill for transparent PNGs
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, dstW, dstH);
       ctx.imageSmoothingEnabled = true;
@@ -1131,7 +1967,6 @@
       const imgData = ctx.getImageData(0, 0, dstW, dstH);
       const pixels = imgData.data;
 
-      // Compute average luminance to detect dark-mode screenshots
       let lumSum = 0;
       const pixelCount = pixels.length / 4;
       for (let i = 0; i < pixels.length; i += 4) {
@@ -1140,7 +1975,6 @@
       const avgLum = pixelCount > 0 ? lumSum / pixelCount : 200;
       const invertDarkBg = avgLum < 110;
 
-      // High-contrast grayscale transform
       const contrast = 1.45;
       for (let i = 0; i < pixels.length; i += 4) {
         let gray = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
@@ -1188,10 +2022,6 @@
     });
   }
 
-  /**
-   * Fetches an image source (Blob, blob:, data:, or http(s):) as a Blob,
-   * with wsrv.nl / images.weserv.nl CORS proxy fallback for external URLs.
-   */
   async function fetchImageBlob(url) {
     if (!url) throw new Error('ไม่พบแหล่งรูปภาพสำหรับแกะคอร์ด');
     if (typeof Blob !== 'undefined' && url instanceof Blob) {
@@ -1231,7 +2061,7 @@
 
   async function defaultTesseractRunner(imageBlob, opts) {
     const onProgress = opts && typeof opts.onProgress === 'function' ? opts.onProgress : null;
-    if (onProgress) onProgress('กำลังโหลดเอนจิน OCR (ไทย + อังกฤษ)...', 18);
+    if (onProgress) onProgress('กำลังโหลดเอนจิน OCR (ไทย + อังกฤษ)...', 22);
 
     const mod = await import(TESSERACT_CDN_URL);
     const Tesseract = mod.default || mod;
@@ -1246,35 +2076,40 @@
         if (!onProgress || !m) return;
         const p = typeof m.progress === 'number' ? m.progress : 0;
         if (m.status === 'recognizing text') {
-          onProgress('กำลังอ่านคอร์ดและเนื้อเพลงจากรูป...', Math.round(35 + p * 55));
+          onProgress('กำลังอ่านคอร์ดและเนื้อเพลงจากรูป...', Math.round(35 + p * 52));
         } else if (m.status === 'loading language traineddata') {
-          onProgress('กำลังโหลดข้อมูลภาษาไทย/อังกฤษ...', Math.round(20 + p * 15));
+          onProgress('กำลังโหลดข้อมูลภาษาไทย/อังกฤษ...', Math.round(24 + p * 11));
         }
       }
     });
 
     try {
-      const result = await worker.recognize(imageBlob);
-      return result;
+      return await worker.recognize(imageBlob);
     } finally {
       try {
         await worker.terminate();
-      } catch (_e) {
-        // Ignore terminate errors
-      }
+      } catch (_e) {}
     }
   }
 
   /**
-   * Main entry point: fetches, preprocesses, OCRs, and spatially aligns a chord sheet image.
+   * Main entry point:
+   * 1. Fetches learned rules + verified examples from `chord_parser_memory` for `source_domain`
+   * 2. Builds Dynamic Few-Shot Vision AI System Prompt
+   * 3. Dispatches to Vision AI (or Spatial OCR + Learned Memory Post-Processor fallback)
+   * 4. Always outputs standardized ChordPro format (`chordpro_content`, `original_key`, `source_domain`, `is_verified`)
    */
   async function parseChordImage(imageSource, options) {
     const opts = options || {};
     const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : function () {};
     const fetcher = typeof opts.fetchImageBlob === 'function' ? opts.fetchImageBlob : fetchImageBlob;
-    const runner = typeof opts.ocrRunner === 'function' ? opts.ocrRunner : defaultTesseractRunner;
+    const sourceDomain = detectSourceDomain(opts.sourceDomain || opts.song || imageSource);
 
-    onProgress('กำลังเตรียมรูปภาพคอร์ด...', 5);
+    onProgress('กำลังดึงความจำระบบ (Dynamic Few-Shot Memory)...', 6);
+    const memory = await fetchParserMemory(sourceDomain);
+    const systemPrompt = buildVisionSystemPrompt(memory);
+
+    onProgress('กำลังเตรียมรูปภาพคอร์ด...', 10);
     let imageBlob = imageSource;
     if (!(typeof Blob !== 'undefined' && imageSource instanceof Blob)) {
       if (typeof imageSource === 'string') {
@@ -1282,31 +2117,107 @@
       }
     }
 
+    // Try Vision AI first unless caller explicitly supplied a custom ocrRunner
+    if (!opts.ocrRunner) {
+      try {
+        const visionJson = await tryVisionAiChordPro(imageBlob, {
+          systemPrompt: systemPrompt,
+          sourceDomain: sourceDomain,
+          memory: memory,
+          songId: opts.songId,
+          visionRunner: opts.visionRunner,
+          onProgress: onProgress
+        });
+
+        if (visionJson && typeof visionJson.chordpro_content === 'string' && visionJson.chordpro_content.trim()) {
+          onProgress('กำลังตรวจสอบความแม่นยำ ChordPro...', 94);
+          const cleanedCp = applyLearnedCorrectionRules(visionJson.chordpro_content.trim(), memory.correctionRules);
+          const mono = convertChordProToMonospace(cleanedCp);
+          const chords = uniqueChords(extractChordsFromText(cleanedCp));
+          const origKey = String(visionJson.original_key || '').trim() || detectOriginalKey(chords, cleanedCp) || 'C';
+
+          onProgress('แกะคอร์ดด้วย Vision AI เสร็จสมบูรณ์', 100);
+          return {
+            title: String(visionJson.title || '').trim(),
+            artist: String(visionJson.artist || '').trim(),
+            original_key: origKey,
+            originalKey: origKey,
+            chordpro_content: cleanedCp,
+            chordPro: cleanedCp,
+            alignedText: mono,
+            monospaceText: mono,
+            source_domain: sourceDomain,
+            sourceDomain: sourceDomain,
+            is_verified: false,
+            rawAiOutput: visionJson.chordpro_content.trim(),
+            chords: chords,
+            lineCount: cleanedCp.split('\n').length,
+            source: 'vision-ai',
+            systemPromptUsed: systemPrompt,
+            memoryApplied: {
+              rulesCount: memory.correctionRules.length,
+              examplesCount: memory.verifiedExamples.length
+            },
+            parsedAt: Date.now()
+          };
+        }
+      } catch (_visionErr) {
+        // If explicit visionRunner threw in test or Vision API failed, fall through only if fallback not disabled
+        if (opts.strictVision) throw _visionErr;
+      }
+    }
+
+    // Fallback: Preprocess + Spatial OCR + ChordPro Conversion + Learned Rules Application
     let processed = imageBlob;
     if (!opts.skipPreprocess && typeof Blob !== 'undefined' && imageBlob instanceof Blob) {
-      onProgress('กำลังปรับความคมชัดรูปภาพ...', 12);
+      onProgress('กำลังปรับความคมชัดรูปภาพ...', 15);
       processed = await preprocessImageForOcr(imageBlob);
     }
 
-    const ocrResult = await runner(processed, { onProgress: onProgress, songId: opts.songId });
+    const runner = typeof opts.ocrRunner === 'function' ? opts.ocrRunner : defaultTesseractRunner;
+    const ocrResult = await runner(processed, {
+      onProgress: onProgress,
+      songId: opts.songId,
+      systemPrompt: systemPrompt,
+      memory: memory
+    });
 
-    onProgress('กำลังจัดตำแหน่งคอร์ดให้ตรงกับเนื้อเพลง...', 94);
+    onProgress('กำลังแปลงเป็น ChordPro และตรวจด้วยความจำระบบ...', 94);
     const aligned = alignOcrDataToChordSheet(ocrResult);
+    const rawCp = aligned.chordpro_content || aligned.chordPro || '';
+    const postLearnedCp = applyLearnedCorrectionRules(rawCp, memory.correctionRules);
+    const postMono = postLearnedCp !== rawCp ? convertChordProToMonospace(postLearnedCp) : aligned.alignedText;
+    const finalChords = uniqueChords(extractChordsFromText(postLearnedCp));
+    const finalKey = aligned.originalKey || detectOriginalKey(finalChords, postLearnedCp) || 'C';
 
     onProgress('แกะคอร์ดเสร็จสมบูรณ์', 100);
     return {
-      alignedText: aligned.alignedText,
-      chordPro: aligned.chordPro,
-      originalKey: aligned.originalKey,
-      chords: aligned.chords,
-      lineCount: aligned.lineCount,
+      title: aligned.title || '',
+      artist: aligned.artist || '',
+      original_key: finalKey,
+      originalKey: finalKey,
+      chordpro_content: postLearnedCp,
+      chordPro: postLearnedCp,
+      alignedText: postMono,
+      monospaceText: postMono,
+      source_domain: sourceDomain,
+      sourceDomain: sourceDomain,
+      is_verified: false,
+      rawAiOutput: rawCp,
+      chords: finalChords,
+      lineCount: postLearnedCp ? postLearnedCp.split('\n').length : 0,
       source: aligned.source,
+      systemPromptUsed: systemPrompt,
+      memoryApplied: {
+        rulesCount: memory.correctionRules.length,
+        examplesCount: memory.verifiedExamples.length
+      },
       parsedAt: Date.now()
     };
   }
 
   /* ============================================================================
-   * 6) Persistence / DB Cache (No Re-parsing)
+   * 9) Persistence / DB Cache
    * ============================================================================ */
 
   function getImageSignature(song) {
@@ -1342,106 +2253,149 @@
     try {
       if (typeof localStorage === 'undefined') return;
       localStorage.setItem(CACHE_KEY, JSON.stringify(map));
-    } catch (_e) {
-      // Ignore storage quota errors
-    }
+    } catch (_e) {}
   }
 
-  function normalizeCachedRecord(record) {
+  function normalizeCachedRecord(record, song) {
     if (!record) return null;
+    const fallbackDomain = detectSourceDomain(song);
+
     if (typeof record === 'string') {
       const trimmed = record.trim();
       if (!trimmed) return null;
       const parsed = parseRawTextToAlignedSheet(trimmed);
       return {
-        alignedText: parsed.alignedText,
-        chordPro: parsed.chordPro,
+        original_key: parsed.originalKey,
         originalKey: parsed.originalKey,
+        chordpro_content: parsed.chordPro,
+        chordPro: parsed.chordPro,
+        alignedText: parsed.alignedText,
+        monospaceText: parsed.alignedText,
+        source_domain: fallbackDomain,
+        sourceDomain: fallbackDomain,
+        is_verified: false,
+        rawAiOutput: parsed.chordPro,
         chords: parsed.chords,
         lineCount: parsed.lineCount,
         source: parsed.source,
         parsedAt: Date.now()
       };
     }
-    if (typeof record === 'object' && typeof record.alignedText === 'string' && record.alignedText.trim()) {
-      const chords = Array.isArray(record.chords) ? record.chords : uniqueChords(extractChordsFromText(record.alignedText));
+
+    if (typeof record === 'object') {
+      const rawCp = String(record.chordpro_content || record.chordPro || '').trim();
+      const rawMono = String(record.alignedText || record.monospaceText || '').trim();
+      if (!rawCp && !rawMono) return null;
+
+      const chordPro = rawCp
+        ? normalizeThaiLeadingVowelChords(rawCp)
+        : convertMonospaceToChordPro(rawMono);
+      const alignedText = rawMono || convertChordProToMonospace(chordPro);
+      const chords = Array.isArray(record.chords) && record.chords.length
+        ? record.chords
+        : uniqueChords(extractChordsFromText(chordPro));
+      const origKey = record.original_key || record.originalKey || detectOriginalKey(chords, chordPro) || '';
+      const srcDomain = record.source_domain || record.sourceDomain || fallbackDomain;
+
       return {
-        alignedText: record.alignedText,
-        chordPro: typeof record.chordPro === 'string' && record.chordPro
-          ? record.chordPro
-          : convertMonospaceToChordPro(record.alignedText),
-        originalKey: record.originalKey || detectOriginalKey(chords, record.alignedText),
+        original_key: origKey,
+        originalKey: origKey,
+        chordpro_content: chordPro,
+        chordPro: chordPro,
+        alignedText: alignedText,
+        monospaceText: alignedText,
+        source_domain: srcDomain,
+        sourceDomain: srcDomain,
+        is_verified: Boolean(record.is_verified),
+        rawAiOutput: record.rawAiOutput || chordPro,
         chords: chords,
-        lineCount: record.lineCount || record.alignedText.split('\n').length,
+        lineCount: record.lineCount || chordPro.split('\n').length,
         source: record.source || 'text',
-        parsedAt: record.parsedAt || Date.now()
+        memoryApplied: record.memoryApplied || null,
+        systemPromptUsed: record.systemPromptUsed || '',
+        parsedAt: record.parsedAt || Date.now(),
+        verifiedAt: record.verifiedAt || null
       };
     }
+
     return null;
   }
 
-  /**
-   * Checks `song.parsedChordSheet` (DB/song record) first, then localStorage cache by song.id or image signature.
-   */
   function getCachedParsedChord(song) {
     if (!song || typeof song !== 'object') return null;
 
+    // 1) Top-level standardized ChordPro song fields (from Supabase songs table)
+    if (typeof song.chordpro_content === 'string' && song.chordpro_content.trim()) {
+      const fromFields = normalizeCachedRecord({
+        chordpro_content: song.chordpro_content,
+        original_key: song.original_key || song.key || '',
+        source_domain: song.source_domain || detectSourceDomain(song),
+        is_verified: Boolean(song.is_verified),
+        rawAiOutput: (song.parsedChordSheet && song.parsedChordSheet.rawAiOutput) || song.chordpro_content
+      }, song);
+      if (fromFields) return fromFields;
+    }
+
+    // 2) song.parsedChordSheet object
     if (song.parsedChordSheet) {
-      const fromSong = normalizeCachedRecord(song.parsedChordSheet);
+      const fromSong = normalizeCachedRecord(song.parsedChordSheet, song);
       if (fromSong) return fromSong;
     }
 
+    // 3) LocalStorage cache by song.id or image signature
     const cache = readCacheMap();
     if (song.id && cache[song.id]) {
-      const fromId = normalizeCachedRecord(cache[song.id]);
+      const fromId = normalizeCachedRecord(cache[song.id], song);
       if (fromId) return fromId;
     }
 
     const sig = getImageSignature(song);
     if (sig && cache[sig]) {
-      const fromSig = normalizeCachedRecord(cache[sig]);
+      const fromSig = normalizeCachedRecord(cache[sig], song);
       if (fromSig) return fromSig;
     }
 
     return null;
   }
 
-  /**
-   * Saves parsed chord data to localStorage cache AND invokes optional `saveToSongAdapter(song.id, parsedData)`
-   * so it persists to the songbook DB & syncs to Supabase.
-   */
   function saveParsedChord(song, parsedData, saveToSongAdapter) {
-    const normalized = normalizeCachedRecord(parsedData);
+    const normalized = normalizeCachedRecord(parsedData, song);
     if (!normalized) return null;
 
     const cache = readCacheMap();
-    if (song && song.id) {
-      cache[song.id] = normalized;
-    }
+    if (song && song.id) cache[song.id] = normalized;
     const sig = getImageSignature(song);
-    if (sig) {
-      cache[sig] = normalized;
-    }
+    if (sig) cache[sig] = normalized;
     writeCacheMap(cache);
+
+    if (song && typeof song === 'object') {
+      song.original_key = normalized.original_key;
+      song.chordpro_content = normalized.chordpro_content;
+      song.source_domain = normalized.source_domain;
+      song.is_verified = normalized.is_verified;
+      song.parsedChordSheet = normalized;
+    }
 
     if (typeof saveToSongAdapter === 'function' && song && song.id) {
       try {
         saveToSongAdapter(song.id, normalized);
-      } catch (_e) {
-        // Adapter errors should not break UI flow
-      }
+      } catch (_e) {}
     }
 
     return normalized;
   }
 
-  function clearCachedParsedChord(songId) {
-    if (!songId) return;
+  function clearCachedParsedChord(songOrId) {
+    if (!songOrId) return;
     const cache = readCacheMap();
-    if (cache[songId]) {
-      delete cache[songId];
-      writeCacheMap(cache);
+    if (typeof songOrId === 'string') {
+      delete cache[songOrId];
+    } else if (typeof songOrId === 'object') {
+      if (songOrId.id) delete cache[songOrId.id];
+      const sig = getImageSignature(songOrId);
+      if (sig) delete cache[sig];
     }
+    writeCacheMap(cache);
   }
 
   /* ============================================================================
@@ -1450,7 +2404,16 @@
 
   const api = {
     CACHE_KEY: CACHE_KEY,
+    MEMORY_KEY: MEMORY_KEY,
+    VISION_CFG_KEY: VISION_CFG_KEY,
     CHORD_RE: CHORD_RE,
+    VISION_SYSTEM_PROMPT_TEMPLATE: VISION_SYSTEM_PROMPT_TEMPLATE,
+
+    // Configuration & Domain Detection
+    configureBackend: configureBackend,
+    detectSourceDomain: detectSourceDomain,
+    getVisionConfig: getVisionConfig,
+    setVisionConfig: setVisionConfig,
 
     // Music theory & transposition
     noteIndex: noteIndex,
@@ -1460,18 +2423,27 @@
     preferFlat: preferFlat,
     detectOriginalKey: detectOriginalKey,
     convertMonospaceToChordPro: convertMonospaceToChordPro,
+    convertChordProToMonospace: convertChordProToMonospace,
     transposeMonospaceText: transposeMonospaceText,
     transposeChordProText: transposeChordProText,
+
+    // Dynamic Learning Memory & Few-Shot Prompt Builder
+    buildVisionSystemPrompt: buildVisionSystemPrompt,
+    fetchParserMemory: fetchParserMemory,
+    extractLearningDiff: extractLearningDiff,
+    applyLearnedCorrectionRules: applyLearnedCorrectionRules,
+    saveVerifiedAndTeach: saveVerifiedAndTeach,
 
     // Spatial OCR alignment
     classifyTextLine: classifyTextLine,
     alignOcrDataToChordSheet: alignOcrDataToChordSheet,
     parseRawTextToAlignedSheet: parseRawTextToAlignedSheet,
 
-    // Image preprocessing & OCR runner
+    // Image preprocessing & Vision/OCR runner
     preprocessImageForOcr: preprocessImageForOcr,
     fetchImageBlob: fetchImageBlob,
     parseChordImage: parseChordImage,
+    parseImageToChords: parseChordImage, // Alias for app.js OCR modal
 
     // Persistence / DB cache
     getCachedParsedChord: getCachedParsedChord,

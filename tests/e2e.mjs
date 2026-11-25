@@ -1022,11 +1022,169 @@ async function run() {
       console.log(`  PASS: iPad Portrait (${Math.round(portraitMetrics.paneWidth)}px) & Landscape (${Math.round(landscapeMetrics.paneWidth)}px) fullscreen & #stageQuickSearchBtn verified.`);
     }
 
+    // -------------------------------------------------------------------------
+    // Test 15: Precision ChordPro Parser, ChordTextViewer (+/-12 Transpose),
+    //          Side-by-Side Verify & Teach Learning Memory, Dynamic Few-Shot Re-parse & Live Room
+    // -------------------------------------------------------------------------
+    console.log('[Test 15] Precision ChordPro Parser + ChordTextViewer + Verify & Teach + Dynamic Re-parse + Live Room...');
+    {
+      const cpCtx = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+      const cpPage = await cpCtx.newPage();
+      const cpErrs = [];
+      cpPage.on('pageerror', err => cpErrs.push(String(err)));
+      await cpPage.goto(url, { waitUntil: 'domcontentloaded' });
+      await cpPage.waitForSelector('#songbook', { timeout: 5000 });
+
+      // 15a) Verify Transpose Engine (+/-12 semitones, Slash, Complex chords, Smart #/b, Thai vowel guard)
+      const unitResults = await cpPage.evaluate(() => {
+        const V = window.MellowChordTextViewer;
+        const sample = '{comment: Intro}\n[| C | G/B | F#m7b5 | Asus4 |]\n\nเ[C]ธอทำให้ฉัน[Em7]รู้สึก ว่า[G/B]รัก[C6/9]แท้';
+        const trUp2 = V.transposeChordPro(sample, 2, 'C', 'auto');     // Key D -> sharps
+        const trUp5 = V.transposeChordPro(sample, 5, 'C', 'auto');     // Key F -> flats
+        const trDown12 = V.transposeChordPro(sample, -12, 'C', 'auto'); // -12 semitones -> octave C
+        const trForceFlat = V.transposeChordPro('[F#m7b5]รัก[G/B]เธอ', 0, 'C', 'flat');
+        return { trUp2, trUp5, trDown12, trForceFlat };
+      });
+
+      assert(unitResults.trUp2.includes('[| D | A/C# | G#m7b5 | Bsus4 |]'), `Expected +2 bar transpose, got: ${unitResults.trUp2}`);
+      assert(unitResults.trUp2.includes('[D]เธอทำให้ฉัน[F#m7]รู้สึก ว่า[A/C#]รัก[D6/9]แท้'),
+        `Expected +2 lyric ChordPro & Thai leading vowel snap, got: ${unitResults.trUp2}`);
+      assert(unitResults.trUp5.includes('[| F | C/E | Bm7b5 | Dsus4 |]'), `Expected +5 flat key F transpose, got: ${unitResults.trUp5}`);
+      assert(unitResults.trDown12.includes('[C]เธอทำให้ฉัน[Em7]รู้สึก'), `Expected -12 semitones clean transpose, got: ${unitResults.trDown12}`);
+      assert(unitResults.trForceFlat.includes('[Gbm7b5]รัก[G/B]เธอ'), `Expected forced flat respelling, got: ${unitResults.trForceFlat}`);
+
+      // 15b) Open Chordtabs image song with initial raw AI mistakes -> Side-by-Side Verify & Teach
+      await cpPage.evaluate(() => {
+        const samplePng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAADklEQVR42mP8z8AARMAgAAf4AQH/4m0OAAAAAElFTkSuQmCC';
+        const rawMistakeSong = {
+          id: 'ct-precision-teach-1',
+          title: 'เพลงทดสอบสอนระบบแกะคอร์ด',
+          artist: 'Precision Band',
+          key: 'C',
+          src: 'https://chordtabs.in.th/99999',
+          images: [samplePng],
+          parsedChordSheet: {
+            original_key: 'C',
+            source_domain: 'chordtabs',
+            is_verified: false,
+            rawAiOutput: '{comment: Verse}\n[C]เธอทำให้ฉัน [Em7]รู้สึกรัก[F#rn7b5]มาก',
+            chordpro_content: '{comment: Verse}\n[C]เธอทำให้ฉัน [Em7]รู้สึกรัก[F#rn7b5]มาก'
+          }
+        };
+        openSong(rawMistakeSong, 0);
+      });
+
+      await cpPage.waitForSelector('#cdvOpenVerifyBtn', { timeout: 4000 });
+      await cpPage.click('#cdvOpenVerifyBtn');
+      await cpPage.waitForSelector('#cvmOverlay', { timeout: 4000 });
+      await cpPage.waitForSelector('#cvmImageViewport img.cvm-orig-img', { timeout: 4000 });
+      await cpPage.waitForSelector('#cvmChordProEditor', { timeout: 4000 });
+
+      // Edit ChordPro to fix [F#rn7b5] -> [F#m7b5] and tighten [Em7] directly before รู้สึก
+      const correctedChordPro = '{comment: Intro}\n[| C | G/B | Am7 | F |]\n\n{comment: Verse}\n[C]เธอทำให้ฉัน[Em7]รู้สึกรัก[F#m7b5]มาก';
+      await cpPage.fill('#cvmChordProEditor', correctedChordPro);
+
+      // Verify live ChordTextViewer preview renders CSS inline-flex pairs (zero spacebars) directly above Thai syllables
+      const flexCheck = await cpPage.evaluate(() => {
+        const pairs = Array.from(document.querySelectorAll('#cvmLivePreview .ctv-pair'));
+        const targetPair = pairs.find(p => p.textContent.includes('รู้สึกรัก'));
+        if (!targetPair) return null;
+        const cs = getComputedStyle(targetPair);
+        const chordEl = targetPair.querySelector('.ctv-chord-slot');
+        const lyricEl = targetPair.querySelector('.ctv-lyric-slot');
+        const cRect = chordEl.getBoundingClientRect();
+        const lRect = lyricEl.getBoundingClientRect();
+        return {
+          display: cs.display,
+          dir: cs.flexDirection,
+          leftDelta: Math.abs(cRect.left - lRect.left),
+          chordAboveLyric: cRect.bottom <= lRect.top + 2
+        };
+      });
+      assert(
+        flexCheck && flexCheck.display === 'inline-flex' && flexCheck.dir === 'column' &&
+        flexCheck.leftDelta <= 2 && flexCheck.chordAboveLyric,
+        `Expected CSS inline-flex column floating directly above Thai syllable, got: ${JSON.stringify(flexCheck)}`
+      );
+
+      // Click "บันทึกและสอนระบบ" (#cvmSaveTeachBtn)
+      await cpPage.click('#cvmSaveTeachBtn');
+      await cpPage.waitForSelector('.cvm-verify-badge.is-verified', { timeout: 4000 });
+
+      // Verify song DB record updated (original_key, chordpro_content, source_domain, is_verified = true)
+      // AND chord_parser_memory stored learned diff rules + verified few-shot example
+      const learnedState = await cpPage.evaluate(async () => {
+        const book = loadBook();
+        const saved = book.find(s => s.id === 'ct-precision-teach-1');
+        const mem = await window.MellowChordParser.fetchParserMemory('chordtabs');
+        const prompt = window.MellowChordParser.buildVisionSystemPrompt(mem);
+        return { saved, mem, prompt };
+      });
+
+      assert(learnedState.saved && learnedState.saved.is_verified === true, 'Expected song is_verified = true after Save & Teach');
+      assert(learnedState.saved.source_domain === 'chordtabs', `Expected source_domain='chordtabs', got ${learnedState.saved.source_domain}`);
+      assert(learnedState.saved.chordpro_content.includes('[F#m7b5]มาก'), 'Expected saved chordpro_content updated');
+      assert(learnedState.mem.correctionRules.some(r => r.wrong === '[F#rn7b5]' && r.right === '[F#m7b5]'),
+        `Expected learned rule [F#rn7b5] -> [F#m7b5], got: ${JSON.stringify(learnedState.mem.correctionRules)}`);
+      assert(learnedState.prompt.includes('LEARNED CORRECTION RULES') && learnedState.prompt.includes('VERIFIED FEW-SHOT CHORDPRO EXAMPLES'),
+        'Expected Dynamic Few-Shot Vision System Prompt to inject learned rules & verified examples');
+
+      await cpPage.click('#cvmCloseBtn');
+
+      // 15c) Test "ลองแกะใหม่ (Re-parse)" on a 2nd song applying learned memory + Dynamic Prompt
+      const reparseCheck = await cpPage.evaluate(async () => {
+        const samplePng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAADklEQVR42mP8z8AARMAgAAf4AQH/4m0OAAAAAElFTkSuQmCC';
+        let capturedPrompt = '';
+        const res = await window.MellowChordParser.parseChordImage(samplePng, {
+          songId: 'ct-reparse-song-2',
+          sourceDomain: 'chordtabs',
+          visionRunner: async (_blob, ctx) => {
+            capturedPrompt = ctx.systemPrompt;
+            // Simulate AI returning raw mistake [F#rn7b5] which learned rules also guard against
+            return {
+              title: 'เพลงใหม่หลังเรียนรู้',
+              artist: 'AI Band',
+              original_key: 'G',
+              chordpro_content: '{comment: Chorus}\n[G]ใจยังรัก[F#rn7b5]เธอ[B7]เสมอ'
+            };
+          }
+        });
+        return { res, capturedPrompt };
+      });
+
+      assert(reparseCheck.capturedPrompt.includes('[F#rn7b5]'), 'Expected dynamic prompt sent to Vision AI to contain learned rule');
+      assert(reparseCheck.res.chordpro_content.includes('[F#m7b5]เธอ'),
+        `Expected learned memory applied on new parse, got: ${reparseCheck.res.chordpro_content}`);
+      assert(reparseCheck.res.memoryApplied.examplesCount >= 1, 'Expected >= 1 verified few-shot example applied');
+
+      // 15d) Verify ChordTextViewer inside Live Room (floating chords + +/-12 transpose sync)
+      await cpPage.click('#liveRoomNavBtn');
+      await cpPage.waitForSelector('#liveRoomView:not([hidden])');
+      await cpPage.fill('#lrRoomName', 'ห้องทดสอบ ChordPro สด');
+      await cpPage.click('#lrCreateSubmitBtn');
+      await cpPage.waitForSelector('#lrModeTextBtn', { timeout: 4000 });
+      await cpPage.click('#lrModeTextBtn');
+      await cpPage.waitForSelector('#lrChordSheet .ctv-pair .ctv-chord-pill', { timeout: 4000 });
+
+      // Transpose +2 in Live Room -> [C] becomes [D], [G/B] becomes [A/C#], [F#m7b5] becomes [G#m7b5]
+      await cpPage.click('#lrKeyUpBtn');
+      await cpPage.click('#lrKeyUpBtn');
+      const lrChordsText = await cpPage.evaluate(() =>
+        Array.from(document.querySelectorAll('#lrChordSheet .ctv-chord-pill')).map(el => el.textContent.trim())
+      );
+      assert(lrChordsText.includes('D') && lrChordsText.includes('A/C#') && lrChordsText.includes('G#m7b5'),
+        `Expected Live Room ChordTextViewer +2 chords [D, A/C#, G#m7b5], got: ${lrChordsText.join(', ')}`);
+
+      assert(cpErrs.length === 0, `Page errors (Test 15): ${cpErrs.join('; ')}`);
+      await cpCtx.close();
+      console.log('  PASS: Precision ChordPro, ChordTextViewer (+/-12, Slash/Complex, #/b), Verify & Teach Memory, Dynamic Re-parse & Live Room verified.');
+    }
+
     assert(pageErrors.length === 0, `Page errors occurred: ${pageErrors.join('; ')}`);
     assert(consoleErrors.length === 0, `Console errors occurred: ${consoleErrors.join('; ')}`);
     assert(softFailures.length === 0, `Subtest failures: ${softFailures.join('; ')}`);
 
-    console.log('\n✅ ALL 14 E2E, RBAC, FRIENDS/GROUPS, LIVE ROOM, MIDI & IPAD STAGE TESTS PASSED!');
+    console.log('\n✅ ALL 15 E2E, RBAC, FRIENDS/GROUPS, LIVE ROOM, MIDI, IPAD STAGE & PRECISION CHORD PARSER TESTS PASSED!');
   } finally {
     await browser.close();
     server.close();

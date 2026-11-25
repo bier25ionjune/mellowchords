@@ -45,16 +45,25 @@
     return songs
       .filter(function (s) { return s && s.type !== 'break'; })
       .map(function (s) {
+        var cached = (!s.chordpro_content && !s.parsedChordSheet && root.MellowChordParser && typeof root.MellowChordParser.getCachedParsedChord === 'function')
+          ? root.MellowChordParser.getCachedParsedChord(s)
+          : s.parsedChordSheet;
+        var cpContent = s.chordpro_content || (cached && (cached.chordpro_content || cached.chordPro)) || '';
+        var origKey = s.original_key || (cached && (cached.original_key || cached.originalKey)) || s.key || '';
         return {
           id: s.id || genId('song'),
           title: s.title || 'ไม่ระบุชื่อเพลง',
           artist: s.artist || '',
-          key: s.key || '',
+          key: origKey,
+          original_key: origKey,
+          chordpro_content: cpContent,
+          source_domain: s.source_domain || (cached && cached.source_domain) || '',
+          is_verified: Boolean(s.is_verified || (cached && cached.is_verified)),
           targetKey: s.targetKey || '',
           shift: typeof s.shift === 'number' && !isNaN(s.shift) ? s.shift : 0,
           text: s.text || '',
           images: Array.isArray(s.images) ? s.images.slice(0, 4) : [],
-          parsedChordSheet: s.parsedChordSheet || null
+          parsedChordSheet: cached || s.parsedChordSheet || null
         };
       });
   }

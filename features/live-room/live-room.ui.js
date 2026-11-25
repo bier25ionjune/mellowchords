@@ -17,9 +17,9 @@
   }
 
   function normShift(n) {
-    var x = Number(n) || 0;
-    while (x > 11) x -= 12;
-    while (x < -11) x += 12;
+    var x = Math.trunc(Number(n) || 0);
+    if (x > 12) return 12;
+    if (x < -12) return -12;
     return x;
   }
 
@@ -31,6 +31,7 @@
     var transposeText = typeof options.transposeText === 'function' ? options.transposeText : function (t) { return t; };
     var transposeChord = typeof options.transposeChord === 'function' ? options.transposeChord : function (c) { return c; };
     var renderChordHtml = typeof options.renderChordHtml === 'function' ? options.renderChordHtml : null;
+    var onChordClick = typeof options.onChordClick === 'function' ? options.onChordClick : null;
     var onAddSongRequest = typeof options.onAddSongRequest === 'function' ? options.onAddSongRequest : null;
     var onOpenLightbox = typeof options.onOpenLightbox === 'function' ? options.onOpenLightbox : null;
     var onToast = typeof options.onToast === 'function' ? options.onToast : function () {};
@@ -41,6 +42,7 @@
     var localOverride = false;
     var localSongIndex = 0;
     var localKeyShift = 0;
+    var accidentalMode = 'auto'; // 'auto' | 'sharp' | 'flat'
     var displayMode = 'image'; // 'image' (Image-first default) | 'text'
     var stageWide = false;     // iPad stage toggle: hide sidebar for full-screen chord sheet
     var onlineMembers = [];
@@ -479,15 +481,22 @@
       var curIdx = getDisplayedIndex();
       var curShift = getDisplayedShift();
       var curSong = songs[curIdx] || null;
-      var origKey = curSong && curSong.key ? curSong.key : 'C';
-      var playKey = curSong ? transposeChord(origKey, curShift) : '-';
+      var Viewer = root.MellowChordTextViewer || null;
 
-      var textSource = '';
+      var origKey = (curSong && (curSong.original_key || (curSong.parsedChordSheet && (curSong.parsedChordSheet.original_key || curSong.parsedChordSheet.originalKey)) || curSong.key)) || 'C';
+      var playKey = curSong
+        ? (Viewer ? Viewer.getTransposedKey(origKey, curShift, accidentalMode) : transposeChord(origKey, curShift))
+        : '-';
+
+      var chordProSource = '';
       var validImgs = [];
       if (curSong) {
-        textSource = (curSong.parsedChordSheet && curSong.parsedChordSheet.monospaceText)
-          ? curSong.parsedChordSheet.monospaceText
-          : (curSong.text || '');
+        chordProSource =
+          curSong.chordpro_content ||
+          (curSong.parsedChordSheet && (curSong.parsedChordSheet.chordpro_content || curSong.parsedChordSheet.chordPro)) ||
+          (curSong.parsedChordSheet && curSong.parsedChordSheet.monospaceText) ||
+          curSong.text ||
+          '';
         if (Array.isArray(curSong.images)) {
           validImgs = curSong.images.filter(function (u) {
             return typeof u === 'string' && /^(https?:|data:|blob:)/i.test(u);
@@ -496,7 +505,7 @@
       }
 
       var hasImages = validImgs.length > 0;
-      var hasText = !!(textSource && textSource.trim());
+      var hasText = !!(chordProSource && chordProSource.trim());
       var showImageNow = hasImages && (displayMode === 'image' || !hasText);
 
       var sheetHtml = '';
@@ -508,9 +517,15 @@
             }).join('') +
           '</div>';
         } else if (hasText) {
-          sheetHtml = '<div class="lr-chord-sheet" id="lrChordSheet">' +
-            (renderChordHtml ? renderChordHtml(textSource, curShift) : esc(transposeText(textSource, curShift))) +
-          '</div>';
+          var renderedBody = Viewer
+            ? Viewer.renderChordProToHtml(chordProSource, {
+                semitones: curShift,
+                originalKey: origKey,
+                accidentalMode: accidentalMode,
+                card: false
+              })
+            : (renderChordHtml ? renderChordHtml(chordProSource, curShift) : esc(transposeText(chordProSource, curShift)));
+          sheetHtml = '<div class="lr-chord-sheet" id="lrChordSheet">' + renderedBody + '</div>';
         } else {
           sheetHtml = '<div class="lr-empty">เพลงนี้ยังไม่มีรูปภาพหรือเนื้อคอร์ด</div>';
         }
@@ -606,9 +621,14 @@
             '<div class="lr-key-controls">' +
               '<span class="keyPill">คีย์เดิม <b>' + esc(origKey) + '</b></span>' +
               '<span class="keyPill">คีย์ที่เล่น <b id="lrPlayKeyVal">' + esc(playKey) + '</b> <small id="lrShiftVal">(' + (curShift >= 0 ? '+' + curShift : curShift) + ')</small></span>' +
-              '<button type="button" class="small lr-touch-btn" id="lrKeyDownBtn"' + (!canControl ? ' disabled' : '') + '>− ลดคีย์</button>' +
+              '<button type="button" class="small lr-touch-btn" id="lrKeyDownBtn"' + (!canControl || curShift <= -12 ? ' disabled' : '') + '>− ลดคีย์</button>' +
               '<button type="button" class="small ghost lr-touch-btn" id="lrKeyResetBtn"' + (!canControl ? ' disabled' : '') + '>รีเซ็ต</button>' +
-              '<button type="button" class="small primary lr-touch-btn" id="lrKeyUpBtn"' + (!canControl ? ' disabled' : '') + '>+ เพิ่มคีย์</button>' +
+              '<button type="button" class="small primary lr-touch-btn" id="lrKeyUpBtn"' + (!canControl || curShift >= 12 ? ' disabled' : '') + '>+ เพิ่มคีย์</button>' +
+              '<span class="ctv-btn-group" aria-label="เครื่องหมาย # / b">' +
+                '<button type="button" class="ctv-btn' + (accidentalMode === 'auto' ? ' is-active' : '') + '" data-lr-acc="auto">Auto</button>' +
+                '<button type="button" class="ctv-btn' + (accidentalMode === 'sharp' ? ' is-active' : '') + '" data-lr-acc="sharp">♯</button>' +
+                '<button type="button" class="ctv-btn' + (accidentalMode === 'flat' ? ' is-active' : '') + '" data-lr-acc="flat">♭</button>' +
+              '</span>' +
               modeSwitchHtml +
             '</div>' +
 
@@ -646,6 +666,21 @@
           render();
         };
       }
+
+      rootEl.querySelectorAll('[data-lr-acc]').forEach(function (accBtn) {
+        accBtn.onclick = function () {
+          accidentalMode = accBtn.dataset.lrAcc || 'auto';
+          render();
+        };
+      });
+
+      rootEl.querySelectorAll('#lrChordSheet .ctv-chord-pill').forEach(function (pill) {
+        pill.onclick = function () {
+          if (onChordClick && pill.dataset.chord) {
+            onChordClick(pill.dataset.chord);
+          }
+        };
+      });
 
       var addSongBtn = rootEl.querySelector('#lrAddSongBtn');
       var quickSearchBtn = rootEl.querySelector('#lrQuickSearchBtn');

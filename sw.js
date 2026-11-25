@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'mellowchords-v25';
+const CACHE_NAME = 'mellowchords-v26';
 const IMG_CACHE_NAME = 'mellowchords-imgs-v1';
 const MAX_IMG_CACHE = 150;
 const STATIC_ASSETS = [
@@ -11,8 +11,11 @@ const STATIC_ASSETS = [
   './components/setlist-picker/setlist-picker.css',
   './components/setlist-picker/setlist-picker.service.js',
   './components/setlist-picker/setlist-picker.js',
+  './components/chord-parser/chord-text-viewer.css',
   './components/chord-parser/chord-dual-view.css',
+  './components/chord-parser/chord-text-viewer.js',
   './components/chord-parser/chord-parser.service.js',
+  './components/chord-parser/chord-verify-modal.js',
   './components/chord-parser/chord-dual-view.js',
   './features/midi/midi-settings.css',
   './features/midi/midi-footswitch.js',
@@ -94,9 +97,11 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Completely bypass Service Worker interception for Supabase, Jina Reader, LRCLIB, and CORS proxies
+  // Completely bypass Service Worker interception for Supabase, Vision AI, Jina Reader, LRCLIB, and CORS proxies
   if (
     url.hostname.includes('supabase.co') ||
+    url.hostname.includes('googleapis.com') ||
+    url.hostname.includes('openai.com') ||
     url.hostname.includes('jina.ai') ||
     url.hostname.includes('lrclib.net') ||
     url.hostname.includes('allorigins') ||

@@ -1,0 +1,280 @@
+/* ==============================================================================
+ * Mellow Chords — ChordTextViewer (Live-Ready Floating ChordPro Renderer)
+ * Pure CSS Inline-Flex over-syllable alignment (Zero Spacebar Counting)
+ * Scoped with .ctv-* prefix | Stage-ready Dark Glassmorphism + Responsive
+ * ============================================================================== */
+
+.ctv-root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+/* Built-in Transpose & Accidental Control Bar (optional) */
+.ctv-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(22, 22, 27, 0.88);
+  border: 1px solid var(--line, #2a2a33);
+  border-radius: var(--radius-md, 14px);
+}
+
+.ctv-key-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ctv-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--panel2, #1f1f27);
+  border: 1px solid var(--line, #2a2a33);
+  font-size: 0.86rem;
+  color: var(--muted, #9898a6);
+}
+
+.ctv-pill strong {
+  color: var(--chord, #fcd34d);
+  font-weight: 800;
+}
+
+.ctv-pill.is-playing {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.11);
+}
+
+.ctv-shift-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: var(--panel3, #2a2a35);
+  color: var(--muted, #9898a6);
+}
+
+.ctv-shift-tag.is-active {
+  background: var(--accent, #f59e0b);
+  color: #09090b;
+}
+
+.ctv-controls-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ctv-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-elev, #121216);
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--line, #2a2a33);
+}
+
+.ctv-btn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text, #f4f4f6);
+  font-size: 0.88rem;
+  font-weight: 700;
+  min-width: 34px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.ctv-btn:hover:not(:disabled) {
+  background: var(--panel2, #1f1f27);
+  color: var(--chord, #fcd34d);
+}
+
+.ctv-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.ctv-btn.is-active {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: var(--chord, #fcd34d);
+}
+
+/* ==============================================================================
+ * Sheet Body & Floating Chord-Over-Syllable Layout (Zero Spacebar Alignment)
+ * ============================================================================== */
+
+.ctv-sheet {
+  color: var(--text, #f4f4f6);
+  font-family: "Sarabun", "Noto Sans Thai", system-ui, -apple-system, sans-serif;
+  font-size: var(--sheet-font-size, clamp(1rem, 2.5vw, 1.18rem));
+  line-height: 1.5;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.ctv-sheet.is-card {
+  background: var(--panel, #16161b);
+  border: 1px solid var(--line, #2a2a33);
+  border-radius: var(--radius-lg, 18px);
+  padding: 18px 18px;
+}
+
+.ctv-stanza-gap {
+  height: 0.9em;
+}
+
+.ctv-section-row {
+  margin: 12px 0 6px;
+}
+
+.ctv-section-row:first-child {
+  margin-top: 0;
+}
+
+.ctv-section-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 11px;
+  border-radius: 7px;
+  background: rgba(245, 158, 11, 0.12);
+  border-left: 3px solid var(--accent, #f59e0b);
+  color: var(--accent-hover, #fbbf24);
+  font-size: 0.86em;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+/* Lyric + Floating Chords Line (inline flow for true inline-flex syllable pairs) */
+.ctv-line {
+  display: block;
+  margin-bottom: 4px;
+  line-height: 1.2;
+}
+
+/* Plain lyric line with no chords at all */
+.ctv-line.is-lyric-only {
+  display: block;
+  white-space: pre-wrap;
+  line-height: 1.7;
+  margin-bottom: 4px;
+}
+
+/* Each [Chord]+Syllable pair stacks vertically via inline-flex */
+.ctv-pair {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  vertical-align: bottom;
+  min-width: 0;
+  margin-bottom: 4px;
+}
+
+.ctv-chord-slot {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.45em;
+  padding-right: 5px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ctv-chord-slot.is-empty {
+  padding-right: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ctv-lyric-slot {
+  display: inline-block;
+  white-space: pre-wrap;
+  line-height: 1.55;
+  color: var(--text, #f4f4f6);
+  min-height: 1.55em;
+}
+
+.ctv-lyric-slot.is-chord-tail {
+  min-width: 0.65em;
+}
+
+/* Interactive Chord Token Pill */
+.ctv-chord-pill {
+  appearance: none;
+  border: 1px solid rgba(252, 211, 77, 0.28);
+  background: rgba(245, 158, 11, 0.13);
+  color: var(--chord, #fcd34d);
+  font-family: ui-monospace, 'SFMono-Regular', 'Consolas', monospace;
+  font-size: 0.88em;
+  font-weight: 800;
+  line-height: 1.25;
+  padding: 1px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, transform 0.1s ease, border-color 0.12s ease;
+}
+
+.ctv-chord-pill:hover {
+  background: rgba(245, 158, 11, 0.28);
+  border-color: rgba(252, 211, 77, 0.65);
+  color: #fffbeb;
+}
+
+.ctv-chord-pill:active {
+  transform: scale(0.96);
+}
+
+/* Instrumental Progression Bar Line (e.g. [| C | G/B | Am7 | F |]) */
+.ctv-instru-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(252, 211, 77, 0.22);
+}
+
+.ctv-bar-sep {
+  color: var(--muted, #9898a6);
+  font-family: ui-monospace, 'SFMono-Regular', monospace;
+  font-weight: 700;
+  opacity: 0.75;
+  padding: 0 2px;
+}
+
+.ctv-instru-text {
+  color: var(--muted, #9898a6);
+  font-size: 0.9em;
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .ctv-sheet.is-card {
+    padding: 14px 12px;
+  }
+
+  .ctv-bar {
+    padding: 8px 10px;
+  }
+}

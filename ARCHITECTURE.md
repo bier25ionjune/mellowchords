@@ -29,10 +29,13 @@ mellowchords/
 │   │   ├── setlist-picker.service.js                       # ลอจิกกรองคลังเพลง, ตรวจจับเพลงซ้ำ 4 ระดับ, และ Online Auto-Add
 │   │   ├── setlist-picker.js                               # UI Side Panel (เดสก์ท็อป) / Bottom Drawer (มือถือ) พร้อม 2 แท็บ (คลังเพลง & ออนไลน์)
 │   │   └── setlist-picker.css                              # สไตล์แบบ Scoped (.sp-*) รองรับ Responsive
-│   └── chord-parser/                                       # โมดูลแกะคอร์ดจากรูปภาพและสลับโหมด Image/Text
-│       ├── chord-parser.service.js                         # ระบบแกะคอร์ดจากภาพ (Canvas Preprocess + Tesseract BBox Alignment + Transpose + DB/Local Cache)
-│       ├── chord-dual-view.js                              # ปุ่มสลับ Image View <-> Text View พร้อมแถบแสดงคีย์, ปุ่ม +/- ทดคีย์ และโหมด Monospace/ChordPro
-│       └── chord-dual-view.css                             # สไตล์แบบ Scoped (.cdv-*) สำหรับการอ่านบนเวที
+│   └── chord-parser/                                       # โมดูลแกะคอร์ดแม่นยำสูง (ChordPro + Vision AI Learning + Live Renderer)
+│       ├── chord-text-viewer.js                            # ChordTextViewer เรนเดอร์คอร์ดลอยเหนือพยางค์ด้วย CSS Flex (+/-12, Slash/Complex, #/b)
+│       ├── chord-text-viewer.css                           # สไตล์แบบ Scoped (.ctv-*) ไม่ใช้การนับ Spacebar รองรับทั้ง Song View และ Live Room
+│       ├── chord-parser.service.js                         # บริการ Vision AI + Dynamic Few-Shot Prompt + chord_parser_memory Diff Learning + OCR Fallback
+│       ├── chord-verify-modal.js                           # หน้าตรวจสอบและสอนระบบ (Side-by-Side Verify & Teach UI) + ปุ่ม Re-parse
+│       ├── chord-dual-view.js                              # ปุ่มสลับ Image View <-> ChordPro Text View พร้อมทดคีย์ +/-12 และสถานะ Verified
+│       └── chord-dual-view.css                             # สไตล์แบบ Scoped (.cdv-*, .cvm-*) สำหรับ Dual View และหน้าเทียบภาพซ้าย-ขวา
 ├── features/
 │   ├── midi/                                               # โมดูลควบคุมการเปลี่ยนเพลงด้วย MIDI Footswitch
 │   │   ├── midi-footswitch.js                              # Hook/Controller (useMidiFootswitch) ใช้ Web MIDI API, Debounce, MIDI Learn, LocalStorage & Simulator
@@ -44,17 +47,20 @@ mellowchords/
 │   │   └── friends.css                                     # สไตล์แบบ Scoped (.fr-*)
 │   └── live-room/                                          # โมดูลห้องเล่นดนตรีซิงก์คอร์ดเรียลไทม์ (Real-time Live Room)
 │       ├── live-room.service.js                            # ซิงก์ผ่าน Supabase Realtime (Presence + Broadcast + Postgres Changes) และ BroadcastChannel (Local)
-│       ├── live-room.ui.js                                 # Lobby สร้าง/เข้าห้อง, เชิญทั้งกรุ๊ปวงใน 1 คลิก, รายชื่อออนไลน์, ซิงก์เพลง/คีย์ และเชื่อมต่อ MIDI
+│       ├── live-room.ui.js                                 # Lobby สร้าง/เข้าห้อง, เชิญทั้งกรุ๊ปวงใน 1 คลิก, แสดง ChordTextViewer (+/-12) และเชื่อมต่อ MIDI
 │       └── live-room.css                                   # สไตล์แบบ Scoped (.lr-*)
-├── sw.js                                                   # Service Worker (v22) สำหรับแคช App Shell, โมดูลทั้งหมด และรูปภาพจาก Proxy
+├── sw.js                                                   # Service Worker (v26) สำหรับแคช App Shell, โมดูลทั้งหมด และรูปภาพจาก Proxy
 ├── manifest.webmanifest                                    # PWA Web Manifest
 ├── supabase/
+│   ├── functions/
+│   │   └── parse-chord-image/index.ts                      # Edge Function ดึง chord_parser_memory ประกอบ Dynamic Few-Shot Prompt ยิง Vision AI
 │   └── migrations/
 │       ├── 20261124000000_user_approval.sql                # Migration ระบบอนุมัติผู้สมัครเริ่มต้น (profiles, status, Restrictive RLS)
 │       ├── 20261124010000_rbac_user_management.sql         # Migration ระบบ RBAC (role, is_active, sync trigger, self-lockout protection, RLS grants)
-│       └── 20261124020000_friends_groups_live_rooms.sql    # Migration ระบบเพื่อน (friendships), กรุ๊ปวง (band_groups/members), และ Live Room (live_rooms/members + Realtime)
+│       ├── 20261124020000_friends_groups_live_rooms.sql    # Migration ระบบเพื่อน (friendships), กรุ๊ปวง (band_groups/members), และ Live Room
+│       └── 20261124030000_precision_chord_parser_memory.sql# Migration มาตรฐาน ChordPro บน songs และตารางความจำ chord_parser_memory (Auto-prune 10)
 ├── tests/
-│   └── e2e.mjs                                             # ชุดทดสอบอัตโนมัติ Playwright E2E 13 ชุด (ฟีเจอร์หลัก, Latency <5s, Approval, RBAC, OCR Pop-up, Friends/Groups, Live Room 2-Tab + MIDI)
+│   └── e2e.mjs                                             # ชุดทดสอบอัตโนมัติ Playwright E2E 15 ชุด (รวม Precision ChordPro, Verify & Teach, Live Room)
 ├── PROJECT.md                                              # บันทึก Milestone และสัญญาอินเทอร์เฟซของระบบ
 └── README.md                                               # คู่มือเริ่มต้นใช้งานและการ Deploy
 ```
@@ -179,13 +185,18 @@ mellowchords/
   - **แท็บคลังเพลง:** ค้นหา/กรอง (`ทั้งหมด`, `ยังไม่ในเซ็ต`, `อยู่ในเซ็ตแล้ว`, `⭐ โปรด`) และแสดง Badge `✓ อยู่ในเซ็ตแล้ว` พร้อมเพิ่ม/นำออกได้ทันที
   - **แท็บค้นหาออนไลน์:** ดึงคอร์ด/รูปภาพจากเว็บ -> ตรวจจับเพลงซ้ำ 4 ระดับ (`id`, `chordtabsId`, `url`, `title+artist`) -> บันทึกเข้าคลังเพลงอัตโนมัติ -> เพิ่มเข้าเซ็ตเพลงทันที
 
-### 6.2 Image-to-Text Chord Parser & Dual View (`components/chord-parser/`)
-- **Namespace:** `window.MellowChordParser`, `window.MellowChordDualView`
-- **จุดเชื่อมต่อ:** คอนเทนเนอร์ `#chordDualViewToolbar` และ `#chordDualViewText` ในหน้าดูคอร์ด (`#songView`)
-- **การทำงาน:**
-  - แกะเนื้อเพลงและคอร์ดจากภาพด้วย `<canvas>` Preprocessing + Tesseract.js (`tha+eng`) พร้อม Spatial BBox Alignment จัดตำแหน่งคอร์ดให้ตรงกับคำร้อง (รองรับสระลอย/วรรณยุกต์ภาษาไทย)
-  - สร้างข้อมูลทั้งแบบ **Monospace** และ **ChordPro**, วิเคราะห์ `originalKey` อัตโนมัติ, และบันทึกลงอ็อบเจกต์เพลง (`song.parsedChordSheet`) + แคช `localStorage` (`mellowchords.parsedChords.v1`) เพื่อไม่ต้องแกะซ้ำ
-  - ปุ่มสลับ **🖼️ แบบรูปภาพ (Image View)** <-> **📝 แบบข้อความ (Text View)** พร้อมตัวแสดงคีย์และปุ่มทดคีย์ `−` / `รีเซ็ต` / `+` ที่ซิงก์กับ Floating Dock
+### 6.2 Precision Chord Parser, `ChordTextViewer` & Dynamic Learning System (`components/chord-parser/`)
+- **Namespace:** `window.MellowChordTextViewer`, `window.MellowChordParser`, `window.MellowChordVerifyModal`, `window.MellowChordDualView`
+- **จุดเชื่อมต่อ:** คอนเทนเนอร์ `#chordDualViewToolbar`, `#chordDualViewText` ใน `#songView`, โมดอลเทียบภาพ `#cvmOverlay`, และพื้นที่คอร์ด `#lrChordSheet` ในห้อง Live Room (`#liveRoomView`)
+- **มาตรฐานข้อมูล (`public.songs` + Local Songbook):**
+  - แกะและจัดเก็บในรูปแบบ **ChordPro Format** (`[C]เธอทำให้ฉัน[Em7]รู้สึก...`, `{comment: Intro}`, `[| C | G/B | Am7 | F |]`) แยกฟิลด์ `original_key`, `chordpro_content`, `source_domain` (เช่น `chordtabs`), และ `is_verified`
+- **`ChordTextViewer` (`chord-text-viewer.js`):**
+  - เรนเดอร์คอร์ดลอยเหนือพยางค์ที่กำหนดด้วย **CSS Inline-Flex (`display: inline-flex; flex-direction: column`)** โดยไม่ใช้การนับ Spacebar ป้องกันสระหน้าและวรรณยุกต์ภาษาไทยเคลื่อน 100%
+  - รองรับ **Transpose `+/- 12 semitones`** แบบเรียลไทม์ ทั้งคอร์ดพื้นฐาน, Slash Chord (`G/B`), และคอร์ดซับซ้อน (`F#m7b5`, `Asus4`, `C6/9`) พร้อมเลือกแสดง `#` หรือ `b` อัตโนมัติตามคีย์หรือกำหนดเอง (`Auto` / `♯` / `♭`) และใช้งานร่วมกันในห้อง **Live Room**
+- **โหมดตรวจสอบและสอนระบบ (`Verify & Teach` — `chord-verify-modal.js`) & Dynamic Few-Shot (`chord_parser_memory`):**
+  - หน้าจอเทียบภาพต้นฉบับด้านซ้าย (ซูม/เลื่อน/โหมดมืด) คู่กับกล่องแก้ไข ChordPro + Live Preview ด้านขวา
+  - เมื่อกด **"บันทึกและสอนระบบ"** ระบบจะตั้ง `is_verified = true` และสกัด Diff คำที่แกะผิด (`correction_rules`) พร้อมตัวอย่างท่อนเพลงคุณภาพสูงบันทึกลงตาราง `public.chord_parser_memory` (Auto-prune เก็บสูงสุด 10 รายการต่อ `source_domain`)
+  - ก่อนแกะเพลงใหม่หรือกดปุ่ม **"ลองแกะใหม่ (Re-parse)"** ระบบ (ทั้ง Edge Function `parse-chord-image` และ Client Service) จะดึงกฎและตัวอย่าง Verified 2–3 รายการไปแทรกใน System Prompt ของ Vision AI อัตโนมัติ
 
 ### 6.3 MIDI Footswitch Hook & Settings UI (`features/midi/`)
 - **Namespace:** `window.MellowMidi` (`useMidiFootswitch`, `openSettingsModal`, `renderSettingsPanel`, `createStatusBadge`)
@@ -201,7 +212,8 @@ mellowchords/
 - **การทำงาน:**
   - เปิด Pop-up (`openSaveChordModeModal`) ให้ผู้ใช้เลือกรูปแบบการเก็บคอร์ดเข้าคลัง:
     1. **🖼️ เก็บเป็นภาพ (ทันที):** บันทึกชีทคอร์ดต้นฉบับลงคลังเพลงและดูออฟไลน์ได้ทันที
-    2. **📝 แปลงเป็น Text (OCR):** เรียก `MellowChordParser.parseImageToChords` (หรือดึงจากแคช) แล้วแสดงผลในกล่อง `<textarea id="saveOcrTextArea">` พร้อมช่องชื่อเพลง/ศิลปิน/คีย์ ให้ผู้ใช้ **ปรับแก้ข้อความและคอร์ดหลังสแกนได้ทันที** ก่อนกดบันทึกเข้าคลัง
+    2. **📝 แปลงเป็น Text (OCR / ChordPro):** เรียก `MellowChordParser.parseChordImage` (หรือดึงจากแคช) แล้วแสดงผลในกล่อง `<textarea id="saveOcrTextArea">` ให้ปรับแก้ข้อความก่อนบันทึก
+    3. **🎯 ตรวจสอบเทียบภาพ & สอนระบบ:** เปิดหน้าต่าง `Verify & Teach` เทียบภาพซ้าย-ขวาและสอนความจำระบบทันที
 
 ### 6.5 ระบบเพื่อนและกรุ๊ปวงดนตรี (`features/friends/`)
 - **Namespace:** `window.MellowFriendsService`, `window.MellowFriendsUI`
@@ -215,12 +227,12 @@ mellowchords/
 ### 6.6 ห้องซิงก์คอร์ดเรียลไทม์ (`features/live-room/`)
 - **Namespace:** `window.MellowLiveRoomService`, `window.MellowLiveRoomUI`
 - **Database Schema:**
-  - `public.live_rooms` (`room_code`, `name`, `host_id`, `band_group_id`, `setlist_id`, `setlist_snapshot` jsonb, `current_song_index`, `current_song_id`, `current_key_shift`, `is_active`)
+  - `public.live_rooms` (`room_code`, `name`, `host_id`, `band_group_id`, `setlist_id`, `setlist_snapshot` jsonb, `current_song_index`, `current_song_id`, `current_key_shift` (-12..12), `is_active`)
   - `public.live_room_members` (`room_id`, `user_id`, `role`: `host | member`, `status`: `invited | joined`)
   - เปิดใช้งาน `supabase_realtime` Publication บน `live_rooms`, `live_room_members`, และ `friendships`
 - **Realtime Event Flow (3 ชั้นบน Channel `live-room:<room_id>`):**
   1. **Presence:** แสดงรายชื่อสมาชิกที่ออนไลน์ในห้องแบบเรียลไทม์ (`#lrOnlineBar`)
-  2. **Broadcast (`room_state_sync`, `room_closed`):** ซิงก์การเปลี่ยนเพลง (ปุ่ม UI / จิ้ม Setlist / MIDI Footswitch) และการเปลี่ยนคีย์ (`−` / `+` / `รีเซ็ต`) ไปยังหน้าจอสมาชิกทุกคนทันที (< 100ms)
+  2. **Broadcast (`room_state_sync`, `room_closed`):** ซิงก์การเปลี่ยนเพลง (ปุ่ม UI / จิ้ม Setlist / MIDI Footswitch) และการเปลี่ยนคีย์ (`−` / `+` / `รีเซ็ต`) ไปยังหน้าจอสมาชิกทุกคนทันที (< 100ms) พร้อมเรนเดอร์ Text คอร์ดด้วย `ChordTextViewer`
   3. **Postgres Changes (`UPDATE` on `live_rooms`):** เก็บสถานะล่าสุดในฐานข้อมูลเป็น Authoritative Fallback สำหรับผู้ที่เพิ่งเข้าห้องหรือเน็ตหลุดแล้วต่อใหม่
   - รองรับการสร้างห้องเลือก Setlist, เชิญเพื่อนรายคน หรือ **ดึงสมาชิกทั้งกรุ๊ปวงในคลิกเดียว** พร้อม `BroadcastChannel` Fallback สำหรับการซิงก์ข้ามแท็บในโหมด Local/Offline
 
@@ -233,7 +245,9 @@ mellowchords/
    node --check app.js && node --check sw.js && node --check tests/e2e.mjs \
      && node --check components/setlist-picker/setlist-picker.service.js \
      && node --check components/setlist-picker/setlist-picker.js \
+     && node --check components/chord-parser/chord-text-viewer.js \
      && node --check components/chord-parser/chord-parser.service.js \
+     && node --check components/chord-parser/chord-verify-modal.js \
      && node --check components/chord-parser/chord-dual-view.js \
      && node --check features/midi/midi-footswitch.js \
      && node --check features/midi/midi-settings.js \
@@ -242,7 +256,7 @@ mellowchords/
      && node --check features/live-room/live-room.service.js \
      && node --check features/live-room/live-room.ui.js
    ```
-2. **รันชุดทดสอบ E2E ทั้งหมด (Playwright — 13 ชุด):**
+2. **รันชุดทดสอบ E2E ทั้งหมด (Playwright — 15 ชุด):**
    ```bash
    node tests/e2e.mjs
    ```
@@ -252,5 +266,7 @@ mellowchords/
    - ระบบ RBAC: การซ่อนเมนูจาก Guest/User, Redirect URL `#/admin`, บล็อกบัญชีที่ `is_active = false`, และการจัดการผู้ใช้โดย Admin (Tests 10a–10c)
    - Save Chord Mode Pop-up: เลือกเก็บเป็นภาพหรือ OCR Text พร้อมแก้ไขข้อความหลังสแกนและบันทึกลงคลัง (Test 11)
    - ระบบเพื่อนและกรุ๊ปวงดนตรี: ค้นหาผู้ใช้, ส่ง/ตอบรับคำขอ, สร้างกรุ๊ปวง, และเพิ่มสมาชิกเข้าวง (Test 12)
-   - Real-time Live Room 2 แท็บ: ดึงทั้งกรุ๊ปวงเข้าคำเชิญใน 1 คลิก, Presence สมาชิกออนไลน์, ซิงก์เปลี่ยนเพลงและคีย์แบบเรียลไทม์, และ MIDI Footswitch (Host ซิงก์ทั้งห้อง / Member ถูกล็อกตาม Host) (Test 13)
+   - Real-time Live Room 2 แท็บ: ดึงทั้งกรุ๊ปวงเข้าคำเชิญใน 1 คลิก, Presence สมาชิกออนไลน์, ซิงก์เปลี่ยนเพลงและคีย์แบบเรียลไทม์, และ MIDI Footswitch (Test 13)
+   - iPad Portrait & Landscape Fullscreen Stage Mode (Test 14)
+   - Precision ChordPro Parser, `ChordTextViewer` (`+/- 12` semitones, Slash/Complex chords, `#`/`b`, CSS Flex over Thai syllables), Side-by-Side `Verify & Teach` Learning Memory (`chord_parser_memory`), Dynamic Few-Shot `Re-parse`, และ `ChordTextViewer` ใน Live Room (Test 15)
 

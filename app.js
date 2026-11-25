@@ -44,25 +44,28 @@ const noteIndex = n => {
 };
 
 function transposeChord(ch, shift, flat) {
-  if (!shift) return ch;
-  const m = ch.match(/^([A-G][#b]?)([^\/]*)(?:\/([A-G][#b]?))?$/);
+  const s = (((parseInt(shift, 10) || 0) % 12) + 12) % 12;
+  if (!s || !ch) return ch;
+  const m = String(ch).replace(/♯/g, '#').replace(/♭/g, 'b').match(/^([A-G][#b]?)(.*?)(?:\/([A-G][#b]?))?$/);
   if (!m) return ch;
-  const N = flat ? FLATS : SHARPS, tr = n => N[(noteIndex(n) + shift + 12) % 12];
-  return tr(m[1]) + m[2] + (m[3] ? '/' + tr(m[3]) : '');
+  const N = flat ? FLATS : SHARPS, tr = n => N[(noteIndex(n) + s) % 12];
+  return tr(m[1]) + (m[2] || '') + (m[3] ? '/' + tr(m[3]) : '');
 }
 
 function preferFlat(key, shift) {
-  const m = (key || '').match(/^([A-G][#b]?)(.*)$/);
+  const m = (key || '').match(/^([A-G][#b♯♭]?)(.*)$/);
   if (!m) return false;
-  const minor = /^m(?!aj)/.test(m[2]), t = (noteIndex(m[1]) + shift + 12) % 12;
-  return FLAT_KEYS.includes(minor ? (t + 3) % 12 : t);
+  const s = (((parseInt(shift, 10) || 0) % 12) + 12) % 12;
+  const minor = /^m(?!aj)/i.test(m[2]), t = (noteIndex(m[1]) + s) % 12;
+  const majEq = minor ? (t + 3) % 12 : t;
+  if (majEq === 6) return m[1].includes('b') || m[1].includes('♭');
+  return FLAT_KEYS.includes(majEq);
 }
 
 const normShift = s => {
   const n = parseInt(s, 10);
   if (isNaN(n)) return 0;
-  let v = ((n % 12) + 12) % 12;
-  return v > 6 ? v - 12 : v;
+  return Math.max(-12, Math.min(12, n));
 };
 
 function calcKeyShift(fromKey, toKey) {
@@ -73,7 +76,8 @@ function calcKeyShift(fromKey, toKey) {
   const r1 = noteIndex(m1[1].toUpperCase());
   const r2 = noteIndex(m2[1].toUpperCase());
   if (isNaN(r1) || isNaN(r2)) return 0;
-  return normShift(r2 - r1);
+  const v = ((r2 - r1) % 12 + 12) % 12;
+  return v > 6 ? v - 12 : v;
 }
 
 const fmtShift = s => (s === 0 ? 'คีย์เดิม' : (s > 0 ? '+' : '') + s + ' คีย์');
@@ -448,6 +452,20 @@ function detectKey(text, titleHint = '') {
 
 function renderSheet(box, text, shift, flat) {
   box.replaceChildren();
+  const isInlineChordPro = /\{\s*(?:comment|c)\s*:/i.test(text || '') ||
+    /\[[A-G|#b][^\[\]\r\n]*\][\u0E00-\u0E7FA-Za-z]/.test(text || '') ||
+    /\[\|\s*[A-G]/.test(text || '');
+  if (isInlineChordPro && window.MellowChordTextViewer && typeof window.MellowChordTextViewer.renderChordProToElement === 'function') {
+    const origKey = (current && current.song && (current.song.original_key || current.song.key)) || detectKey(text) || 'C';
+    window.MellowChordTextViewer.renderChordProToElement(box, text, {
+      semitones: shift || 0,
+      originalKey: origKey,
+      accidentalMode: typeof flat === 'boolean' ? (flat ? 'flat' : 'sharp') : 'auto',
+      card: false,
+      onChordClick: ch => showChordPopup(ch)
+    });
+    return;
+  }
   for (const item of parseSong(text)) {
     if (item.type === 'blank') {
       box.appendChild(mk('div', 'line blank'));
@@ -2735,11 +2753,18 @@ async function getSongFirstImageBlob(song) {
 function saveCurrentSongDirect() {
   if (!current || !current.song) return;
   const { song, shift } = current;
+  const detectedOrigKey = song.original_key || detectKey(song.text) || (song.parsedChordSheet && song.parsedChordSheet.originalKey) || song.key || '';
+  const cpContent = song.chordpro_content || (song.parsedChordSheet && (song.parsedChordSheet.chordpro_content || song.parsedChordSheet.chordPro)) || '';
+  const srcDomain = song.source_domain || (window.MellowChordParser ? window.MellowChordParser.detectSourceDomain(song) : 'unknown');
   const e = {
     id: song.id,
     title: song.title,
     artist: song.artist || '',
-    key: detectKey(song.text) || song.key,
+    key: detectedOrigKey,
+    original_key: detectedOrigKey,
+    chordpro_content: cpContent,
+    source_domain: srcDomain,
+    is_verified: Boolean(song.is_verified || (song.parsedChordSheet && song.parsedChordSheet.is_verified)),
     text: song.text || '',
     images: song.images || [],
     sections: song.sections || [],
@@ -2756,7 +2781,7 @@ function openSaveChordModeModal(song, shift = 0) {
   modal('💾 เลือกรูปแบบการเก็บคอร์ดเข้าคลัง', (box, close) => {
     const intro = mk('p', 'muted small');
     intro.style.marginTop = '0';
-    intro.textContent = `เพลง "${song.title || 'ไม่ระบุชื่อ'}" — เลือกว่าจะเก็บเป็นภาพคอร์ดต้นฉบับ หรือสแกน OCR แปลงเป็น Text เพื่อปรับแก้และเปลี่ยนคีย์ได้ทันที`;
+    intro.textContent = `เพลง "${song.title || 'ไม่ระบุชื่อ'}" — เลือกว่าจะเก็บเป็นภาพคอร์ดต้นฉบับ แปลงเป็น Text (ChordPro/OCR) หรือเปิดโหมดเทียบภาพสอนระบบ`;
 
     const choiceGrid = mk('div', 'saveModeGrid');
 
@@ -2772,9 +2797,20 @@ function openSaveChordModeModal(song, shift = 0) {
     const ocrBtn = mk('button', 'saveModeCard');
     ocrBtn.type = 'button';
     ocrBtn.id = 'saveChoiceOcrBtn';
-    ocrBtn.innerHTML = '<b>📝 แปลงเป็น Text (OCR)</b><small>สแกนคอร์ดและเนื้อร้องจากภาพ แล้วปรับแก้ข้อความก่อนบันทึกเข้าคลัง</small>';
+    ocrBtn.innerHTML = '<b>📝 แปลงเป็น Text (OCR / ChordPro)</b><small>สแกนคอร์ดและเนื้อร้องจากภาพ แล้วปรับแก้ข้อความก่อนบันทึกเข้าคลัง</small>';
 
-    choiceGrid.append(imgBtn, ocrBtn);
+    const verifyTeachCardBtn = mk('button', 'saveModeCard');
+    verifyTeachCardBtn.type = 'button';
+    verifyTeachCardBtn.id = 'saveChoiceVerifyBtn';
+    verifyTeachCardBtn.innerHTML = '<b>🎯 ตรวจสอบเทียบภาพ &amp; สอนระบบ</b><small>เปิดหน้าจอเทียบภาพซ้าย-ขวา แก้ไข ChordPro และสอน Vision AI จดจำ</small>';
+    verifyTeachCardBtn.onclick = () => {
+      close();
+      if (chordDualViewInstance && typeof chordDualViewInstance.openVerifyModal === 'function') {
+        chordDualViewInstance.openVerifyModal();
+      }
+    };
+
+    choiceGrid.append(imgBtn, ocrBtn, verifyTeachCardBtn);
 
     const statusEl = mk('div', 'muted small');
     statusEl.id = 'saveOcrStatus';
@@ -2803,11 +2839,11 @@ function openSaveChordModeModal(song, shift = 0) {
     keyInp.id = 'saveOcrKeyInput';
     keyInp.style.width = '76px';
     keyInp.placeholder = 'คีย์';
-    keyInp.value = song.key || '';
+    keyInp.value = song.original_key || song.key || '';
 
     metaRow.append(titleInp, artistInp, keyInp);
 
-    const textLabel = mk('label', null, '✏️ ปรับแก้คอร์ดและเนื้อเพลงหลังสแกน (Text):');
+    const textLabel = mk('label', null, '✏️ ปรับแก้คอร์ดและเนื้อเพลงหลังสแกน (Text / ChordPro):');
     textLabel.style.display = 'block';
     textLabel.style.marginBottom = '6px';
     textLabel.style.fontSize = '0.86rem';
@@ -2838,12 +2874,22 @@ function openSaveChordModeModal(song, shift = 0) {
         toast('กรุณากรอกหรือสแกนข้อความคอร์ดก่อนบันทึก', true);
         return;
       }
-      const detectedKey = detectKey(editedText) || keyInp.value.trim() || song.key || '';
+      const detectedKey = keyInp.value.trim() || detectKey(editedText) || song.original_key || song.key || '';
       const keptImages = keepImgCb.checked ? (song.images || []) : [];
+      const chordProText = (window.MellowChordTextViewer && typeof window.MellowChordTextViewer.ensureChordProContent === 'function')
+        ? window.MellowChordTextViewer.ensureChordProContent(editedText)
+        : editedText;
+      const srcDomain = song.source_domain || (window.MellowChordParser ? window.MellowChordParser.detectSourceDomain(song) : 'unknown');
       const updatedParsed = {
         ...(song.parsedChordSheet || {}),
+        original_key: detectedKey || 'C',
         originalKey: detectedKey || 'C',
+        chordpro_content: chordProText,
+        chordPro: chordProText,
         monospaceText: editedText,
+        alignedText: editedText,
+        source_domain: srcDomain,
+        is_verified: true,
         updatedAt: Date.now()
       };
       const entry = {
@@ -2851,6 +2897,10 @@ function openSaveChordModeModal(song, shift = 0) {
         title: titleInp.value.trim() || song.title || 'ไม่ระบุชื่อเพลง',
         artist: artistInp.value.trim(),
         key: detectedKey,
+        original_key: detectedKey,
+        chordpro_content: chordProText,
+        source_domain: srcDomain,
+        is_verified: true,
         text: editedText,
         images: keptImages,
         sections: song.sections || [],
@@ -2877,45 +2927,51 @@ function openSaveChordModeModal(song, shift = 0) {
       ocrBtn.disabled = true;
       try {
         let initialText = '';
-        let detectedKey = song.key || '';
+        let detectedKey = song.original_key || song.key || '';
 
-        const cached = song.parsedChordSheet ||
+        const directSheet = song.parsedChordSheet;
+        const cached = directSheet ||
           (window.MellowChordParser && typeof window.MellowChordParser.getCachedParsedChord === 'function'
             ? window.MellowChordParser.getCachedParsedChord(song)
             : null);
 
-        if (cached && cached.monospaceText) {
-          initialText = cached.monospaceText;
-          detectedKey = cached.originalKey || detectedKey;
+        if (directSheet && directSheet.monospaceText && !directSheet.chordpro_content) {
+          initialText = directSheet.monospaceText;
+          detectedKey = directSheet.originalKey || detectedKey;
           statusEl.textContent = '✅ โหลดผลแกะคอร์ดจากแคชแล้ว — คุณสามารถปรับแก้ข้อความด้านล่างได้เลย';
-        } else if (window.MellowChordParser && typeof window.MellowChordParser.parseImageToChords === 'function') {
-          statusEl.textContent = '⏳ กำลังโหลดภาพและสแกน OCR แปลงเป็น Text...';
+        } else if (cached && (cached.chordpro_content || cached.monospaceText)) {
+          initialText = cached.chordpro_content || cached.monospaceText;
+          detectedKey = cached.original_key || cached.originalKey || detectedKey;
+          statusEl.textContent = '✅ โหลดผลแกะคอร์ดจากแคชแล้ว — คุณสามารถปรับแก้ข้อความด้านล่างได้เลย';
+        } else if (window.MellowChordParser && typeof window.MellowChordParser.parseChordImage === 'function') {
+          statusEl.textContent = '⏳ กำลังโหลดภาพและแกะเป็น ChordPro...';
           const blob = await getSongFirstImageBlob(song);
-          const parsed = await window.MellowChordParser.parseImageToChords(blob, {
+          const parsed = await window.MellowChordParser.parseChordImage(blob, {
             songId: song.id,
+            song: song,
             title: song.title,
-            onProgress: (p) => {
-              const pct = Math.round((p && p.progress ? p.progress : 0) * 100);
-              statusEl.textContent = `⏳ กำลังสแกนคอร์ดด้วย OCR... ${pct}%`;
+            onProgress: (msg, pct) => {
+              const numPct = typeof pct === 'number' ? Math.round(pct) : 50;
+              statusEl.textContent = `⏳ ${msg || 'กำลังแกะคอร์ด...'} ${numPct}%`;
             }
           });
-          initialText = (parsed && parsed.monospaceText) || '';
-          detectedKey = (parsed && parsed.originalKey) || detectedKey;
+          initialText = (parsed && (parsed.chordpro_content || parsed.monospaceText)) || '';
+          detectedKey = (parsed && (parsed.original_key || parsed.originalKey)) || detectedKey;
           if (parsed) song.parsedChordSheet = parsed;
           statusEl.textContent = initialText
-            ? '✅ สแกน OCR สำเร็จ! ตรวจสอบและปรับแก้คอร์ด/เนื้อเพลงด้านล่างก่อนบันทึก'
+            ? '✅ แกะคอร์ดสำเร็จ! ตรวจสอบและปรับแก้ด้านล่างก่อนบันทึก'
             : '⚠️ ไม่พบข้อความชัดเจนจากภาพ — คุณสามารถพิมพ์หรือปรับแก้ในช่องด้านล่างได้ทันที';
         } else {
           statusEl.textContent = '⚠️ โมดูล OCR ไม่พร้อมใช้งาน — สามารถพิมพ์ข้อความคอร์ดด้านล่างได้เลย';
         }
 
-        ta.value = initialText || song.text || '';
+        ta.value = initialText || song.chordpro_content || song.text || '';
         if (detectedKey && !keyInp.value) keyInp.value = detectedKey;
         editorWrap.hidden = false;
         ta.focus();
       } catch (err) {
         statusEl.textContent = '⚠️ สแกน OCR ไม่สำเร็จ (' + (err.message || err) + ') — คุณยังสามารถพิมพ์/วาง Text เพื่อบันทึกได้';
-        ta.value = song.text || '';
+        ta.value = song.chordpro_content || song.text || '';
         editorWrap.hidden = false;
       } finally {
         ocrBtn.disabled = false;
@@ -3703,32 +3759,60 @@ const conf = () => {
 };
 const getPls = () => LS.get(K.pls, []), setPls = p => LS.set(K.pls, p);
 const getMeta = () => LS.get(K.meta, { songs: {}, pls: {} });
-const songH = (s, f) => hash(JSON.stringify([s.title, s.artist, s.key, s.text, s.shift || 0, !(!f), s.images || []]));
+const songH = (s, f) => hash(JSON.stringify([
+  s.title,
+  s.artist,
+  s.original_key || s.key,
+  s.text,
+  s.chordpro_content || '',
+  s.source_domain || '',
+  Boolean(s.is_verified),
+  s.shift || 0,
+  !(!f),
+  s.images || []
+]));
 const plH = p => hash(JSON.stringify([p.name, p.songIds, !(!p.shared), p.token || '']));
-const toRow = (s, f) => ({
+const toRowLegacy = (s, f) => ({
   user_id: user.id,
   id: s.id,
   title: s.title,
   artist: s.artist || '',
-  song_key: s.key || '',
+  song_key: s.original_key || s.key || '',
   content: s.text || '',
   src: s.src || '',
   shift: s.shift || 0,
   favorite: !(!f),
   images: s.images || []
 });
-const fromRow = (r, old) => ({
-  ...(old || {}),
-  id: r.id,
-  title: r.title,
-  artist: r.artist,
-  key: r.song_key,
-  text: r.content,
-  src: r.src,
-  shift: r.shift,
-  images: r.images || [],
-  savedAt: Date.parse(r.updated_at)
+const toRow = (s, f) => ({
+  ...toRowLegacy(s, f),
+  original_key: s.original_key || (s.parsedChordSheet && (s.parsedChordSheet.original_key || s.parsedChordSheet.originalKey)) || s.key || '',
+  chordpro_content: s.chordpro_content || (s.parsedChordSheet && (s.parsedChordSheet.chordpro_content || s.parsedChordSheet.chordPro)) || '',
+  source_domain: s.source_domain || (s.parsedChordSheet && s.parsedChordSheet.source_domain) || (window.MellowChordParser ? window.MellowChordParser.detectSourceDomain(s) : 'unknown'),
+  is_verified: Boolean(s.is_verified || (s.parsedChordSheet && s.parsedChordSheet.is_verified))
 });
+const fromRow = (r, old) => {
+  const origKey = r.original_key || r.song_key || (old && (old.original_key || old.key)) || '';
+  const cpContent = r.chordpro_content || (old && old.chordpro_content) || '';
+  const srcDomain = r.source_domain || (old && old.source_domain) || '';
+  const verified = typeof r.is_verified === 'boolean' ? r.is_verified : Boolean(old && old.is_verified);
+  return {
+    ...(old || {}),
+    id: r.id,
+    title: r.title,
+    artist: r.artist,
+    key: origKey,
+    original_key: origKey,
+    chordpro_content: cpContent,
+    source_domain: srcDomain,
+    is_verified: verified,
+    text: r.content,
+    src: r.src,
+    shift: r.shift,
+    images: r.images || [],
+    savedAt: Date.parse(r.updated_at)
+  };
+};
 const fromP = r => ({
   id: r.id,
   name: r.name,
@@ -4983,7 +5067,10 @@ async function syncAll() {
       }
     }
     if (up.length) {
-      const { data, error } = await sb.from('songs').upsert(up.map(s => toRow(s, f.has(s.id))), { onConflict: 'user_id,id' }).select('id,updated_at');
+      let { data, error } = await sb.from('songs').upsert(up.map(s => toRow(s, f.has(s.id))), { onConflict: 'user_id,id' }).select('id,updated_at');
+      if (error && /column .* does not exist|Could not find the .* column|PGRST204/i.test(String(error.message || error.code || ''))) {
+        ({ data, error } = await sb.from('songs').upsert(up.map(s => toRowLegacy(s, f.has(s.id))), { onConflict: 'user_id,id' }).select('id,updated_at'));
+      }
       if (error) throw error;
       for (const r of data) {
         const s = up.find(x => x.id === r.id);
@@ -6302,11 +6389,18 @@ function upsertSongToBookForModules(song) {
   if (!song || !song.title) return song;
   const book = loadBook();
   const id = song.id || ('s-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6));
+  const origKey = song.original_key || detectKey(song.text) || (song.parsedChordSheet && (song.parsedChordSheet.original_key || song.parsedChordSheet.originalKey)) || song.key || '';
+  const cpContent = song.chordpro_content || (song.parsedChordSheet && (song.parsedChordSheet.chordpro_content || song.parsedChordSheet.chordPro)) || '';
+  const srcDomain = song.source_domain || (song.parsedChordSheet && song.parsedChordSheet.source_domain) || (window.MellowChordParser ? window.MellowChordParser.detectSourceDomain(song) : 'unknown');
   const normalized = {
     id,
     title: song.title,
     artist: song.artist || '',
-    key: detectKey(song.text) || (song.parsedChordSheet && song.parsedChordSheet.originalKey) || song.key || '',
+    key: origKey,
+    original_key: origKey,
+    chordpro_content: cpContent,
+    source_domain: srcDomain,
+    is_verified: Boolean(song.is_verified || (song.parsedChordSheet && song.parsedChordSheet.is_verified)),
     text: song.text || '',
     images: Array.isArray(song.images) ? song.images : [],
     sections: Array.isArray(song.sections) ? song.sections : [],
@@ -6325,6 +6419,14 @@ function upsertSongToBookForModules(song) {
   renderSongbook();
   if (cloudOn()) syncAll();
   return idx >= 0 ? book[idx] : normalized;
+}
+
+if (window.MellowChordParser && typeof window.MellowChordParser.configureBackend === 'function') {
+  window.MellowChordParser.configureBackend({
+    getSupabase: () => sb,
+    getCurrentUser: () => getCurrentUserSummary(),
+    isCloudActive: () => cloudOn()
+  });
 }
 
 // 1) Setlist Songbook Picker & Online Auto-Add
@@ -6394,7 +6496,7 @@ function openSetlistSongPicker(playlist) {
   });
 }
 
-// 2) Image-to-Text Chord Parser & Dual View
+// 2) Image-to-Text Chord Parser, ChordTextViewer & Verify/Teach Calibration UI
 if (window.MellowChordDualView && typeof window.MellowChordDualView.createDualView === 'function') {
   chordDualViewInstance = window.MellowChordDualView.createDualView({
     onModeChange: (mode) => {
@@ -6418,30 +6520,71 @@ if (window.MellowChordDualView && typeof window.MellowChordDualView.createDualVi
     },
     onParsedSaved: (songId, parsedData) => {
       if (!parsedData) return;
-      if (current && current.song && current.song.id === songId) {
+      const origKey = parsedData.original_key || parsedData.originalKey || '';
+      const cpContent = parsedData.chordpro_content || parsedData.chordPro || '';
+      const srcDomain = parsedData.source_domain || parsedData.sourceDomain || 'chordtabs';
+      const verified = Boolean(parsedData.is_verified);
+
+      if (current && current.song && (!songId || current.song.id === songId)) {
         current.song.parsedChordSheet = parsedData;
-        if (!current.song.key && parsedData.originalKey) {
-          current.song.key = parsedData.originalKey;
-        }
+        current.song.original_key = origKey || current.song.original_key || current.song.key || '';
+        current.song.chordpro_content = cpContent;
+        current.song.source_domain = srcDomain;
+        current.song.is_verified = verified;
+        if (origKey) current.song.key = origKey;
       }
+
       const book = loadBook();
       const idx = book.findIndex(s => s.id === songId);
       if (idx >= 0) {
         book[idx] = {
           ...book[idx],
           parsedChordSheet: parsedData,
-          key: book[idx].key || parsedData.originalKey || ''
+          key: origKey || book[idx].key || '',
+          original_key: origKey || book[idx].original_key || book[idx].key || '',
+          chordpro_content: cpContent,
+          source_domain: srcDomain,
+          is_verified: verified
         };
         saveBook(book);
         renderSongbook();
         if (cloudOn()) syncAll();
+      } else if (verified && current && current.song) {
+        // User verified & taught an unsaved online chord -> save to Songbook automatically
+        upsertSongToBookForModules({
+          ...current.song,
+          id: current.song.id || songId,
+          key: origKey || current.song.key || 'C',
+          original_key: origKey || current.song.key || 'C',
+          chordpro_content: cpContent,
+          source_domain: srcDomain,
+          is_verified: true,
+          parsedChordSheet: parsedData
+        });
       }
-      if (current && current.song && current.song.id === songId) {
+
+      if (current && current.song && (!songId || current.song.id === songId)) {
         renderSong(false);
       }
     },
     onChordClick: (chordName) => {
       if (typeof showChordPopup === 'function') showChordPopup(chordName);
+    },
+    resolveImageUrls: async (song) => {
+      if (!song || !Array.isArray(song.images) || !song.images.length) return [];
+      if (galUrls && galUrls.length && current && current.song && current.song.id === song.id) {
+        return galUrls.slice();
+      }
+      const resolved = [];
+      for (const id of song.images) {
+        if (typeof id === 'string' && /^(https?:|data:|blob:)/i.test(id)) {
+          resolved.push(id);
+        } else {
+          const b = await getImg(id);
+          if (b instanceof Blob) resolved.push(URL.createObjectURL(b));
+        }
+      }
+      return resolved;
     },
     getImageBlob: async (song) => {
       if (!song || !Array.isArray(song.images) || !song.images.length) {
@@ -6809,6 +6952,9 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
       renderSheet(tmp, txt, sh || 0, preferFlat(k, sh || 0));
       return tmp.innerHTML;
     },
+    onChordClick: (ch) => {
+      if (typeof showChordPopup === 'function') showChordPopup(ch);
+    },
     onAddSongRequest: openLiveRoomSongPicker,
     onOpenLightbox: (imgUrl) => {
       if (typeof openLightbox === 'function') openLightbox(imgUrl);
@@ -6823,6 +6969,9 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
 window.__mellowModules = {
   setlistPicker: setlistPickerInstance,
   chordDualView: chordDualViewInstance,
+  chordParser: window.MellowChordParser || null,
+  chordTextViewer: window.MellowChordTextViewer || null,
+  chordVerifyModal: window.MellowChordVerifyModal || null,
   midi: midiControllerInstance,
   friends: friendsUIInstance,
   friendsService: friendsServiceInstance,
