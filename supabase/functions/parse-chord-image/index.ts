@@ -201,20 +201,24 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json();
-    const imageBase64 = String(body.imageBase64 || '').replace(/^data:[^;]+;base64,/, '');
-    const mimeType = String(body.mimeType || 'image/png');
-    const sourceDomain = String(body.sourceDomain || 'chordtabs').trim().toLowerCase() || 'chordtabs';
+    const imageBase64 = String(body.imageBase64 || body.image_base64 || '').replace(/^data:[^;]+;base64,/, '');
+    const mimeType = String(body.mimeType || body.mime_type || 'image/png');
+    const sourceDomain = String(body.sourceDomain || body.source_domain || 'chordtabs').trim().toLowerCase() || 'chordtabs';
 
     if (!imageBase64) {
-      return new Response(JSON.stringify({ error: 'Missing imageBase64' }), {
+      return new Response(JSON.stringify({ error: 'Missing imageBase64 or image_base64' }), {
         status: 400,
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
       });
     }
 
     // 1) Fetch learned rules & verified few-shot examples from public.chord_parser_memory
-    let dbRules: CorrectionRule[] = Array.isArray(body.correctionRules) ? body.correctionRules : [];
-    let dbExamples: VerifiedExample[] = Array.isArray(body.verifiedExamples) ? body.verifiedExamples : [];
+    let dbRules: CorrectionRule[] = Array.isArray(body.correctionRules || body.correction_rules)
+      ? (body.correctionRules || body.correction_rules)
+      : [];
+    let dbExamples: VerifiedExample[] = Array.isArray(body.verifiedExamples || body.verified_examples)
+      ? (body.verifiedExamples || body.verified_examples)
+      : [];
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
@@ -287,18 +291,24 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const payload = {
+      title: String(parsed.title || ''),
+      artist: String(parsed.artist || ''),
+      original_key: String(parsed.original_key || ''),
+      chordpro_content: String(parsed.chordpro_content || ''),
+      source_domain: sourceDomain,
+      provider,
+      memory_applied: {
+        rules_count: dbRules.length,
+        examples_count: Math.min(3, dbExamples.length)
+      }
+    };
+
     return new Response(
       JSON.stringify({
-        title: String(parsed.title || ''),
-        artist: String(parsed.artist || ''),
-        original_key: String(parsed.original_key || ''),
-        chordpro_content: String(parsed.chordpro_content || ''),
-        source_domain: sourceDomain,
-        provider,
-        memory_applied: {
-          rules_count: dbRules.length,
-          examples_count: Math.min(3, dbExamples.length)
-        }
+        ...payload,
+        success: true,
+        data: payload
       }),
       { status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
     );

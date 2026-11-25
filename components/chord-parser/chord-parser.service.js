@@ -1071,17 +1071,41 @@
     };
   }
 
+  const BUILTIN_OCR_CORRECTIONS = [
+    { wrong: '6 ทาล ]7', right: 'Gmaj7' },
+    { wrong: '6 ทาล 7', right: 'Gmaj7' },
+    { wrong: '6 ทาล]7', right: 'Gmaj7' },
+    { wrong: '6ทาล]7', right: 'Gmaj7' },
+    { wrong: '8 ทา 7', right: 'Bmaj7' },
+    { wrong: '8ทา7', right: 'Bmaj7' },
+    { wrong: 'คิเทา 7 0', right: 'Cmaj7' },
+    { wrong: 'คิเทา 7', right: 'Cmaj7' },
+    { wrong: 'คิเทา7', right: 'Cmaj7' },
+    { wrong: '0 รนร 4', right: 'Dsus4' },
+    { wrong: '0 รนร 2', right: 'Dsus2' },
+    { wrong: '0รนร4', right: 'Dsus4' },
+    { wrong: '0รนร2', right: 'Dsus2' },
+    { wrong: '0 รนร', right: 'Dsus' },
+    { wrong: '05 นร 2 87', right: 'Dsus2 B7' },
+    { wrong: '05 นร 2', right: 'Dsus2' },
+    { wrong: 'อ๒กา 7', right: 'Emaj7' },
+    { wrong: 'โทรไหน', right: 'Intro' },
+    { wrong: 'Am7 0', right: 'Am7' },
+    { wrong: '(Fmaj7z)', right: 'Fmaj7' },
+    { wrong: 'Fmaj7z', right: 'Fmaj7' },
+    { wrong: 'อย าก', right: 'อยาก' }
+  ];
+
   /**
    * Applies learned correction rules to a parsed ChordPro text (used as post-processor
    * for offline/fallback OCR and safety guard against known recurring OCR errors).
    */
   function applyLearnedCorrectionRules(chordProText, correctionRules) {
-    if (!chordProText || !Array.isArray(correctionRules) || !correctionRules.length) {
-      return chordProText || '';
-    }
+    if (!chordProText) return '';
     let out = String(chordProText);
-    for (let i = 0; i < correctionRules.length; i++) {
-      const rule = correctionRules[i];
+    const combinedRules = BUILTIN_OCR_CORRECTIONS.concat(Array.isArray(correctionRules) ? correctionRules : []);
+    for (let i = 0; i < combinedRules.length; i++) {
+      const rule = combinedRules[i];
       if (!rule || !rule.wrong || !rule.right || rule.wrong === rule.right) continue;
       if (out.indexOf(rule.wrong) !== -1) {
         out = out.split(rule.wrong).join(rule.right);
@@ -1384,16 +1408,28 @@
         const res = await sb.functions.invoke('parse-chord-image', {
           body: {
             imageBase64: base64,
+            image_base64: base64,
             mimeType: imageBlob.type || 'image/png',
+            mime_type: imageBlob.type || 'image/png',
             sourceDomain: context.sourceDomain,
+            source_domain: context.sourceDomain,
+            song_title: (context.song && context.song.title) || '',
+            artist: (context.song && context.song.artist) || '',
             correctionRules: context.memory.correctionRules,
             verifiedExamples: context.memory.verifiedExamples
           }
         });
-        if (!res.error && res.data && res.data.chordpro_content) {
-          return res.data;
+        if (res.error) {
+          console.warn('[Vision AI Edge Function Warning]', res.error);
+        }
+        if (!res.error && res.data) {
+          const payload = (res.data.data && res.data.data.chordpro_content) ? res.data.data : res.data;
+          if (payload && payload.chordpro_content) {
+            return payload;
+          }
         }
       } catch (_edgeErr) {
+        console.warn('[Vision AI Network/Edge exception]', _edgeErr);
         // Fallback smoothly to local Spatial OCR + ChordPro converter
       }
     }
