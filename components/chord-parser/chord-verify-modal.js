@@ -141,8 +141,8 @@
     const provSelect = el('select', 'cvm-select');
     provSelect.id = 'cvmVisionProviderSelect';
     [
-      { v: 'auto', t: 'Auto (Supabase Edge Vision AI - Gemini 3.8 Flash Low)' },
-      { v: 'gemini', t: 'Google Gemini 3.8 Flash (Low Thinking / Ultra-fast)' },
+      { v: 'auto', t: 'Auto (Google Gemini 3.8 Flash / Edge Function)' },
+      { v: 'gemini', t: 'Google Gemini 3.8 Flash (Direct Browser API)' },
       { v: 'openai', t: 'OpenAI Vision API (gpt-4o-mini / gpt-4o)' },
       { v: 'ocr', t: 'Offline Spatial OCR + Learned Memory Rules' }
     ].forEach(function (opt) {
@@ -154,11 +154,11 @@
     provWrap.appendChild(provSelect);
 
     const keyWrap = el('div', 'cvm-field cvm-grow');
-    keyWrap.appendChild(el('label', 'cvm-label', 'API Key (เฉพาะโหมดเรียก Gemini / OpenAI ตรงจากเบราว์เซอร์)'));
+    keyWrap.appendChild(el('label', 'cvm-label', 'Google Gemini API Key (ใส่เพื่อใช้ Gemini 3.8 Flash แกะตรงจากภาพ)'));
     const apiKeyInp = el('input', 'cvm-input');
     apiKeyInp.type = 'password';
     apiKeyInp.id = 'cvmVisionApiKeyInput';
-    apiKeyInp.placeholder = 'เว้นว่างได้หากใช้ Supabase Edge Function หรือโหมด Auto';
+    apiKeyInp.placeholder = 'วาง Gemini API Key ที่นี่ (ขึ้นต้นด้วย AIza...)';
     apiKeyInp.value = visionCfg.apiKey || '';
     keyWrap.appendChild(apiKeyInp);
 
@@ -175,10 +175,16 @@
     const saveCfgBtn = el('button', 'cvm-btn cvm-btn-secondary', '💾 บันทึกตั้งค่า AI');
     saveCfgBtn.type = 'button';
     saveCfgBtn.addEventListener('click', function () {
+      const enteredKey = apiKeyInp.value.trim();
+      let chosenProv = provSelect.value;
+      if (enteredKey && chosenProv === 'auto') {
+        chosenProv = enteredKey.startsWith('sk-') ? 'openai' : 'gemini';
+        provSelect.value = chosenProv;
+      }
       Parser.setVisionConfig({
-        provider: provSelect.value,
-        apiKey: apiKeyInp.value.trim(),
-        model: visionCfg.model || 'gemini-3.8-flash',
+        provider: chosenProv,
+        apiKey: enteredKey,
+        model: visionCfg.model || (chosenProv === 'gemini' ? 'gemini-3.8-flash' : 'gpt-4o-mini'),
         autoParseOnOpen: autoParseInp.checked
       });
       onToast('บันทึกการตั้งค่า Vision AI เรียบร้อยแล้ว ✔', false);
@@ -585,12 +591,20 @@
         handleEditorInput();
 
         const applied = result.memoryApplied || { rulesCount: 0, examplesCount: 0 };
-        const summaryMsg =
-          '✅ ลองแกะใหม่สำเร็จ! ใช้ความจำจาก "' + domainSelect.value +
-          '" (กฎแก้คำผิด ' + applied.rulesCount + ' ข้อ + ตัวอย่าง Verified ' +
-          applied.examplesCount + ' รายการ)';
-        showBanner(summaryMsg, 'success');
-        onToast(summaryMsg, false);
+        if (result.source === 'fallback-ocr' || result.isFallbackOcr) {
+          const warnMsg =
+            '⚠️ ฟังก์ชัน Edge ยังไม่เปิดใช้งาน และยังไม่ได้ใส่ Gemini API Key ในระบบ (กำลังใช้ Offline OCR สำรอง + ล้างอักขระเพี้ยนอัตโนมัติ)\n' +
+            '👉 กดที่ปุ่ม "⚙️ Vision AI & Prompt" ด้านบนขวา แล้วใส่ Google Gemini API Key เพื่อให้ระบบใช้โมเดล Gemini 3.8 Flash แกะตรงจากภาพได้อย่างแม่นยำ 100%!';
+          showBanner(warnMsg, 'error');
+          onToast('⚠️ กำลังใช้ Offline OCR สำรอง — แนะนำใส่ Gemini API Key ใน ⚙️ Vision AI & Prompt เพื่อความแม่นยำสูงสุด', true);
+        } else {
+          const summaryMsg =
+            '✅ ลองแกะใหม่สำเร็จด้วย Gemini 3.8 Flash! (ใช้ความจำจาก "' + domainSelect.value +
+            '" กฎแก้คำผิด ' + applied.rulesCount + ' ข้อ + ตัวอย่าง Verified ' +
+            applied.examplesCount + ' รายการ)';
+          showBanner(summaryMsg, 'success');
+          onToast(summaryMsg, false);
+        }
       } catch (err) {
         const errMsg = (err && err.message) ? err.message : 'ลองแกะใหม่ไม่สำเร็จ';
         showBanner('⚠️ ' + errMsg, 'error');

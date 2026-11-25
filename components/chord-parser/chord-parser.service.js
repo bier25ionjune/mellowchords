@@ -196,12 +196,12 @@
       .replace(/[–—]/g, '-')
       .replace(/[／]/g, '/');
 
-    t = t.replace(/^[\|\[\{\.,;:*~•·(]+/, '').replace(/[\|\]\}\.,;:*~•·)]+$/, '');
+    t = t.replace(/^[_\|\[\{\.,;:*~•·(/\'\"“”‘’\^\\–—]+/, '').replace(/[_\|\]\}\.,;:*~•·)/\'\"“”‘’\^\\–—]+$/, '');
     if (t.startsWith('(') && t.endsWith(')') && !t.slice(1, -1).includes('(')) {
       const inner = t.slice(1, -1).trim();
       if (inner) t = inner;
     }
-    t = t.replace(/^[\|\[\{\.,;:*~•·(]+/, '').replace(/[\|\]\}\.,;:*~•·)]+$/, '');
+    t = t.replace(/^[_\|\[\{\.,;:*~•·(/\'\"“”‘’\^\\–—]+/, '').replace(/[_\|\]\}\.,;:*~•·)/\'\"“”‘’\^\\–—]+$/, '');
 
     if (!t) return '';
     if (isChordToken(t)) return t;
@@ -210,6 +210,22 @@
 
     if (/^[a-g]#/.test(candidate)) {
       candidate = candidate[0].toUpperCase() + candidate.slice(1);
+    }
+
+    if (/^Cc$/i.test(candidate)) {
+      candidate = 'C';
+    }
+
+    if (/^Fn$/i.test(candidate)) {
+      candidate = 'F';
+    }
+
+    if (candidate === '๑ท' || candidate === '๑m' || candidate === 'Gท') {
+      candidate = 'Gm';
+    }
+
+    if (candidate === '87') {
+      candidate = 'B7';
     }
 
     // Fix OCR "rn" misread for "m" (Arn -> Am, F#rn -> F#m, Crnaj7 -> Cmaj7)
@@ -443,6 +459,19 @@
     { pattern: /(?:อินโทร)/gi, replace: 'Intro' },
 
     // Complex chords & fixes
+    { pattern: /(?:\/[ \t]*[”"'\^][ \t]*\/)/gi, replace: '/ F /' },
+    { pattern: /\bIntro[ \t]*\/[ \t]*[”"'\^][ \t]*\//gi, replace: 'Intro / F /' },
+    { pattern: /\bFn[ \t]*['"”’‘]?\b/gi, replace: 'F' },
+    { pattern: /_([A-G][#b]?(?:m|maj|min|sus|dim|add|aug|7|\d+)?)\b/g, replace: '$1' },
+    { pattern: /(?:๑[ \t]*ท|๑ท)(?=[ \t\r\n/|\]]|$)/g, replace: 'Gm' },
+    { pattern: /\b๑m\b/g, replace: 'Gm' },
+    { pattern: /\bGท\b/g, replace: 'Gm' },
+    { pattern: /\bGm[ \t]+(?:6[ \t]*0|[o0]|Cc)\b/gi, replace: 'Gm C' },
+    { pattern: /\b6[ \t]*0\b/g, replace: 'C' },
+    { pattern: /\bCc[ \t]+[\u0E01-\u0E2E]\b/gi, replace: 'C' },
+    { pattern: /\bCc\b/g, replace: 'C' },
+    { pattern: /\bCC\b/g, replace: 'C' },
+    { pattern: /\b([A-G][#b]?(?:m|maj|min|sus|dim|add|aug|7)?)[ \t]+[o0]\b/g, replace: '$1 C' },
     { pattern: /(?:F#rn7b5|F#m7b5z)/gi, replace: 'F#m7b5' },
     { pattern: /(?:Fmaj7z)/gi, replace: 'Fmaj7' },
     { pattern: /\((Fmaj7)\)D\b/g, replace: 'Fmaj7 D' },
@@ -1584,15 +1613,25 @@
     if (!(typeof Blob !== 'undefined' && imageBlob instanceof Blob)) return null;
 
     // 2) Direct Gemini / OpenAI Vision API if user configured an API key
-    if ((cfg.provider === 'gemini' || cfg.provider === 'openai') && cfg.apiKey) {
-      context.onProgress('กำลังส่งภาพให้ Vision AI แกะเป็น ChordPro...', 45);
+    const trimmedKey = (cfg.apiKey || '').trim();
+    const effectiveProvider = (cfg.provider === 'auto' || !cfg.provider)
+      ? (trimmedKey.startsWith('sk-') ? 'openai' : (trimmedKey ? 'gemini' : 'auto'))
+      : cfg.provider;
+
+    if (trimmedKey && (effectiveProvider === 'gemini' || effectiveProvider === 'openai')) {
+      const activeCfg = Object.assign({}, cfg, {
+        provider: effectiveProvider,
+        apiKey: trimmedKey,
+        model: cfg.model || (effectiveProvider === 'gemini' ? 'gemini-3.8-flash' : 'gpt-4o-mini')
+      });
+      context.onProgress('กำลังส่งภาพให้ Vision AI (' + (effectiveProvider === 'gemini' ? 'Gemini 3.8 Flash' : 'OpenAI') + ') แกะเป็น ChordPro...', 45);
       const base64 = await blobToBase64(imageBlob);
-      return await invokeDirectVisionApi(cfg, context.systemPrompt, base64, imageBlob.type || 'image/png');
+      return await invokeDirectVisionApi(activeCfg, context.systemPrompt, base64, imageBlob.type || 'image/png');
     }
 
-    // 3) Supabase Edge Function `parse-chord-image` when cloud is connected
+    // 3) Supabase Edge Function `parse-chord-image`
     const sb = backendDeps.getSupabase();
-    if (sb && sb.functions && typeof sb.functions.invoke === 'function' && backendDeps.isCloudActive()) {
+    if (sb && sb.functions && typeof sb.functions.invoke === 'function') {
       try {
         context.onProgress('กำลังส่งภาพไปยัง Vision AI (Edge Function)...', 40);
         const base64 = await blobToBase64(imageBlob);
@@ -2388,6 +2427,7 @@
             chords: chords,
             lineCount: cleanedCp.split('\n').length,
             source: 'vision-ai',
+            isFallbackOcr: false,
             systemPromptUsed: systemPrompt,
             memoryApplied: {
               rulesCount: memory.correctionRules.length,
@@ -2420,8 +2460,9 @@
     onProgress('กำลังแปลงเป็น ChordPro และตรวจด้วยความจำระบบ...', 94);
     const aligned = alignOcrDataToChordSheet(ocrResult);
     const rawCp = aligned.chordpro_content || aligned.chordPro || '';
-    const postLearnedCp = applyLearnedCorrectionRules(rawCp, memory.correctionRules);
-    const postMono = postLearnedCp !== rawCp ? convertChordProToMonospace(postLearnedCp) : aligned.alignedText;
+    const cleanedCp = cleanOcrArtifacts(rawCp);
+    const postLearnedCp = applyLearnedCorrectionRules(cleanedCp, memory.correctionRules);
+    const postMono = convertChordProToMonospace(postLearnedCp);
     const finalChords = uniqueChords(extractChordsFromText(postLearnedCp));
     const finalKey = aligned.originalKey || detectOriginalKey(finalChords, postLearnedCp) || 'C';
 
@@ -2441,7 +2482,8 @@
       rawAiOutput: rawCp,
       chords: finalChords,
       lineCount: postLearnedCp ? postLearnedCp.split('\n').length : 0,
-      source: aligned.source,
+      source: 'fallback-ocr',
+      isFallbackOcr: true,
       systemPromptUsed: systemPrompt,
       memoryApplied: {
         rulesCount: memory.correctionRules.length,
