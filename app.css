@@ -2524,5 +2524,118 @@ button,
   }
 }
 
+/* ==============================================================================
+ * 16) User Guide & Version Notice Styles
+ * ============================================================================== */
+.userGuideBanner {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.16), var(--panel2));
+  border: 1.5px solid #3b82f6;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.noticeBanner {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.16), var(--panel2));
+  border: 1.5px solid #10b981;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.guideSection {
+  margin-bottom: 20px;
+}
+
+.guideSectionTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 4px;
+}
+
+.guideGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.guideCard {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.guideBtnTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: #f4f4f5;
+  font-size: 0.9rem;
+}
+
+.guideBtnBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: rgba(245, 158, 11, 0.16);
+  color: var(--accent);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.guideBtnDesc {
+  font-size: 0.82rem;
+  color: #a1a1aa;
+  line-height: 1.45;
+}
+
+.noticeList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+.noticeItem {
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 3px solid var(--accent);
+  padding: 8px 12px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.noticeItemTitle {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #fafafa;
+  margin-bottom: 3px;
+}
+
+.noticeItemDesc {
+  font-size: 0.82rem;
+  color: #a1a1aa;
+  line-height: 1.4;
+}
+
 
 

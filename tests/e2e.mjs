@@ -1180,11 +1180,45 @@ async function run() {
       console.log('  PASS: Precision ChordPro, ChordTextViewer (+/-12, Slash/Complex, #/b), Verify & Teach Memory, Dynamic Re-parse & Live Room verified.');
     }
 
+    // -------------------------------------------------------------------------
+    // Test 16: User Guide & Version Release Notice Modals
+    // -------------------------------------------------------------------------
+    console.log('[Test 16] User Guide & Version Release Notice Modals (#userGuideNavBtn, #noticeNavBtn, openAcct banners)...');
+    {
+      const ugCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      const ugPage = await ugCtx.newPage();
+      await ugPage.goto(url, { waitUntil: 'domcontentloaded' });
+      await ugPage.waitForSelector('#hdr');
+
+      // 16a) Click #userGuideNavBtn in header -> Verify modal opens with sections & button descriptions
+      await ugPage.click('#userGuideNavBtn');
+      await ugPage.waitForSelector('.modal .guideSection', { timeout: 3000 });
+      const guideSections = await ugPage.locator('.modal .guideSectionTitle').count();
+      assert(guideSections >= 3, `Expected at least 3 guide sections, got: ${guideSections}`);
+      const hasCalibrationBadge = await ugPage.evaluate(() => document.body.innerText.includes('🎯 เทียบภาพ/สอนระบบ'));
+      assert(hasCalibrationBadge, 'Expected user guide to describe 🎯 เทียบภาพ/สอนระบบ');
+      await ugPage.click('.modal button:has-text("✕ ปิดคู่มือ")');
+
+      // 16b) Click #noticeNavBtn in header -> Verify Version Notice modal opens with v2.6.0
+      await ugPage.click('#noticeNavBtn');
+      await ugPage.waitForSelector('.modal .noticeItem', { timeout: 3000 });
+      const noticeTitle = await ugPage.evaluate(() => document.querySelector('.modal h3')?.textContent || '');
+      assert(noticeTitle.includes('Gemini 3.8 Flash'), `Expected notice title with Gemini 3.8 Flash, got: ${noticeTitle}`);
+      await ugPage.click('.modal button:has-text("✓ รับทราบและเริ่มใช้งาน")');
+
+      // 16c) Open Account / Login modal -> Verify both Notice and User Guide banners exist
+      await ugPage.click('#acct');
+      await ugPage.waitForSelector('.modal .noticeBanner', { timeout: 3000 });
+      await ugPage.waitForSelector('.modal .userGuideBanner', { timeout: 3000 });
+      console.log('  PASS: User Guide & Version Release Notice Modals and Login banners verified.');
+      await ugCtx.close();
+    }
+
     assert(pageErrors.length === 0, `Page errors occurred: ${pageErrors.join('; ')}`);
     assert(consoleErrors.length === 0, `Console errors occurred: ${consoleErrors.join('; ')}`);
     assert(softFailures.length === 0, `Subtest failures: ${softFailures.join('; ')}`);
 
-    console.log('\n✅ ALL 15 E2E, RBAC, FRIENDS/GROUPS, LIVE ROOM, MIDI, IPAD STAGE & PRECISION CHORD PARSER TESTS PASSED!');
+    console.log('\n✅ ALL 16 E2E, RBAC, FRIENDS/GROUPS, LIVE ROOM, MIDI, IPAD STAGE, PRECISION CHORD PARSER & USER GUIDE TESTS PASSED!');
   } finally {
     await browser.close();
     server.close();

@@ -4493,13 +4493,268 @@ if ($('#adminSearchClearBtn')) {
     renderAdminUserList();
   };
 }
-$$('#adminFilterBar [data-admin-filter]').forEach(b => {
-  b.onclick = () => {
-    adminFilter = b.dataset.adminFilter || 'all';
-    renderAdminUserList();
-  };
-});
+/* ==============================================================================
+ * 12.5) User Guide & Version Release Notice System
+ * ============================================================================== */
+const CURRENT_VERSION = 'v2.6.0';
+const RELEASE_DATE = '25 พ.ย. 2026';
 
+const RELEASE_NOTICES = [
+  {
+    version: 'v2.6.0',
+    date: '25 พ.ย. 2026',
+    title: 'อัปเกรด Vision AI (Gemini 3.8 Flash Low) + Precision ChordPro & Auto-Parse',
+    items: [
+      {
+        title: '⚡ Google Gemini 3.8 Flash (Low Thinking Mode)',
+        desc: 'ประมวลผลแกะรูปภาพคอร์ดแท็บได้เร็วขึ้นระดับเสี้ยววินาที ประหยัด Token สูงสุด ลดต้นทุนและ Latency ลงกว่า 40–50%'
+      },
+      {
+        title: '🎯 ระบบ Side-by-Side Verify & Teach (เทียบภาพ/สอนระบบ)',
+        desc: 'หน้าจอตรวจแก้เทียบภาพต้นฉบับทางซ้ายกับกล่อง ChordPro ทางขวา พร้อมระบบ Diff Learning บันทึกคำที่มักแกะผิดลง chord_parser_memory'
+      },
+      {
+        title: '🎼 ChordTextViewer วางคอร์ดลอยเหนือพยางค์แม่นยำ',
+        desc: 'แสดงคอร์ดลอยตรงพยางค์ภาษาไทย 100% ด้วย CSS Inline-flex ไม่ใช้การนับ Spacebar พร้อมปรับคีย์ ±12 ครึ่งเสียง ทั้งคอร์ด Slash และคอร์ดซับซ้อน'
+      },
+      {
+        title: '⚡ Auto-Parse on Open (แกะคอร์ดอัตโนมัติ)',
+        desc: 'เปิดเพลงที่มีรูปภาพปุ๊บ ระบบสั่ง AI ประมวลผลในพื้นหลังให้อัตโนมัติทันที พร้อมสลับดูคอร์ดตัวหนังสือที่ปรับคีย์ได้ทันที'
+      },
+      {
+        title: '📖 User Guide & Version Notice',
+        desc: 'เพิ่มคู่มือแนะนำปุ่มฟังก์ชันสำคัญบนหน้า Login และ Header พร้อมระบบแจ้งเตือนอัปเดตเวอร์ชันใหม่ทุกครั้ง'
+      }
+    ]
+  },
+  {
+    version: 'v2.5.0',
+    date: '24 พ.ย. 2026',
+    title: 'ระบบ Live Room ซิงก์คอร์ดเรียลไทม์ & iPad Stage Mode & MIDI Footswitch',
+    items: [
+      {
+        title: '🎤 Live Room',
+        desc: 'ห้องเล่นสดซิงก์คอร์ดและคีย์เพลงแบบเรียลไทม์ทั้งวง พร้อมระบบเชิญเพื่อนเข้าห้องซ้อมด้วยคลิกเดียว'
+      },
+      {
+        title: '🎹 MIDI Footswitch',
+        desc: 'รองรับการเชื่อมต่อแป้นเหยียบ MIDI แป้นคีย์บอร์ด หรือตัวจำลองสัญญาณ เพื่อเปลี่ยนเพลงและเลื่อนหน้าคอร์ด'
+      },
+      {
+        title: '📱 iPad Stage & Focus Mode',
+        desc: 'โหมดเวทีขยายคอร์ดเต็มหน้าจอ ซ่อนเมนูด้านข้าง และมีปุ่มค้นหาเพลงต่อไปบนเวทีได้ทันที'
+      }
+    ]
+  }
+];
+
+function openNoticeModal(force) {
+  modal(`📢 ประกาศการอัปเดตระบบ — ${CURRENT_VERSION}`, (box, close) => {
+    const wrap = mk('div');
+    const headerBanner = mk('div', 'noticeBanner');
+    headerBanner.innerHTML = `
+      <div>
+        <div style="font-weight:700; font-size:1.05rem; color:#10b981; margin-bottom:2px">🚀 Mellow Chords ${escapeHtml(CURRENT_VERSION)}</div>
+        <div style="font-size:0.82rem; color:#a1a1aa">อัปเดตล่าสุดเมื่อ ${escapeHtml(RELEASE_DATE)}</div>
+      </div>
+      <span class="guideBtnBadge">ล่าสุด</span>
+    `;
+    wrap.appendChild(headerBanner);
+
+    const titleEl = mk('h3');
+    titleEl.style.margin = '14px 0 10px';
+    titleEl.style.fontSize = '1rem';
+    titleEl.textContent = RELEASE_NOTICES[0].title;
+    wrap.appendChild(titleEl);
+
+    const list = mk('div', 'noticeList');
+    RELEASE_NOTICES[0].items.forEach(it => {
+      const card = mk('div', 'noticeItem');
+      card.innerHTML = `
+        <div class="noticeItemTitle">${escapeHtml(it.title)}</div>
+        <div class="noticeItemDesc">${escapeHtml(it.desc)}</div>
+      `;
+      list.appendChild(card);
+    });
+    wrap.appendChild(list);
+
+    const btnRow = mk('div', 'row');
+    btnRow.style.marginTop = '16px';
+    btnRow.style.justifyContent = 'space-between';
+
+    const guideBtn = btn('📖 เปิดคู่มือการใช้งาน (User Guide)', () => {
+      close();
+      openUserGuideModal();
+    }, 'small secondary');
+
+    const okBtn = btn('✓ รับทราบและเริ่มใช้งาน', () => {
+      LS.set('mellowchords.lastSeenVersion', CURRENT_VERSION);
+      close();
+    }, 'small primary');
+
+    btnRow.append(guideBtn, okBtn);
+    wrap.appendChild(btnRow);
+    box.appendChild(wrap);
+  });
+}
+
+function openUserGuideModal() {
+  modal('📖 คู่มือการใช้งาน & แนะนำปุ่มสำคัญ (User Guide)', (box, close) => {
+    const wrap = mk('div');
+    wrap.style.maxHeight = '72vh';
+    wrap.style.overflowY = 'auto';
+    wrap.style.paddingRight = '4px';
+
+    const intro = mk('p', 'small dim');
+    intro.style.lineHeight = '1.5';
+    intro.style.marginBottom = '16px';
+    intro.textContent = 'Mellow Chords ออกแบบมาเพื่อให้นักดนตรีเปิดคอร์ด แกะเพลง ปรับคีย์ และซิงก์เล่นสดในวงได้อย่างรวดเร็ว ด้านล่างนี้คือคำอธิบายปุ่มสำคัญทั้งหมดที่คุณสามารถใช้งานได้ครับ:';
+    wrap.appendChild(intro);
+
+    const sections = [
+      {
+        title: '🎸 1. ระบบแกะคอร์ดด้วย Vision AI & ตรวจสอบเทียบภาพ',
+        items: [
+          {
+            badge: '🎯 เทียบภาพ/สอนระบบ',
+            name: 'ปุ่มตรวจสอบและสอนระบบ (Side-by-Side Calibration)',
+            desc: 'เปิดหน้าต่างคู่ขนาน: ฝั่งซ้ายคือรูปภาพคอร์ดแท็บต้นฉบับ ฝั่งขวาคือกล่อง ChordPro ที่แก้ไขได้ เพื่อตรวจเช็กตำแหน่งคอร์ดให้ตรงพยางค์ 100%'
+          },
+          {
+            badge: '🔄 ลองแกะใหม่',
+            name: 'ปุ่ม Re-parse ด้วย Vision AI',
+            desc: 'สั่งให้ AI (Gemini 3.8 Flash Low) สแกนอ่านรูปภาพใหม่แบบทันควัน พร้อมนำกฎที่เคยสอนระบบไว้มาช่วยจัดตำแหน่งให้แม่นยำยิ่งขึ้น'
+          },
+          {
+            badge: '🎓 บันทึกและสอนระบบ',
+            name: 'ปุ่มบันทึกการเรียนรู้ (Diff Learning)',
+            desc: 'บันทึกเพลงที่ตรวจแล้ว และดึงคำที่เคยแก้ผิดเข้าสู่ฐานข้อมูล chord_parser_memory เพื่อให้ AI ไม่ทำผิดซ้ำในเพลงต่อๆ ไป'
+          },
+          {
+            badge: '📝 ข้อความคอร์ด / 📷 รูปภาพ',
+            name: 'ปุ่มสลับโหมดการดูคอร์ด (Dual View Mode)',
+            desc: 'สลับระหว่างดูรูปภาพคอร์ดแท็บต้นฉบับ กับดูข้อความคอร์ด ChordPro ที่มีคอร์ดลอยเหนือพยางค์และปรับคีย์ได้'
+          },
+          {
+            badge: '− / + / รีเซ็ต',
+            name: 'ปุ่มปรับคีย์เพลง (Transpose ±12 Semitones)',
+            desc: 'เพิ่มหรือลดคีย์เพลงได้แบบเรียลไทม์ถึง 1 อ็อกเทฟเต็ม รองรับคอร์ดปกติ, Slash Chord (เช่น G/B), และเลือกแสดงแบบ # หรือ b'
+          },
+          {
+            badge: '⚡ Auto-Parse on Open',
+            name: 'สวิตช์แกะคอร์ดอัตโนมัติเมื่อเปิดเพลง',
+            desc: 'เมื่อเปิดเพลงที่เป็นรูปภาพ ระบบจะสั่ง AI ประมวลผลในพื้นหลังให้อัตโนมัติทันที สะดวกโดยไม่ต้องกดปุ่มเอง'
+          }
+        ]
+      },
+      {
+        title: '🎤 2. ระบบห้องซ้อมสด & วงดนตรี (Live Room & Band)',
+        items: [
+          {
+            badge: '🎤 Live',
+            name: 'ปุ่มเข้าห้อง Live Room',
+            desc: 'ห้องแสดงสดและซ้อมดนตรีแบบเรียลไทม์ หัวหน้าห้องเปลี่ยนเพลงหรือปรับคีย์ สมาชิกทุกคนในห้องจะเปลี่ยนตามทันที'
+          },
+          {
+            badge: '👥 เพื่อน/วง',
+            name: 'ปุ่มจัดการเพื่อนและวงดนตรี (Friends & Band Groups)',
+            desc: 'ค้นหาเพื่อนนักดนตรี สร้างกลุ่มวงดนตรี และกดชวนสมาชิกทั้งวงเข้าห้อง Live Room ได้ในคลิกเดียว'
+          },
+          {
+            badge: '📱 โหมดเวที',
+            name: 'ปุ่ม iPad Stage & Focus Mode',
+            desc: 'ขยายคอร์ดเต็มหน้าจอ ซ่อนแถบเครื่องมือรกตา เหมาะสำหรับวางบนขาตั้งโน้ต พร้อมปุ่มค้นหาเพลงถัดไปได้อย่างรวดเร็ว'
+          },
+          {
+            badge: '⏱️ เมโทรนอม / BPM',
+            name: 'ปุ่มเครื่องเคาะจังหวะ (Metronome)',
+            desc: 'เปิดเสียงเคาะจังหวะตามความเร็ว BPM ที่บันทึกไว้ในเพลงหรือเซ็ตลิสต์'
+          },
+          {
+            badge: '🎹 MIDI Footswitch',
+            name: 'ปุ่มตั้งค่าแป้นเหยียบ MIDI',
+            desc: 'เชื่อมต่อแป้นเหยียบ Bluetooth หรือ USB เพื่อเหยียบเปลี่ยนเพลงและเลื่อนหน้าคอร์ดโดยไม่ต้องปล่อยมือจากเครื่องดนตรี'
+          }
+        ]
+      },
+      {
+        title: '📚 3. การจัดการคลังเพลง & บัญชีผู้ใช้งาน',
+        items: [
+          {
+            badge: '🌐 ค้นออนไลน์',
+            name: 'ปุ่มค้นหาคอร์ดออนไลน์',
+            desc: 'ค้นหาคอร์ดเพลงจากเว็บคอร์ดแท็บชั้นนำและบันทึกเข้าคลังเพลงส่วนตัวได้ทันที'
+          },
+          {
+            badge: '➕ เพิ่มเพลง / 📋 วางคอร์ด',
+            name: 'ปุ่มสร้างเพลงใหม่',
+            desc: 'พิมพ์เนื้อเพลงเอง หรือวางเนื้อเพลงที่มีคอร์ด เพื่อจัดรูปแบบและบันทึกเก็บไว้'
+          },
+          {
+            badge: '🎼 เซ็ตเพลง (Playlist)',
+            name: 'ปุ่มสร้างเซ็ตเพลง',
+            desc: 'จัดชุดเพลงสำหรับเล่นในแต่ละงานหรือวันซ้อม พร้อมเรียงลำดับและกำหนด BPM ได้'
+          },
+          {
+            badge: '⬇ สำรอง / ⬆ นำเข้า',
+            name: 'ปุ่มสำรองและนำเข้าข้อมูล (Backup & Restore)',
+            desc: 'ดาวน์โหลดไฟล์ .json เก็บไว้เพื่อความปลอดภัย หรือนำเข้าข้อมูลเพลงและเซ็ตลิสต์ข้ามอุปกรณ์'
+          },
+          {
+            badge: '👤 เข้าสู่ระบบ',
+            name: 'ปุ่มบัญชีและระบบคลาวด์',
+            desc: 'เข้าสู่ระบบด้วยบัญชีวงเพื่อซิงก์ข้อมูลอัตโนมัติ หรือใช้งานในเครื่องแบบออฟไลน์ 100%'
+          }
+        ]
+      }
+    ];
+
+    sections.forEach(sec => {
+      const secBox = mk('div', 'guideSection');
+      const secTitle = mk('div', 'guideSectionTitle', sec.title);
+      const grid = mk('div', 'guideGrid');
+
+      sec.items.forEach(it => {
+        const card = mk('div', 'guideCard');
+        card.innerHTML = `
+          <div class="guideBtnTitle">
+            <span class="guideBtnBadge">${escapeHtml(it.badge)}</span>
+            <span>${escapeHtml(it.name)}</span>
+          </div>
+          <div class="guideBtnDesc">${escapeHtml(it.desc)}</div>
+        `;
+        grid.appendChild(card);
+      });
+
+      secBox.append(secTitle, grid);
+      wrap.appendChild(secBox);
+    });
+
+    const bottomRow = mk('div', 'row');
+    bottomRow.style.marginTop = '16px';
+    bottomRow.style.justifyContent = 'flex-end';
+    bottomRow.appendChild(btn('✕ ปิดคู่มือ', () => close(), 'small primary'));
+    wrap.appendChild(bottomRow);
+
+    box.appendChild(wrap);
+  });
+}
+
+function checkVersionNotice() {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.webdriver) return;
+    const last = LS.get('mellowchords.lastSeenVersion', '');
+    if (last !== CURRENT_VERSION) {
+      setTimeout(() => {
+        if (document.querySelector('.modal')) return;
+        openNoticeModal(false);
+      }, 1000);
+    }
+  } catch {}
+}
+
+if ($('#userGuideNavBtn')) $('#userGuideNavBtn').onclick = () => openUserGuideModal();
+if ($('#noticeNavBtn')) $('#noticeNavBtn').onclick = () => openNoticeModal(true);
 $('#acct').onclick = () => openAcct();
 
 function signInLocalProfile(email, forceAdmin = false) {
@@ -4529,6 +4784,20 @@ function openAcct() {
     box.appendChild(body);
     const draw = () => {
       body.replaceChildren();
+
+      const noticeBox = mk('div', 'noticeBanner');
+      noticeBox.append(
+        mk('div', null, `📢 <b>อัปเดตระบบ ${escapeHtml(CURRENT_VERSION)}:</b> Gemini 3.8 Flash Low + Precision ChordPro & Auto-Parse`),
+        btn('ดูประกาศอัปเดต', () => { close(); openNoticeModal(true); }, 'small primary')
+      );
+      body.appendChild(noticeBox);
+
+      const guideBox = mk('div', 'userGuideBanner');
+      guideBox.append(
+        mk('div', null, '📖 <b>คู่มือการใช้งาน & แนะนำปุ่มสำคัญ</b> (เข้าใจง่ายใน 1 นาที พร้อมบอกหน้าที่ทุกปุ่ม)'),
+        btn('เปิดคู่มือ', () => { close(); openUserGuideModal(); }, 'small')
+      );
+      body.appendChild(guideBox);
 
       const pwaBox = mk('div', 'installBanner');
       pwaBox.append(
@@ -6982,7 +7251,10 @@ window.__mellowModules = {
   openFriendsView,
   openLiveRoomView,
   openSaveChordModeModal,
-  openEditor
+  openEditor,
+  openUserGuide: openUserGuideModal,
+  openNotice: openNoticeModal,
+  version: CURRENT_VERSION
 };
 
 /* ==============================================================================
@@ -7012,6 +7284,7 @@ renderPopularChips();
 renderSongbook();
 route();
 registerPWA();
+checkVersionNotice();
 
 if (matchMedia('(min-width: 920px)').matches && !current && !isAdminRouteUrl() && !location.hash.startsWith('#/p/') && !location.hash.startsWith('#/s/')) {
   const firstSong = loadBook()[0] || MOCK_DB[0];
