@@ -132,28 +132,30 @@
 
   function getVisionConfig() {
     try {
-      if (typeof localStorage === 'undefined') return { provider: 'auto', apiKey: '', model: 'gemini-3.8-flash', autoParseOnOpen: true };
+      if (typeof localStorage === 'undefined') return { provider: 'auto', apiKey: '', model: 'gemini-2.5-flash', autoParseOnOpen: true };
       const raw = localStorage.getItem(VISION_CFG_KEY);
-      if (!raw) return { provider: 'auto', apiKey: '', model: 'gemini-3.8-flash', autoParseOnOpen: true };
+      if (!raw) return { provider: 'auto', apiKey: '', model: 'gemini-2.5-flash', autoParseOnOpen: true };
       const parsed = JSON.parse(raw);
+      const rawModel = (parsed && parsed.model) || '';
       return {
         provider: (parsed && parsed.provider) || 'auto', // 'auto' | 'gemini' | 'openai' | 'edge' | 'ocr'
         apiKey: (parsed && parsed.apiKey) || '',
-        model: (parsed && parsed.model) || 'gemini-3.8-flash',
+        model: (rawModel && rawModel !== 'gemini-3.8-flash') ? rawModel : 'gemini-2.5-flash',
         autoParseOnOpen: parsed && typeof parsed.autoParseOnOpen === 'boolean' ? parsed.autoParseOnOpen : true
       };
     } catch (_e) {
-      return { provider: 'auto', apiKey: '', model: 'gemini-3.8-flash', autoParseOnOpen: true };
+      return { provider: 'auto', apiKey: '', model: 'gemini-2.5-flash', autoParseOnOpen: true };
     }
   }
 
   function setVisionConfig(cfg) {
     try {
       if (typeof localStorage === 'undefined') return;
+      const model = String((cfg && cfg.model) || '').trim();
       const next = {
         provider: (cfg && cfg.provider) || 'auto',
         apiKey: String((cfg && cfg.apiKey) || '').trim(),
-        model: String((cfg && cfg.model) || '').trim() || 'gemini-3.8-flash',
+        model: (model && model !== 'gemini-3.8-flash') ? model : 'gemini-2.5-flash',
         autoParseOnOpen: typeof (cfg && cfg.autoParseOnOpen) === 'boolean' ? cfg.autoParseOnOpen : true
       };
       localStorage.setItem(VISION_CFG_KEY, JSON.stringify(next));
@@ -459,8 +461,10 @@
     { pattern: /(?:อินโทร)/gi, replace: 'Intro' },
 
     // Complex chords & fixes
+    { pattern: /\{comment:\s*Intro[:\s]*[”"'\^]?\s*\}/gi, replace: '{comment: Intro}\n[| F |]' },
     { pattern: /(?:\/[ \t]*[”"'\^][ \t]*\/)/gi, replace: '/ F /' },
-    { pattern: /\bIntro[ \t]*\/[ \t]*[”"'\^][ \t]*\//gi, replace: 'Intro / F /' },
+    { pattern: /\bIntro[ \t]*[:/][ \t]*[”"'\^][ \t]*(?:\/|$)/gi, replace: 'Intro / F /' },
+    { pattern: /\bIntro[ \t]+[”"'\^](?=[ \t\r\n/]|$)/gi, replace: 'Intro / F /' },
     { pattern: /\bFn[ \t]*['"”’‘]?\b/gi, replace: 'F' },
     { pattern: /_([A-G][#b]?(?:m|maj|min|sus|dim|add|aug|7|\d+)?)\b/g, replace: '$1' },
     { pattern: /(?:๑[ \t]*ท|๑ท)(?=[ \t\r\n/|\]]|$)/g, replace: 'Gm' },

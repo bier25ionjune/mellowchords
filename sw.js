@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'mellowchords-v27';
+const CACHE_NAME = 'mellowchords-v29';
 const IMG_CACHE_NAME = 'mellowchords-imgs-v1';
 const MAX_IMG_CACHE = 150;
 const STATIC_ASSETS = [
@@ -131,7 +131,7 @@ self.addEventListener('fetch', event => {
 
   // Static assets (CSS, JS, images, icons, fonts, CDN): Cache-First with Stale-While-Revalidate
   event.respondWith(
-    caches.match(req).then(cached => {
+    caches.match(req, { ignoreSearch: true }).then(cached => {
       const fetchPromise = fetch(req).then(networkResponse => {
         if (networkResponse && (networkResponse.ok || networkResponse.type === 'opaque')) {
           const respClone = networkResponse.clone();
@@ -142,6 +142,12 @@ self.addEventListener('fetch', event => {
         if (cached) return cached;
         throw err;
       });
+
+      // If request has ?v= cache-busting query, prefer network so deployments update instantly
+      if (url.searchParams && url.searchParams.has('v')) {
+        return fetchPromise.catch(() => cached);
+      }
+
       return cached || fetchPromise;
     })
   );
