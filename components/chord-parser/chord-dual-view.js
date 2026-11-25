@@ -457,6 +457,28 @@
 
       const rightBtns = el('div', 'cdv-format-toggle');
 
+      const btnClean = el('button', 'cdv-clean-btn', '🧹 คลีนคอร์ด');
+      btnClean.type = 'button';
+      btnClean.id = 'cdvCleanChordsBtn';
+      btnClean.title = 'ล้างคำแปลกปลอมนอกรูปแบบคอร์ด และแปลงคำผิดจาก OCR ให้เป็นคอร์ดมาตรฐาน';
+      btnClean.addEventListener('click', function () {
+        if (!parsedData || (!parsedData.chordpro_content && !parsedData.alignedText)) return;
+        const Parser = getParser();
+        if (!Parser || typeof Parser.cleanOcrArtifacts !== 'function') return;
+        const rawContent = parsedData.chordpro_content || parsedData.alignedText || '';
+        const cleanedCp = Parser.cleanOcrArtifacts(rawContent);
+        parsedData.chordpro_content = cleanedCp;
+        parsedData.chordPro = cleanedCp;
+        parsedData.alignedText = Parser.convertChordProToMonospace(cleanedCp);
+        parsedData.monospaceText = parsedData.alignedText;
+        parsedData.chords = Parser.uniqueChords(Parser.extractChordsFromText(cleanedCp));
+        Parser.saveParsedChord(currentSong, parsedData);
+        renderView();
+        if (typeof global.toast === 'function') {
+          global.toast('✨ ล้างคำแปลกปลอมและจัดรูปแบบคอร์ดเรียบร้อยแล้ว');
+        }
+      });
+
       const btnVerify = el('button', 'cdv-verify-trigger-btn', '🎯 ตรวจสอบและสอนระบบ');
       btnVerify.type = 'button';
       btnVerify.addEventListener('click', openVerifyTeachDialog);
@@ -469,6 +491,7 @@
         triggerParse(true);
       });
 
+      rightBtns.appendChild(btnClean);
       rightBtns.appendChild(btnVerify);
       rightBtns.appendChild(btnReparse);
 
@@ -686,6 +709,18 @@
       parsedData = (Parser && currentSong && hasSongImages(currentSong))
         ? Parser.getCachedParsedChord(currentSong)
         : null;
+
+      if (parsedData && Parser && typeof Parser.cleanOcrArtifacts === 'function') {
+        const raw = parsedData.chordpro_content || parsedData.alignedText || '';
+        if (raw && /(?:6\s*ทาล|8\s*ทา|0\s*รนร|คิเทา|อ๒กา|โทรไหน|05\s*นร)/.test(raw)) {
+          const cleaned = Parser.cleanOcrArtifacts(raw);
+          parsedData.chordpro_content = cleaned;
+          parsedData.chordPro = cleaned;
+          parsedData.alignedText = Parser.convertChordProToMonospace(cleaned);
+          parsedData.monospaceText = parsedData.alignedText;
+          Parser.saveParsedChord(currentSong, parsedData);
+        }
+      }
 
       // If song is already verified, default to text mode
       if (parsedData && (parsedData.is_verified || (currentSong && currentSong.is_verified))) {

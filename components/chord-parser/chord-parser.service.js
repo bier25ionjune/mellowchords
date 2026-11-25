@@ -38,7 +38,7 @@
     /^\s*[\[\(\*]*\s*(?:intro|verse\s*\d*|pre[\s-]*chorus\s*\d*|chorus\s*\d*|hook\s*\d*|solo\s*\d*|bridge\s*\d*|outro|ending|interlude|instru(?:ment(?:al)?)?|coda|tag|rap|ท่อน\s*(?:ฮุค|แยก|จบ|อินโทร|โซโล่)?|อินโทร|ฮุค|โซโล่|จบ)\s*[\]\)\*:]*\s*$/i;
 
   const SECTION_PREFIX_RE =
-    /^\s*[\[\(]?\s*(intro|verse\s*\d*|pre[\s-]*chorus\s*\d*|chorus\s*\d*|hook\s*\d*|solo\s*\d*|bridge\s*\d*|outro|ending|interlude|instru(?:ment(?:al)?)?|อินโทร|ฮุค|โซโล่)\s*[\]\)]?\s*[:\-–—]\s*(.+)$/i;
+    /^\s*[\[\(]?\s*(intro|verse\s*\d*|pre[\s-]*chorus\s*\d*|chorus\s*\d*|hook\s*\d*|solo\s*\d*|bridge\s*\d*|outro|ending|interlude|instru(?:ment(?:al)?)?|อินโทร|ฮุค|โซโล่)\s*[\]\)]?\s*[:\-–—/]\s*(.+)$/i;
 
   // Common Thai chord website headers, watermarks, and metadata lines to strip
   const WATERMARK_LINE_RE =
@@ -196,11 +196,12 @@
       .replace(/[–—]/g, '-')
       .replace(/[／]/g, '/');
 
-    t = t.replace(/^[\|\[\{\.,;:*~•·]+/, '').replace(/[\|\]\}\.,;:*~•·]+$/, '');
+    t = t.replace(/^[\|\[\{\.,;:*~•·(]+/, '').replace(/[\|\]\}\.,;:*~•·)]+$/, '');
     if (t.startsWith('(') && t.endsWith(')') && !t.slice(1, -1).includes('(')) {
       const inner = t.slice(1, -1).trim();
       if (inner) t = inner;
     }
+    t = t.replace(/^[\|\[\{\.,;:*~•·(]+/, '').replace(/[\|\]\}\.,;:*~•·)]+$/, '');
 
     if (!t) return '';
     if (isChordToken(t)) return t;
@@ -385,9 +386,230 @@
     );
   }
 
+  const BUILTIN_OCR_CORRECTIONS = [
+    { wrong: '6 ทาล ]7', right: 'Gmaj7' },
+    { wrong: '6 ทาล 7', right: 'Gmaj7' },
+    { wrong: '6 ทาล]7', right: 'Gmaj7' },
+    { wrong: '6ทาล]7', right: 'Gmaj7' },
+    { wrong: '8 ทา 7', right: 'Bmaj7' },
+    { wrong: '8ทา7', right: 'Bmaj7' },
+    { wrong: 'คิเทา 7 0', right: 'Cmaj7' },
+    { wrong: 'คิเทา 7', right: 'Cmaj7' },
+    { wrong: 'คิเทา7', right: 'Cmaj7' },
+    { wrong: '0 รนร 4', right: 'Dsus4' },
+    { wrong: '0 รนร 2', right: 'Dsus2' },
+    { wrong: '0รนร4', right: 'Dsus4' },
+    { wrong: '0รนร2', right: 'Dsus2' },
+    { wrong: '0 รนร', right: 'Dsus' },
+    { wrong: '05 นร 2 87', right: 'Dsus2 B7' },
+    { wrong: '05 นร 2', right: 'Dsus2' },
+    { wrong: 'อ๒กา 7', right: 'Emaj7' },
+    { wrong: 'โทรไหน', right: 'Intro' },
+    { wrong: 'Am7 0', right: 'Am7' },
+    { wrong: '(Fmaj7z)', right: 'Fmaj7' },
+    { wrong: 'Fmaj7z', right: 'Fmaj7' },
+    { wrong: 'อย าก', right: 'อยาก' }
+  ];
+
+  const OCR_PHRASE_RULES = [
+    // Gmaj7 / Gmaj variants
+    { pattern: /(?:6[ \t]*ทาล[ \t]*\]?7|6[ \t]*ทา[ \t]*7|6ทาล\]?7)/gi, replace: 'Gmaj7' },
+    { pattern: /(?:6[ \t]*ทาล|6ทาล)/gi, replace: 'Gmaj' },
+    { pattern: /(?:6[ \t]*ทา|6ทา)(?=[^\u0E00-\u0E7FA-Za-z0-9]|$)/gi, replace: 'Gmaj' },
+
+    // Bmaj7 / Bmaj variants
+    { pattern: /(?:8[ \t]*ทา[ \t]*\]?7|8[ \t]*ทา[ \t]*7|8ทา7)/gi, replace: 'Bmaj7' },
+    { pattern: /(?:8[ \t]*ทา|8ทา)(?=[^\u0E00-\u0E7FA-Za-z0-9]|$)/gi, replace: 'Bmaj' },
+
+    // Cmaj7 / Cmaj variants
+    { pattern: /(?:คิเทา[ \t]*7[ \t]*0?|คิเทา7|คิเฑา[ \t]*7)/gi, replace: 'Cmaj7' },
+    { pattern: /(?:คิเทา|คิเฑา)/gi, replace: 'Cmaj' },
+
+    // Dsus variants
+    { pattern: /(?:05[ \t]*นร[ \t]*2[ \t]*87|05[ \t]*นร[ \t]*2[ \t]*B7)/gi, replace: 'Dsus2 B7' },
+    { pattern: /(?:0[ \t]*รนร[ \t]*4|0รนร4)/gi, replace: 'Dsus4' },
+    { pattern: /(?:0[ \t]*รนร[ \t]*2|0รนร2|05[ \t]*นร[ \t]*2)/gi, replace: 'Dsus2' },
+    { pattern: /(?:0[ \t]*รนร|0[ \t]*นร)/gi, replace: 'Dsus' },
+
+    // Emaj7 / Emaj variants
+    { pattern: /(?:อ๒กา[ \t]*7|อ๒กา7)/gi, replace: 'Emaj7' },
+    { pattern: /(?:อ๒กา|อ๒)/gi, replace: 'Emaj' },
+
+    // Sections
+    { pattern: /(?:โทรไหน)/gi, replace: 'Intro' },
+    { pattern: /(?:เอาโทร|0utro)/gi, replace: 'Outro' },
+    { pattern: /(?:โซโล่|5olo)/gi, replace: 'Solo' },
+    { pattern: /(?:ฮุค|ท่อนฮุก)/gi, replace: 'Chorus' },
+    { pattern: /(?:อินโทร)/gi, replace: 'Intro' },
+
+    // Complex chords & fixes
+    { pattern: /(?:F#rn7b5|F#m7b5z)/gi, replace: 'F#m7b5' },
+    { pattern: /(?:Fmaj7z)/gi, replace: 'Fmaj7' },
+    { pattern: /\((Fmaj7)\)D\b/g, replace: 'Fmaj7 D' },
+    { pattern: /\bAm7[ \t]+0\b/g, replace: 'Am7' },
+    { pattern: /\bBm[ \t]*7\b/g, replace: 'Bm7' },
+    { pattern: /\b([A-G][#b]?)m[ \t]*7\b/g, replace: '$1m7' },
+    { pattern: /\b([A-G][#b]?)maj[ \t]*7\b/g, replace: '$1maj7' },
+    { pattern: /\b([A-G][#b]?)sus[ \t]*4\b/g, replace: '$1sus4' },
+    { pattern: /\b([A-G][#b]?)sus[ \t]*2\b/g, replace: '$1sus2' },
+
+    // Repeat counts: ( 3 Times) -> (x3)
+    { pattern: /\([ \t]*(\d+)[ \t]*(?:Times|รอบ|เที่ยว)[ \t]*\)/gi, replace: '(x$1)' },
+    { pattern: /\b(\d+)[ \t]*(?:Times|รอบ|เที่ยว)\b/gi, replace: '(x$1)' }
+  ];
+
+  function sanitizeChordLineText(line) {
+    if (!line || typeof line !== 'string') return '';
+    let t = line;
+    for (let i = 0; i < OCR_PHRASE_RULES.length; i++) {
+      const r = OCR_PHRASE_RULES[i];
+      t = t.replace(r.pattern, r.replace);
+    }
+    return t;
+  }
+
+  /**
+   * Aggressively purges non-chord garbage, stray OCR numbers (0, 05, ]7, 87),
+   * and corrupted Thai misreads from chord progressions and ChordPro lines.
+   */
+  function cleanOcrArtifacts(text, userRules) {
+    if (!text || typeof text !== 'string') return '';
+    let out = String(text).replace(/\r\n/g, '\n');
+
+    out = sanitizeChordLineText(out);
+
+    const allRules = BUILTIN_OCR_CORRECTIONS.concat(Array.isArray(userRules) ? userRules : []);
+    for (let i = 0; i < allRules.length; i++) {
+      const rule = allRules[i];
+      if (!rule || !rule.wrong || !rule.right || rule.wrong === rule.right) continue;
+      if (out.indexOf(rule.wrong) !== -1) {
+        out = out.split(rule.wrong).join(rule.right);
+      }
+    }
+
+    const lines = out.split('\n');
+    const cleanedLines = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      let l = lines[i];
+      const trimmed = l.trim();
+      if (!trimmed) {
+        cleanedLines.push('');
+        continue;
+      }
+
+      // 1) Line with ChordPro brackets [Chord]
+      if (/\[[^\]]+\]/.test(l)) {
+        l = l.replace(/\[([^\]]+)\]/g, function (full, inner) {
+          const inTrim = inner.trim();
+          if (inTrim.indexOf('|') !== -1 || inTrim.indexOf(' ') !== -1 || inTrim.indexOf('/') !== -1) {
+            const toks = inTrim.split(/\s+/).filter(Boolean);
+            const validToks = [];
+            for (let j = 0; j < toks.length; j++) {
+              const tk = toks[j];
+              if (/^[|/]+$/.test(tk) || /^\(x\d+\)$/i.test(tk) || /^x\d+$/i.test(tk)) {
+                validToks.push(tk.indexOf('/') !== -1 ? '/' : tk);
+              } else {
+                const norm = normalizeOcrChordToken(tk);
+                if (isChordToken(norm)) {
+                  validToks.push(norm);
+                } else if (tk === '87') {
+                  validToks.push('B7');
+                }
+              }
+            }
+            return validToks.length > 0 ? '[' + validToks.join(' ') + ']' : '';
+          }
+
+          if (/^(Intro|Verse|Chorus|Hook|Solo|Bridge|Outro|Interlude|End)$/i.test(inTrim)) {
+            return '{comment: ' + inTrim + '}';
+          }
+          const norm = normalizeOcrChordToken(inTrim);
+          if (isChordToken(norm)) return '[' + norm + ']';
+          if (inTrim === '87') return '[B7]';
+          const subChords = inTrim.split(/\s+/).map(normalizeOcrChordToken).filter(isChordToken);
+          if (subChords.length > 0) {
+            return subChords.map(function (c) { return '[' + c + ']'; }).join(' ');
+          }
+          return '';
+        });
+        cleanedLines.push(normalizeThaiLeadingVowelChords(l));
+        continue;
+      }
+
+      // 2) Instrumental section line e.g. "Intro / Gmaj7 Bm7 / Cmaj7 / (x3) /"
+      const secPref = trimmed.match(SECTION_PREFIX_RE);
+      if (secPref) {
+        const secName = cleanSectionName(secPref[1]);
+        const chordPart = secPref[2];
+        const toks = chordPart.split(/\s+/).filter(Boolean);
+        const validToks = [];
+        let chordHits = 0;
+
+        for (let j = 0; j < toks.length; j++) {
+          const tk = toks[j];
+          if (/^[|/\\–—]+$/.test(tk) || /^\(x\d+\)$/i.test(tk) || /^x\d+$/i.test(tk)) {
+            validToks.push(tk.indexOf('/') !== -1 ? '/' : tk);
+          } else {
+            const norm = normalizeOcrChordToken(tk);
+            if (isChordToken(norm)) {
+              chordHits++;
+              validToks.push(norm);
+            } else if (tk === '87') {
+              chordHits++;
+              validToks.push('B7');
+            }
+          }
+        }
+
+        if (chordHits > 0) {
+          cleanedLines.push((secName ? secName + ' : ' : '') + validToks.join(' '));
+          continue;
+        }
+      }
+
+      // 3) Chord-only progression line
+      const toks = trimmed.split(/\s+/).filter(Boolean);
+      let chordCount = 0;
+      let meaningfulCount = 0;
+      for (let j = 0; j < toks.length; j++) {
+        const tk = toks[j];
+        if (CHORD_LINE_DECOR_RE.test(tk)) continue;
+        meaningfulCount++;
+        const norm = normalizeOcrChordToken(tk);
+        if (isChordToken(norm) || tk === '87') chordCount++;
+      }
+
+      if (meaningfulCount > 0 && chordCount / meaningfulCount >= 0.5) {
+        const pureChords = [];
+        for (let j = 0; j < toks.length; j++) {
+          const tk = toks[j];
+          if (/^[|/\\–—]+$/.test(tk) || /^\(x\d+\)$/i.test(tk) || /^x\d+$/i.test(tk)) {
+            pureChords.push(tk.indexOf('/') !== -1 ? '/' : tk);
+          } else {
+            const norm = normalizeOcrChordToken(tk);
+            if (isChordToken(norm)) {
+              pureChords.push(norm);
+            } else if (tk === '87') {
+              pureChords.push('B7');
+            }
+          }
+        }
+        cleanedLines.push(pureChords.join(' '));
+        continue;
+      }
+
+      cleanedLines.push(l);
+    }
+
+    return normalizeThaiLeadingVowelChords(cleanedLines.join('\n'));
+  }
+
   function classifyTextLine(line) {
-    const trimmed = String(line || '').trim();
-    if (!trimmed) return 'blank';
+    const rawTrimmed = String(line || '').trim();
+    if (!rawTrimmed) return 'blank';
+
+    const trimmed = sanitizeChordLineText(rawTrimmed);
     if (CHORDPRO_COMMENT_RE.test(trimmed) || SECTION_ONLY_RE.test(trimmed)) return 'section';
 
     if (/\[[^\]]+\]/.test(trimmed)) {
@@ -398,14 +620,10 @@
     if (secPref) {
       const restTokens = secPref[2].trim().split(/\s+/).filter(Boolean);
       const chordHits = restTokens.filter(function (tok) {
-        return isChordToken(normalizeOcrChordToken(tok));
+        return isChordToken(normalizeOcrChordToken(tok)) || tok === '87';
       }).length;
       if (chordHits > 0) return 'mixed';
       return 'section';
-    }
-
-    if (THAI_CHAR_RE.test(trimmed)) {
-      return 'lyric';
     }
 
     const rawTokens = trimmed.split(/\s+/).filter(Boolean);
@@ -419,12 +637,15 @@
       if (CHORD_LINE_DECOR_RE.test(tok)) continue;
       meaningfulCount++;
       const norm = normalizeOcrChordToken(tok);
-      if (isChordToken(norm)) chordCount++;
+      if (isChordToken(norm) || tok === '87') chordCount++;
     }
 
-    if (meaningfulCount === 0) return 'lyric';
-    if (chordCount > 0 && chordCount / meaningfulCount >= 0.6) {
+    if (chordCount > 0 && meaningfulCount > 0 && chordCount / meaningfulCount >= 0.5) {
       return 'chord';
+    }
+
+    if (THAI_CHAR_RE.test(trimmed)) {
+      return 'lyric';
     }
 
     return 'lyric';
@@ -491,15 +712,18 @@
    * ============================================================================ */
 
   function extractChordPositions(chordLine) {
+    const sanitized = sanitizeChordLineText(chordLine);
     const positions = [];
     const re = /\S+/g;
     let m;
-    while ((m = re.exec(chordLine)) !== null) {
+    while ((m = re.exec(sanitized)) !== null) {
       const raw = m[0];
       if (CHORD_LINE_DECOR_RE.test(raw)) continue;
       const norm = normalizeOcrChordToken(raw);
       if (isChordToken(norm)) {
         positions.push({ chord: norm, col: m.index });
+      } else if (raw === '87') {
+        positions.push({ chord: 'B7', col: m.index });
       }
     }
     return positions;
@@ -509,13 +733,14 @@
     const dir = String(rawSection || '').match(CHORDPRO_COMMENT_RE);
     if (dir) return dir[1].trim();
     return String(rawSection || '')
-      .replace(/^[\[\(\*\s]+/, '')
-      .replace(/[\]\)\*:\s]+$/, '')
+      .replace(/^[\[\(\*\/\\\s]+/, '')
+      .replace(/[\]\)\*:\/\\\s]+$/, '')
       .trim();
   }
 
   function convertMonospaceToChordPro(monospaceText) {
-    const lines = String(monospaceText || '').replace(/\r\n/g, '\n').split('\n');
+    const cleaned = cleanOcrArtifacts(monospaceText);
+    const lines = String(cleaned || '').replace(/\r\n/g, '\n').split('\n');
     const out = [];
 
     for (let i = 0; i < lines.length; i++) {
@@ -1071,47 +1296,13 @@
     };
   }
 
-  const BUILTIN_OCR_CORRECTIONS = [
-    { wrong: '6 ทาล ]7', right: 'Gmaj7' },
-    { wrong: '6 ทาล 7', right: 'Gmaj7' },
-    { wrong: '6 ทาล]7', right: 'Gmaj7' },
-    { wrong: '6ทาล]7', right: 'Gmaj7' },
-    { wrong: '8 ทา 7', right: 'Bmaj7' },
-    { wrong: '8ทา7', right: 'Bmaj7' },
-    { wrong: 'คิเทา 7 0', right: 'Cmaj7' },
-    { wrong: 'คิเทา 7', right: 'Cmaj7' },
-    { wrong: 'คิเทา7', right: 'Cmaj7' },
-    { wrong: '0 รนร 4', right: 'Dsus4' },
-    { wrong: '0 รนร 2', right: 'Dsus2' },
-    { wrong: '0รนร4', right: 'Dsus4' },
-    { wrong: '0รนร2', right: 'Dsus2' },
-    { wrong: '0 รนร', right: 'Dsus' },
-    { wrong: '05 นร 2 87', right: 'Dsus2 B7' },
-    { wrong: '05 นร 2', right: 'Dsus2' },
-    { wrong: 'อ๒กา 7', right: 'Emaj7' },
-    { wrong: 'โทรไหน', right: 'Intro' },
-    { wrong: 'Am7 0', right: 'Am7' },
-    { wrong: '(Fmaj7z)', right: 'Fmaj7' },
-    { wrong: 'Fmaj7z', right: 'Fmaj7' },
-    { wrong: 'อย าก', right: 'อยาก' }
-  ];
-
   /**
    * Applies learned correction rules to a parsed ChordPro text (used as post-processor
    * for offline/fallback OCR and safety guard against known recurring OCR errors).
    */
   function applyLearnedCorrectionRules(chordProText, correctionRules) {
     if (!chordProText) return '';
-    let out = String(chordProText);
-    const combinedRules = BUILTIN_OCR_CORRECTIONS.concat(Array.isArray(correctionRules) ? correctionRules : []);
-    for (let i = 0; i < combinedRules.length; i++) {
-      const rule = combinedRules[i];
-      if (!rule || !rule.wrong || !rule.right || rule.wrong === rule.right) continue;
-      if (out.indexOf(rule.wrong) !== -1) {
-        out = out.split(rule.wrong).join(rule.right);
-      }
-    }
-    return normalizeThaiLeadingVowelChords(out);
+    return cleanOcrArtifacts(chordProText, correctionRules);
   }
 
   /**
@@ -2332,9 +2523,9 @@
       if (!rawCp && !rawMono) return null;
 
       const chordPro = rawCp
-        ? normalizeThaiLeadingVowelChords(rawCp)
+        ? cleanOcrArtifacts(rawCp)
         : convertMonospaceToChordPro(rawMono);
-      const alignedText = rawMono || convertChordProToMonospace(chordPro);
+      const alignedText = cleanOcrArtifacts(rawMono) || convertChordProToMonospace(chordPro);
       const chords = Array.isArray(record.chords) && record.chords.length
         ? record.chords
         : uniqueChords(extractChordsFromText(chordPro));
@@ -2476,6 +2667,9 @@
     fetchParserMemory: fetchParserMemory,
     extractLearningDiff: extractLearningDiff,
     applyLearnedCorrectionRules: applyLearnedCorrectionRules,
+    cleanOcrArtifacts: cleanOcrArtifacts,
+    sanitizeChordLineText: sanitizeChordLineText,
+    sanitizeChordPro: cleanOcrArtifacts,
     saveVerifiedAndTeach: saveVerifiedAndTeach,
 
     // Spatial OCR alignment

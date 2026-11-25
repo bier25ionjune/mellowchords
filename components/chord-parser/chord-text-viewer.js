@@ -140,6 +140,9 @@
     if (isValidChordToken(trimmed)) {
       return transposeChordSymbol(trimmed, modShift, useFlat, forceRespell);
     }
+    if (trimmed === '87') {
+      return transposeChordSymbol('B7', modShift, useFlat, forceRespell);
+    }
 
     // Check if it is an instrumental bar/progression bracket e.g. "| C | G/B | Am7 | F |"
     const tokens = trimmed.split(/(\s+|\|+)/);
@@ -150,6 +153,10 @@
       if (isValidChordToken(clean)) {
         chordCount++;
         return transposeChordSymbol(clean, modShift, useFlat, forceRespell);
+      }
+      if (clean === '87') {
+        chordCount++;
+        return transposeChordSymbol('B7', modShift, useFlat, forceRespell);
       }
       return tok;
     });
@@ -199,16 +206,21 @@
     const raw = String(content || '').replace(/\r\n/g, '\n');
     if (!raw.trim()) return '';
 
+    const Parser = global.MellowChordParser;
+    const sanitized = (Parser && typeof Parser.cleanOcrArtifacts === 'function')
+      ? Parser.cleanOcrArtifacts(raw)
+      : raw;
+
     // Already has ChordPro chord brackets or directives
-    if (/\[[A-G|#b][^\[\]\n]*\]/.test(raw) || /\{\s*(?:comment|c)\s*:/i.test(raw)) {
-      return normalizeThaiChordProPlacement(raw);
+    if (/\[[A-G|#b][^\[\]\n]*\]/.test(sanitized) || /\{\s*(?:comment|c)\s*:/i.test(sanitized)) {
+      return normalizeThaiChordProPlacement(sanitized);
     }
 
-    if (global.MellowChordParser && typeof global.MellowChordParser.convertMonospaceToChordPro === 'function') {
-      return normalizeThaiChordProPlacement(global.MellowChordParser.convertMonospaceToChordPro(raw));
+    if (Parser && typeof Parser.convertMonospaceToChordPro === 'function') {
+      return normalizeThaiChordProPlacement(Parser.convertMonospaceToChordPro(sanitized));
     }
 
-    return raw;
+    return normalizeThaiChordProPlacement(sanitized);
   }
 
   /**
@@ -228,12 +240,15 @@
       const sub = rawParts[i].split(/(\|+)/).filter(Boolean);
       for (let j = 0; j < sub.length; j++) {
         const tok = sub[j];
-        if (/^\|+$/.test(tok)) {
+        if (/^\|+$/.test(tok) || tok === '/') {
           items.push({ kind: 'bar', value: '|' });
         } else if (isValidChordToken(tok)) {
           chordHits++;
           items.push({ kind: 'chord', value: tok });
-        } else {
+        } else if (tok === '87') {
+          chordHits++;
+          items.push({ kind: 'chord', value: 'B7' });
+        } else if (/^\(x\d+\)$/i.test(tok) || /^x\d+$/i.test(tok)) {
           items.push({ kind: 'text', value: tok });
         }
       }
@@ -817,6 +832,11 @@
     normalizeThaiChordProPlacement: normalizeThaiChordProPlacement,
     transposeChordPro: transposeChordPro,
     ensureChordProContent: ensureChordProContent,
+    cleanOcrArtifacts: function (t) {
+      return (global.MellowChordParser && typeof global.MellowChordParser.cleanOcrArtifacts === 'function')
+        ? global.MellowChordParser.cleanOcrArtifacts(t)
+        : t;
+    },
     parseChordProLineToSegments: parseChordProLineToSegments,
     parseChordProDocument: parseChordProDocument,
     renderChordProToElement: renderChordProToElement,

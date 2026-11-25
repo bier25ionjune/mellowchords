@@ -108,6 +108,11 @@
     promptToggleBtn.type = 'button';
     promptToggleBtn.id = 'cvmTogglePromptBtn';
 
+    const topCleanBtn = el('button', 'cvm-btn cvm-btn-secondary', '🧹 คลีนคอร์ด (Clean)');
+    topCleanBtn.type = 'button';
+    topCleanBtn.id = 'cvmTopCleanBtn';
+    topCleanBtn.title = 'ล้างคำแปลกปลอมนอกรูปแบบคอร์ด และแปลงคำผิดจาก OCR ให้เป็นคอร์ดถูกต้อง';
+
     const topReparseBtn = el('button', 'cvm-btn cvm-btn-secondary', '🔄 ลองแกะใหม่ (Re-parse)');
     topReparseBtn.type = 'button';
     topReparseBtn.id = 'cvmTopReparseBtn';
@@ -117,6 +122,7 @@
     closeBtn.id = 'cvmCloseBtn';
 
     headerActions.appendChild(promptToggleBtn);
+    headerActions.appendChild(topCleanBtn);
     headerActions.appendChild(topReparseBtn);
     headerActions.appendChild(closeBtn);
     header.appendChild(titleGroup);
@@ -328,6 +334,15 @@
       });
       quickTokens.appendChild(b);
     });
+
+    const cleanOcrBtn = el('button', 'cvm-mini-btn', '🧹 คลีนคอร์ด');
+    cleanOcrBtn.type = 'button';
+    cleanOcrBtn.id = 'cvmCleanEditorBtn';
+    cleanOcrBtn.title = 'ล้างคำแปลกปลอมนอกรูปแบบคอร์ด และแปลงคำผิดจาก OCR ให้เป็นคอร์ดมาตรฐาน';
+    cleanOcrBtn.style.color = '#34d399';
+    cleanOcrBtn.style.borderColor = 'rgba(52, 211, 153, 0.45)';
+    quickTokens.appendChild(cleanOcrBtn);
+
     editorHeader.appendChild(quickTokens);
 
     const editorArea = el('textarea', 'cvm-textarea');
@@ -422,6 +437,27 @@
       }
       updateDiffSummary();
     }
+
+    function runCleanChords() {
+      const before = editorArea.value;
+      const cleaned = (Parser && typeof Parser.cleanOcrArtifacts === 'function')
+        ? Parser.cleanOcrArtifacts(before)
+        : before;
+      editorArea.value = cleaned;
+      handleEditorInput();
+      const detected = Parser && typeof Parser.detectOriginalKey === 'function'
+        ? Parser.detectOriginalKey(null, cleaned)
+        : '';
+      if (detected && !origKeyInput.value.trim()) {
+        origKeyInput.value = detected;
+      }
+      if (typeof global.toast === 'function') {
+        global.toast('✨ ล้างคำแปลกปลอมและจัดรูปแบบคอร์ดเรียบร้อยแล้ว');
+      }
+    }
+
+    cleanOcrBtn.addEventListener('click', runCleanChords);
+    topCleanBtn.addEventListener('click', runCleanChords);
 
     editorArea.addEventListener('input', handleEditorInput);
     origKeyInput.addEventListener('input', handleEditorInput);

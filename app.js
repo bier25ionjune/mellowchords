@@ -329,13 +329,19 @@ const safeCut = (i, s) => {
 
 function isChordLine(l) {
   if (!l.trim()) return false;
-  const cleaned = l.replace(/^\s*(intro|instru|instrument|interlude|solo|outro|outtro|ending)\s*[:\-]?\s*/i, '')
+  const Parser = window.MellowChordParser;
+  const sanitized = (Parser && typeof Parser.cleanOcrArtifacts === 'function')
+    ? Parser.cleanOcrArtifacts(l)
+    : l;
+  const cleaned = sanitized.replace(/^\s*(intro|instru|instrument|interlude|solo|outro|outtro|ending)\s*[:\-]?\s*/i, '')
                    .replace(/\(.*?\)/g, '')
                    .replace(/[|/\\\-]+/g, ' ')
                    .trim();
   if (!cleaned) return false;
-  const t = cleaned.split(/\s+/);
-  return t.every(x => isChord(x) || x === '*' || x === '%') && t.some(isChord);
+  const t = cleaned.split(/\s+/).filter(Boolean);
+  if (!t.length) return false;
+  const chordHits = t.filter(x => isChord(x) || x === '*' || x === '%' || x === '87').length;
+  return chordHits > 0 && (chordHits === t.length || (t.length >= 2 && chordHits / t.length >= 0.6));
 }
 
 function getSectionType(line) {
@@ -2181,6 +2187,11 @@ $('#colToggleBtn').onclick = () => {
 applyCols();
 
 function openSong(song, shift = 0) {
+  if (song && song.text && window.MellowChordParser && typeof window.MellowChordParser.cleanOcrArtifacts === 'function') {
+    if (/(?:6\s*ทาล|8\s*ทา|0\s*รนร|คิเทา|อ๒กา|โทรไหน|05\s*นร)/.test(song.text)) {
+      song.text = window.MellowChordParser.cleanOcrArtifacts(song.text);
+    }
+  }
   // Ensure the song's base key always matches the actual chords in its text sheet
   const sheetDetectedKey = detectKey(song.text);
   const syncedSong = {

@@ -546,6 +546,30 @@
   transform: scale(0.97);
 }
 
+.cdv-clean-btn {
+  appearance: none;
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+  font-size: 0.84rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.cdv-clean-btn:hover {
+  background: rgba(16, 185, 129, 0.28);
+  border-color: rgba(110, 231, 183, 0.7);
+  color: #ecfdf5;
+}
+
+.cdv-clean-btn:active {
+  transform: scale(0.97);
+}
+
 .cdv-acc-group {
   display: inline-flex;
   align-items: center;
