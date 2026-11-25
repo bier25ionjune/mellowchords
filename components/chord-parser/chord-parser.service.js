@@ -1686,6 +1686,8 @@
           body: {
             imageBase64: base64,
             image_base64: base64,
+            model: cfg.model || 'gemini-2.5-flash',
+            provider: cfg.model || 'gemini-2.5-flash',
             mimeType: imageBlob.type || 'image/png',
             mime_type: imageBlob.type || 'image/png',
             sourceDomain: context.sourceDomain,
@@ -1697,8 +1699,22 @@
           }
         });
         if (res.error) {
-          context.lastVisionError = res.error && res.error.message ? res.error.message : JSON.stringify(res.error);
-          console.warn('[Vision AI Edge Function Warning]', res.error);
+          let detailedMsg = res.error && res.error.message ? res.error.message : JSON.stringify(res.error);
+          if (res.error.context) {
+            try {
+              const errJson = typeof res.error.context.json === 'function' ? await res.error.context.json() : null;
+              if (errJson && errJson.error) {
+                detailedMsg = typeof errJson.error === 'string' ? errJson.error : JSON.stringify(errJson.error);
+              }
+            } catch (_) {
+              try {
+                const errTxt = typeof res.error.context.text === 'function' ? await res.error.context.text() : '';
+                if (errTxt) detailedMsg = errTxt;
+              } catch (_) {}
+            }
+          }
+          context.lastVisionError = detailedMsg;
+          console.warn('[Vision AI Edge Function Warning]', detailedMsg);
         }
         if (!res.error && res.data) {
           const payload = (res.data.data && res.data.data.chordpro_content) ? res.data.data : res.data;
