@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'mellowchords-v29';
+const CACHE_NAME = 'mellowchords-v30';
 const IMG_CACHE_NAME = 'mellowchords-imgs-v1';
 const MAX_IMG_CACHE = 150;
 const STATIC_ASSETS = [
