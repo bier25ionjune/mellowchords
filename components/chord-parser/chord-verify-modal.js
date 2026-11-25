@@ -141,8 +141,8 @@
     const provSelect = el('select', 'cvm-select');
     provSelect.id = 'cvmVisionProviderSelect';
     [
-      { v: 'auto', t: 'Auto (Google Gemini 3.8 Flash / Edge Function)' },
-      { v: 'gemini', t: 'Google Gemini 3.8 Flash (Direct Browser API)' },
+      { v: 'auto', t: 'Auto (Google Gemini Flash / Edge Function)' },
+      { v: 'gemini', t: 'Google Gemini Flash (Direct Browser API)' },
       { v: 'openai', t: 'OpenAI Vision API (gpt-4o-mini / gpt-4o)' },
       { v: 'ocr', t: 'Offline Spatial OCR + Learned Memory Rules' }
     ].forEach(function (opt) {
@@ -154,7 +154,7 @@
     provWrap.appendChild(provSelect);
 
     const keyWrap = el('div', 'cvm-field cvm-grow');
-    keyWrap.appendChild(el('label', 'cvm-label', 'Google Gemini API Key (ใส่เพื่อใช้ Gemini 3.8 Flash แกะตรงจากภาพ)'));
+    keyWrap.appendChild(el('label', 'cvm-label', 'Google Gemini API Key (ใส่เพื่อใช้ Gemini Flash แกะตรงจากภาพ)'));
     const apiKeyInp = el('input', 'cvm-input');
     apiKeyInp.type = 'password';
     apiKeyInp.id = 'cvmVisionApiKeyInput';
