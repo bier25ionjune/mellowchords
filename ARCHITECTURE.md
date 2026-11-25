@@ -49,18 +49,18 @@ mellowchords/
 │       ├── live-room.service.js                            # ซิงก์ผ่าน Supabase Realtime (Presence + Broadcast + Postgres Changes) และ BroadcastChannel (Local)
 │       ├── live-room.ui.js                                 # Lobby สร้าง/เข้าห้อง, เชิญทั้งกรุ๊ปวงใน 1 คลิก, แสดง ChordTextViewer (+/-12) และเชื่อมต่อ MIDI
 │       └── live-room.css                                   # สไตล์แบบ Scoped (.lr-*)
-├── sw.js                                                   # Service Worker (v26) สำหรับแคช App Shell, โมดูลทั้งหมด และรูปภาพจาก Proxy
+├── sw.js                                                   # Service Worker (v27) สำหรับแคช App Shell, โมดูลทั้งหมด และรูปภาพจาก Proxy
 ├── manifest.webmanifest                                    # PWA Web Manifest
 ├── supabase/
 │   ├── functions/
-│   │   └── parse-chord-image/index.ts                      # Edge Function ดึง chord_parser_memory ประกอบ Dynamic Few-Shot Prompt ยิง Vision AI
+│   │   └── parse-chord-image/index.ts                      # Edge Function (Gemini 3.8 Flash Low) ดึง chord_parser_memory ประกอบ Dynamic Few-Shot Prompt ยิง Vision AI
 │   └── migrations/
 │       ├── 20261124000000_user_approval.sql                # Migration ระบบอนุมัติผู้สมัครเริ่มต้น (profiles, status, Restrictive RLS)
 │       ├── 20261124010000_rbac_user_management.sql         # Migration ระบบ RBAC (role, is_active, sync trigger, self-lockout protection, RLS grants)
 │       ├── 20261124020000_friends_groups_live_rooms.sql    # Migration ระบบเพื่อน (friendships), กรุ๊ปวง (band_groups/members), และ Live Room
 │       └── 20261124030000_precision_chord_parser_memory.sql# Migration มาตรฐาน ChordPro บน songs และตารางความจำ chord_parser_memory (Auto-prune 10)
 ├── tests/
-│   └── e2e.mjs                                             # ชุดทดสอบอัตโนมัติ Playwright E2E 15 ชุด (รวม Precision ChordPro, Verify & Teach, Live Room)
+│   └── e2e.mjs                                             # ชุดทดสอบอัตโนมัติ Playwright E2E 16 ชุด (รวม Precision ChordPro, Live Room, User Guide & Notice)
 ├── PROJECT.md                                              # บันทึก Milestone และสัญญาอินเทอร์เฟซของระบบ
 └── README.md                                               # คู่มือเริ่มต้นใช้งานและการ Deploy
 ```
@@ -236,6 +236,36 @@ mellowchords/
   3. **Postgres Changes (`UPDATE` on `live_rooms`):** เก็บสถานะล่าสุดในฐานข้อมูลเป็น Authoritative Fallback สำหรับผู้ที่เพิ่งเข้าห้องหรือเน็ตหลุดแล้วต่อใหม่
   - รองรับการสร้างห้องเลือก Setlist, เชิญเพื่อนรายคน หรือ **ดึงสมาชิกทั้งกรุ๊ปวงในคลิกเดียว** พร้อม `BroadcastChannel` Fallback สำหรับการซิงก์ข้ามแท็บในโหมด Local/Offline
 
+### 6.7 ระบบ Precision ChordPro Parser & Dynamic Few-Shot Learning (`components/chord-parser/`, `supabase/functions/parse-chord-image/`)
+- **Namespace:** `window.MellowChordParser`, `window.MellowChordTextViewer`, `window.MellowChordVerifyModal`
+- **โมเดล AI หลัก:** **Google Gemini 3.8 Flash (Low Thinking Mode)**
+  - กำหนด `thinkingConfig: { thinkingBudget: 1024 }` ทำให้ประมวลผลเร็วระดับเสี้ยววินาที ประหยัด Token สูงสุด และลด Latency ลงกว่า 40–50%
+  - สถาปัตยกรรมรองรับ Fallback หลายระดับ: `Auto (Supabase Edge Function) → Gemini Direct API → OpenAI Direct API (gpt-4o-mini) → Offline Spatial OCR + Learned Rules`
+  - **Zero-Token Cached Reload:** เมื่อเพลงถูกแกะและบันทึกลง Database หรือ Local Cache แล้ว การเปิดเพลงซ้ำหรือการทดคีย์จะไม่ยิง AI ซ้ำอีกเลย (0 Token 100%)
+- **Database Schema (`20261124030000_precision_chord_parser_memory.sql`):**
+  - `public.songs`: เพิ่ม `original_key`, `chordpro_content`, `source_domain`, `is_verified`
+  - `public.chord_parser_memory`: เก็บ `source_domain`, `entry_type` (`ocr_correction_rule` / `few_shot_example`), `error_pattern`, `correction_rules` jsonb, `verified_chordpro`, `quality_score` พร้อม Trigger `prune_chord_parser_memory()` จำกัดเก็บตัวอย่างคุณภาพสูงสุด 10 รายการต่อโดเมน
+  - บังคับ RLS Restrictive Policy `public.is_approved()`
+- **ตัวแสดงผลลอยเหนือพยางค์ (ChordTextViewer):**
+  - จัดวางคอร์ดลอยเหนือพยางค์ภาษาไทยด้วยโครงสร้าง CSS Inline-Flex (`.ctv-pair`, `.ctv-chord-pill`, `.ctv-lyric`, `display: inline-flex; flex-direction: column`) ไม่ใช้การนับ Spacebar ป้องกันปัญหาสระลอย/เยื้อง 100%
+  - รองรับการปรับคีย์ **±12 ครึ่งเสียง (1 อ็อกเทฟเต็ม)** แบบเรียลไทม์ รองรับคอร์ดปกติ, Slash Chord (`G/B`), คอร์ดซับซ้อน (`F#m7b5`, `Asus4`), และตัวเลือกแสดงเครื่องหมาย `#`, `b`, หรือ `Auto`
+- **หน้าจอตรวจสอบเทียบภาพและสอนระบบ (Side-by-Side Calibration UI):**
+  - ฝั่งซ้ายแสดงภาพคอร์ดแท็บต้นฉบับ ฝั่งขวาแสดงกล่องแก้ไข ChordPro และพรีวิว ChordTextViewer ด้านล่าง
+  - ปุ่ม **`🔄 ลองแกะใหม่ (Re-parse)`**: ยิง AI แกะรูปใหม่พร้อมนำความจำล่าสุดมาประกอบ Prompt
+  - ปุ่ม **`🎓 บันทึกและสอนระบบ`**: ตรวจจับความต่าง (Diff) สกัดคู่คำที่มักแกะผิดและท่อนเพลงที่ถูกต้องลง `chord_parser_memory`
+- **ระบบแกะคอร์ดอัตโนมัติ (Auto-Parse on Open):**
+  - เมื่อเปิดดูเพลงที่เป็นรูปภาพและยังไม่มีคอร์ด ChordPro ระบบจะสั่ง AI ประมวลผลในพื้นหลังให้อัตโนมัติทันที พร้อมสลับดูคอร์ดตัวหนังสือที่ปรับคีย์ได้ทันที (สามารถเปิด/ปิดได้ในหน้าตั้งค่า AI)
+
+### 6.8 ระบบคู่มือการใช้งานและแจ้งเตือนเวอร์ชัน (User Guide & Version Release Notice System — `v2.6.0`)
+- **เวอร์ชันระบบ:** `CURRENT_VERSION = 'v2.6.0'` (อัปเดตล่าสุด: 25 พ.ย. 2026)
+- **จุดเชื่อมต่อ UI:**
+  - ปุ่ม **`📖 คู่มือ`** บน Top App Bar Header (`#userGuideNavBtn`)
+  - ปุ่ม **`📢 v2.6.0`** บน Top App Bar Header (`#noticeNavBtn`)
+  - การ์ดคู่มือการใช้งาน (`.userGuideBanner`) และการ์ดแจ้งเตือนเวอร์ชัน (`.noticeBanner`) บนหน้าต่าง Login/Account Modal (`openAcct()`)
+- **การทำงาน:**
+  - **User Guide Modal (`openUserGuideModal`):** รวบรวมคำอธิบายปุ่มและฟังก์ชันสำคัญทั้งหมด 15+ รายการ แบ่งเป็น 3 หมวด (Vision AI, Live Room, คลังเพลง) ช่วยให้นักดนตรีใหม่เข้าใจวิธีใช้งานได้ทันที
+  - **Release Notice Modal (`openNoticeModal`):** แสดงรายละเอียดการอัปเดตเวอร์ชันล่าสุด (`RELEASE_NOTICES`) ตรวจสอบเวอร์ชันผ่าน `checkVersionNotice()` และเด้งเตือนอัตโนมัติเมื่อตรวจพบเวอร์ชันใหม่ (ข้ามการเด้งเตือนหากอยู่ในโหมด automated test runner / `navigator.webdriver`)
+
 ---
 
 ## 7. การตรวจสอบและชุดทดสอบอัตโนมัติ (Verification)
@@ -256,7 +286,7 @@ mellowchords/
      && node --check features/live-room/live-room.service.js \
      && node --check features/live-room/live-room.ui.js
    ```
-2. **รันชุดทดสอบ E2E ทั้งหมด (Playwright — 15 ชุด):**
+2. **รันชุดทดสอบ E2E ทั้งหมด (Playwright — 16 ชุด):**
    ```bash
    node tests/e2e.mjs
    ```
@@ -269,4 +299,5 @@ mellowchords/
    - Real-time Live Room 2 แท็บ: ดึงทั้งกรุ๊ปวงเข้าคำเชิญใน 1 คลิก, Presence สมาชิกออนไลน์, ซิงก์เปลี่ยนเพลงและคีย์แบบเรียลไทม์, และ MIDI Footswitch (Test 13)
    - iPad Portrait & Landscape Fullscreen Stage Mode (Test 14)
    - Precision ChordPro Parser, `ChordTextViewer` (`+/- 12` semitones, Slash/Complex chords, `#`/`b`, CSS Flex over Thai syllables), Side-by-Side `Verify & Teach` Learning Memory (`chord_parser_memory`), Dynamic Few-Shot `Re-parse`, และ `ChordTextViewer` ใน Live Room (Test 15)
+   - User Guide & Version Release Notice Modals (`#userGuideNavBtn`, `#noticeNavBtn`, และแบนเนอร์บนหน้าต่าง Login/Account) (Test 16)
 
