@@ -2616,6 +2616,10 @@ async function loadGallery(song) {
       im.hidden = true;
       const errBox = mk('div', 'sheetImgError');
       errBox.appendChild(mk('div', null, 'ไม่สามารถโหลดภาพคอร์ดได้ในขณะนี้'));
+      const btnRow = mk('div', 'row');
+      btnRow.style.justifyContent = 'center';
+      btnRow.style.gap = '8px';
+      btnRow.style.flexWrap = 'wrap';
       const retryBtn = btn('🔄 ลองโหลดใหม่', () => {
         errBox.remove();
         im.hidden = false;
@@ -2627,7 +2631,30 @@ async function loadGallery(song) {
         imgWrap.prepend(skel);
         setImgSrc(entry.url);
       }, 'primary small');
-      errBox.appendChild(retryBtn);
+      const searchFetchBtn = btn('🔍 ค้นหาและดึงภาพใหม่', async () => {
+        searchFetchBtn.disabled = true;
+        searchFetchBtn.textContent = '⏳ กำลังค้นหาภาพใหม่…';
+        try {
+          const updated = await refetchSongImageByTitleAndArtist(song);
+          if (updated && updated.images && updated.images.length) {
+            toast(`ดึงภาพคอร์ด “${song.title}” ใหม่สำเร็จ ✔`);
+            if (current && current.song && current.song.id === song.id) {
+              renderSong(false);
+            }
+          } else {
+            toast('ไม่พบภาพคอร์ดใหม่สำหรับเพลงนี้', true);
+          }
+        } catch (err) {
+          toast('ค้นหาภาพใหม่ไม่สำเร็จ: ' + ((err && err.message) || err), true);
+        } finally {
+          if (searchFetchBtn.isConnected) {
+            searchFetchBtn.disabled = false;
+            searchFetchBtn.textContent = '🔍 ค้นหาและดึงภาพใหม่';
+          }
+        }
+      }, 'small');
+      btnRow.append(retryBtn, searchFetchBtn);
+      errBox.appendChild(btnRow);
       imgWrap.appendChild(errBox);
     };
 
@@ -7261,12 +7288,58 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
     isCloudActive: () => cloudOn()
   });
 
+  async function refetchSongImageByTitleAndArtist(song) {
+    if (!song || !song.title) throw new Error('ไม่พบชื่อเพลงสำหรับค้นหา');
+    const q = `${song.title} ${song.artist || ''}`.trim();
+    const results = await searchRealWebChords(q);
+    if (!results || !results.length) {
+      throw new Error(`ไม่พบผลการค้นหาสำหรับ “${q}”`);
+    }
+    const imgCandidates = results.filter(it => it.isChordtabs || (it.domain && it.domain.includes('chordtabs')));
+    const ordered = [...imgCandidates, ...results.filter(it => !imgCandidates.includes(it))];
+    let loaded = null;
+    for (const candidate of ordered.slice(0, 3)) {
+      try {
+        const res = await loadRealWebChordResult(candidate, results);
+        if (res && Array.isArray(res.images) && res.images.length) {
+          loaded = res;
+          break;
+        }
+      } catch (_) {}
+    }
+    if (!loaded || !Array.isArray(loaded.images) || !loaded.images.length) {
+      throw new Error('ไม่พบไฟล์ภาพคอร์ดจากผลการค้นหา');
+    }
+
+    song.images = loaded.images.slice();
+    if (loaded._ctSongId) song._ctSongId = loaded._ctSongId;
+    if (loaded.src) song.src = loaded.src;
+
+    const book = loadBook();
+    const idx = book.findIndex(b => b.id === song.id || (b.title === song.title && (b.artist || '') === (song.artist || '')));
+    if (idx >= 0) {
+      book[idx] = {
+        ...book[idx],
+        images: loaded.images.slice(),
+        _ctSongId: loaded._ctSongId || book[idx]._ctSongId || null,
+        src: loaded.src || book[idx].src || ''
+      };
+      saveBook(book);
+    }
+    if (current && current.song && (current.song.id === song.id || current.song === song)) {
+      current.song.images = loaded.images.slice();
+      if (loaded._ctSongId) current.song._ctSongId = loaded._ctSongId;
+    }
+    return loaded;
+  }
+
   const lrBlobUrlCache = new Map();
   liveRoomUIInstance = window.MellowLiveRoomUI.createLiveRoomUI({
     service: liveRoomServiceInstance,
     friendsService: friendsServiceInstance,
     getSetlists: getResolvedSetlistsForLiveRoom,
     getSongbook: () => loadBook(),
+    onRefetchSongImage: (song) => refetchSongImageByTitleAndArtist(song),
     resolveImageUrl: async (rawKey) => {
       if (!rawKey || typeof rawKey !== 'string') return '';
       const key = rawKey.trim();

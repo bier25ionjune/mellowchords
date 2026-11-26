@@ -29,6 +29,7 @@
     var getSetlists = typeof options.getSetlists === 'function' ? options.getSetlists : function () { return []; };
     var getSongbook = typeof options.getSongbook === 'function' ? options.getSongbook : function () { return []; };
     var resolveImageUrl = typeof options.resolveImageUrl === 'function' ? options.resolveImageUrl : null;
+    var onRefetchSongImage = typeof options.onRefetchSongImage === 'function' ? options.onRefetchSongImage : null;
     var transposeText = typeof options.transposeText === 'function' ? options.transposeText : function (t) { return t; };
     var transposeChord = typeof options.transposeChord === 'function' ? options.transposeChord : function (c) { return c; };
     var renderChordHtml = typeof options.renderChordHtml === 'function' ? options.renderChordHtml : null;
@@ -588,7 +589,10 @@
           } else {
             sheetHtml = '<div class="lr-empty">' +
               '<div style="margin-bottom:10px">เพลงนี้ยังไม่มีรูปภาพในคลัง</div>' +
-              (hasText ? '<button type="button" class="small primary" id="lrFallbackTextBtn">📝 เปิดดูแบบ Text ชั่วคราว</button>' : '') +
+              '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">' +
+                (onRefetchSongImage ? '<button type="button" class="small primary" id="lrRefetchImgBtn">🔍 ค้นหาและดึงภาพใหม่</button>' : '') +
+                (hasText ? '<button type="button" class="small ghost" id="lrFallbackTextBtn">📝 เปิดดูแบบ Text ชั่วคราว</button>' : '') +
+              '</div>' +
             '</div>';
           }
         } else if (hasText) {
@@ -777,16 +781,98 @@
         };
       }
 
+      async function handleRefetchSongImage(btnEl) {
+        var songs = getSnapshotSongs();
+        var targetSong = songs[curIdx];
+        if (!targetSong || !onRefetchSongImage) return;
+        if (btnEl) {
+          btnEl.disabled = true;
+          btnEl.textContent = '⏳ กำลังค้นหาภาพใหม่…';
+        }
+        try {
+          var loaded = await onRefetchSongImage(targetSong);
+          if (loaded && Array.isArray(loaded.images) && loaded.images.length) {
+            targetSong.images = loaded.images.slice();
+            if (loaded._ctSongId) targetSong._ctSongId = loaded._ctSongId;
+            if (loaded.src) targetSong.src = loaded.src;
+            if (isHost && activeRoom && typeof service.broadcastRoomSetlist === 'function') {
+              var synced = await service.broadcastRoomSetlist(activeRoom, songs);
+              if (synced && synced.length) activeRoom.setlist_snapshot = synced;
+            }
+            onToast('ดึงภาพคอร์ด “' + targetSong.title + '” ใหม่สำเร็จ ✔');
+            render();
+            return;
+          }
+          onToast('ไม่พบภาพคอร์ดใหม่สำหรับเพลงนี้', true);
+        } catch (err) {
+          onToast('ค้นหาภาพใหม่ไม่สำเร็จ: ' + ((err && err.message) || err), true);
+        }
+        if (btnEl && btnEl.isConnected) {
+          btnEl.disabled = false;
+          btnEl.textContent = '🔍 ค้นหาและดึงภาพใหม่';
+        }
+      }
+
+      var refetchImgBtn = rootEl.querySelector('#lrRefetchImgBtn');
+      if (refetchImgBtn) {
+        refetchImgBtn.onclick = function () {
+          handleRefetchSongImage(refetchImgBtn);
+        };
+      }
+
+      function showBrokenImgBox(imgEl) {
+        if (!imgEl || !imgEl.isConnected || imgEl.dataset.errShown) return;
+        imgEl.dataset.errShown = '1';
+        imgEl.hidden = true;
+        var box = document.createElement('div');
+        box.className = 'sheetImgError';
+        box.style.margin = '10px auto';
+        box.innerHTML = '<div>ไม่สามารถโหลดภาพคอร์ดได้</div>';
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px';
+        var retryBtn = document.createElement('button');
+        retryBtn.type = 'button';
+        retryBtn.className = 'small primary';
+        retryBtn.textContent = '🔄 ลองโหลดใหม่';
+        retryBtn.onclick = function () {
+          box.remove();
+          imgEl.hidden = false;
+          delete imgEl.dataset.errShown;
+          delete imgEl.dataset.fallbackTried;
+          var orig = imgEl.dataset.origSrc || imgEl.src;
+          if (orig) imgEl.src = orig;
+        };
+        row.appendChild(retryBtn);
+        if (onRefetchSongImage) {
+          var searchBtn = document.createElement('button');
+          searchBtn.type = 'button';
+          searchBtn.className = 'small';
+          searchBtn.textContent = '🔍 ค้นหาและดึงภาพใหม่';
+          searchBtn.onclick = function () {
+            handleRefetchSongImage(searchBtn);
+          };
+          row.appendChild(searchBtn);
+        }
+        box.appendChild(row);
+        imgEl.parentNode.insertBefore(box, imgEl.nextSibling);
+      }
+
       rootEl.querySelectorAll('img[data-lr-img-key]').forEach(function (imgEl) {
         var key = imgEl.dataset.lrImgKey;
-        if (!key || !resolveImageUrl) return;
+        if (!key || !resolveImageUrl) {
+          showBrokenImgBox(imgEl);
+          return;
+        }
         resolveImageUrl(key).then(function (resolvedUrl) {
           if (resolvedUrl && imgEl.isConnected) {
+            imgEl.dataset.origSrc = resolvedUrl;
             imgEl.src = resolvedUrl;
           } else if (imgEl.isConnected) {
-            imgEl.alt = 'ไม่พบไฟล์รูปภาพนี้บนอุปกรณ์ (' + key + ')';
+            showBrokenImgBox(imgEl);
           }
-        }).catch(function () {});
+        }).catch(function () {
+          if (imgEl.isConnected) showBrokenImgBox(imgEl);
+        });
       });
 
       rootEl.querySelectorAll('[data-lr-acc]').forEach(function (accBtn) {
@@ -818,15 +904,19 @@
       if (quickSearchBtn) quickSearchBtn.onclick = openRoomPicker;
 
       rootEl.querySelectorAll('.lr-chord-img').forEach(function (img) {
+        if (img.src && !img.dataset.origSrc) img.dataset.origSrc = img.src;
         img.onerror = function () {
-          if (img.dataset.fallbackTried) return;
-          img.dataset.fallbackTried = '1';
-          if (/^https?:\/\//i.test(img.src) && !img.src.includes('wsrv.nl')) {
-            img.src = 'https://wsrv.nl/?url=' + encodeURIComponent(img.src) + '&output=webp&q=85&w=1400&we';
+          if (!img.dataset.fallbackTried) {
+            img.dataset.fallbackTried = '1';
+            if (/^https?:\/\//i.test(img.src) && !img.src.includes('wsrv.nl')) {
+              img.src = 'https://wsrv.nl/?url=' + encodeURIComponent(img.src) + '&output=webp&q=85&w=1400&we';
+              return;
+            }
           }
+          showBrokenImgBox(img);
         };
         img.onclick = function () {
-          if (onOpenLightbox) onOpenLightbox(img.src);
+          if (onOpenLightbox && img.src) onOpenLightbox(img.src);
         };
       });
 
