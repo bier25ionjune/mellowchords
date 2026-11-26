@@ -37,6 +37,7 @@
     var onChordClick = typeof options.onChordClick === 'function' ? options.onChordClick : null;
     var onAddSongRequest = typeof options.onAddSongRequest === 'function' ? options.onAddSongRequest : null;
     var onOpenLightbox = typeof options.onOpenLightbox === 'function' ? options.onOpenLightbox : null;
+    var onUpdateLightboxImage = typeof options.onUpdateLightboxImage === 'function' ? options.onUpdateLightboxImage : null;
     var onToast = typeof options.onToast === 'function' ? options.onToast : function () {};
 
     var rootEl = null;
@@ -48,6 +49,7 @@
     var accidentalMode = 'auto'; // 'auto' | 'sharp' | 'flat'
     var displayMode = 'image'; // 'image' (Image-first default) | 'text'
     var stageWide = false;     // iPad stage toggle: hide sidebar for full-screen chord sheet
+    var floatingCollapsed = false;
     var onlineMembers = [];
     var myRooms = [];
     var friends = [];
@@ -202,6 +204,31 @@
       await refreshLobbyData();
     }
 
+    function syncLightboxToSong(target) {
+      if (!onUpdateLightboxImage || !target) return;
+      var firstImg = '';
+      if (Array.isArray(target.images) && target.images.length) firstImg = target.images[0];
+      else if (target._ctSongId) firstImg = 'https://chordtabs.in.th/img/nm/' + String(target._ctSongId) + '.png';
+      if (!firstImg) {
+        var book = getSongbook() || [];
+        var m = book.find(function (b) { return b && ((target.id && b.id === target.id) || (target.title && b.title === target.title)); });
+        if (m && Array.isArray(m.images) && m.images.length) firstImg = m.images[0];
+      }
+      if (!firstImg) return;
+      var ctMatch = String(firstImg).match(/^ct-img-(\d+)$/i);
+      if (ctMatch) {
+        onUpdateLightboxImage('https://chordtabs.in.th/img/nm/' + ctMatch[1] + '.png');
+        return;
+      }
+      if (/^(https?:|data:|blob:)/i.test(firstImg)) {
+        onUpdateLightboxImage(firstImg);
+      } else if (resolveImageUrl) {
+        resolveImageUrl(firstImg).then(function (u) {
+          if (u) onUpdateLightboxImage(u);
+        }).catch(function () {});
+      }
+    }
+
     async function hostSelectSong(index, opts) {
       if (!activeRoom) return;
       var songs = getSnapshotSongs();
@@ -217,6 +244,7 @@
         localSongIndex = index;
         localKeyShift = nextShift;
         render();
+        syncLightboxToSong(target);
         return;
       }
 
@@ -226,6 +254,7 @@
       localSongIndex = index;
       localKeyShift = nextShift;
       render();
+      syncLightboxToSong(target);
 
       await service.broadcastRoomState(activeRoom, {
         current_song_index: index,
@@ -648,10 +677,10 @@
         : '';
 
       var floatingSetlistHtml = stageWide
-        ? '<aside class="lr-floating-setlist" aria-label="คิวเพลงแบบโปร่งแสง">' +
+        ? '<aside class="lr-floating-setlist' + (floatingCollapsed ? ' is-collapsed' : '') + '" aria-label="คิวเพลงแบบโปร่งแสง">' +
             '<div class="lr-floating-setlist-head">' +
               '<span>🎼 คิวเพลง (' + (curIdx + 1) + '/' + songs.length + ')</span>' +
-              '<span style="font-size:0.72rem;opacity:0.8">' + (canControl ? 'แตะเพื่อข้ามคิว' : 'ดูอิสระเพื่อกดข้าม') + '</span>' +
+              '<button type="button" class="small ghost" id="lrFloatToggleBtn" style="padding:2px 6px;min-height:24px;font-size:0.72rem">' + (floatingCollapsed ? '▴ คิวเพลง' : '▾ ซ่อน') + '</button>' +
             '</div>' +
             '<div class="lr-floating-setlist-list">' +
               songs.map(function (s, idx) {
@@ -773,9 +802,17 @@
         };
       }
 
+      var floatToggleBtn = rootEl.querySelector('#lrFloatToggleBtn');
+      if (floatToggleBtn) {
+        floatToggleBtn.onclick = function () {
+          floatingCollapsed = !floatingCollapsed;
+          render();
+        };
+      }
+
       rootEl.querySelectorAll('[data-lr-float-idx]').forEach(function (btn) {
         btn.onclick = function () {
-          selectSong(Number(btn.dataset.lrFloatIdx));
+          hostSelectSong(Number(btn.dataset.lrFloatIdx));
         };
       });
 
@@ -959,7 +996,13 @@
           showBrokenImgBox(img);
         };
         img.onclick = function () {
-          if (onOpenLightbox && img.src) onOpenLightbox(img.src);
+          if (onOpenLightbox && img.src) {
+            onOpenLightbox(img.src, {
+              songs: getSnapshotSongs(),
+              currentIndex: curIdx,
+              onSelectSong: function (idx) { return hostSelectSong(idx); }
+            });
+          }
         };
       });
 

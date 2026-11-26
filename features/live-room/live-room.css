@@ -416,27 +416,36 @@
 
 .lr-floating-setlist {
   position: fixed;
-  right: max(14px, env(safe-area-inset-right, 0px));
-  bottom: max(16px, env(safe-area-inset-bottom, 0px));
-  z-index: 95;
-  width: min(290px, 78vw);
-  max-height: 42vh;
+  right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: max(14px, env(safe-area-inset-bottom, 0px));
+  z-index: 1200;
+  width: min(260px, 72vw);
+  max-height: 38vh;
   display: flex;
   flex-direction: column;
-  background: rgba(15, 23, 42, 0.30);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 14px;
-  padding: 8px 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  transition: background 0.18s ease, opacity 0.18s ease;
+  background: rgba(15, 23, 42, 0.28);
+  opacity: 0.30;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  padding: 6px 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  transition: opacity 0.18s ease, background 0.18s ease;
 }
 
 .lr-floating-setlist:hover,
 .lr-floating-setlist:focus-within,
 .lr-floating-setlist:active {
-  background: rgba(15, 23, 42, 0.82);
+  opacity: 0.96;
+  background: rgba(15, 23, 42, 0.90);
+}
+
+.lr-floating-setlist.is-collapsed .lr-floating-setlist-list {
+  display: none;
+}
+
+.lr-floating-setlist.is-collapsed {
+  width: auto;
+  max-height: none;
 }
 
 .lr-floating-setlist-head {

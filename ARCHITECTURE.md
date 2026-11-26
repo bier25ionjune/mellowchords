@@ -241,8 +241,9 @@ mellowchords/
     - สมาชิกที่เปิดโหมด **"ดูอิสระเฉพาะเครื่องนี้" (`localOverride`)** สามารถสลับดูภาพ/Text หรือทดคีย์เฉพาะเครื่องตัวเองได้โดยไม่กระทบทั้งวง
   - **Pre-flight Image Check & Sync (`prepareSetlistImagesForLiveRoom` & `verifySongImagesReady`):**
     - ก่อนสร้างห้อง Live ระบบจะรีเช็คความสมบูรณ์ของภาพทุกเพลงจริง (ตรวจ `Blob` ใน `IndexedDB`/`Supabase Storage` และทดสอบโหลดภาพจริงผ่าน `verifyImageUrlLoads` + `wsrv.nl` fallback) หากพบลิงก์เสีย/404 หรือภาพหาย จะ Resolve ลิงก์เก่าผ่าน Jina หรือค้นหาและดึงภาพจาก `chordtabs.in.th` ตามชื่อเพลง/ศิลปินมาบันทึกไว้ก่อนเปิดห้องเสมอ
-  - **Full-Screen Stage & 30% Translucent Floating Setlist (`.lr-floating-setlist`):**
-    - เมื่อกด `🖥️ ขยายเต็มจอ` (`stageWide`) พื้นที่คอร์ดจะขยายเต็มหน้าจอ พร้อมแสดงลิสต์คิวเพลงแบบโปร่งแสง (~30% opacity + `backdrop-filter: blur(8px)`) ที่มุมขวาล่าง เพื่อให้ดูคิวหรือแตะข้ามไปเพลงนั้นๆ ได้ทันที
+  - **Full-Screen Stage, Image Lightbox & Translucent Floating Setlist (`.lr-floating-setlist`):**
+    - เมื่อกด `🖥️ ขยายเต็มจอ` (`stageWide`) หรือแตะที่รูปคอร์ดเพื่อเปิดเต็มจอ (`openLightbox` / `#lightbox`) จะแสดงลิสต์คิวเพลงแบบโปร่งแสง (`opacity: 0.30` ไม่ใช้ `backdrop-filter: blur` เพื่อไม่ให้บัง/เบลอตัวหนังสือด้านหลัง และชัดขึ้นเป็น `0.96` เมื่อชี้/แตะ พร้อมปุ่มย่อ/ซ่อน) ที่มุมขวาล่าง
+    - เมื่อกดเลือกข้ามเพลงจากลิสต์ลอยด้านขวามือ จะเรียก `hostSelectSong` เพื่อเปลี่ยนเพลง ซิงก์ทั้งห้อง และอัปเดตภาพคอร์ด (`#lrChordGallery` และ `#lbImg` ใน `#lightbox`) ทันที
   - **Quick Search Next Song (`openLiveRoomSongPicker`):**
     - ปุ่ม `🔍 ค้นหาเพลงต่อไป` / `➕ เพิ่มเพลง` ในห้อง Live เปิด Modal ค้นหาทั้งจากคลังในเครื่องและออนไลน์ (`searchRealWebChords` โดยเรียง `chordtabs.in.th` ก่อนเสมอ), ดึงภาพ/บันทึกเข้าคลัง, และซิงก์เข้า Setlist ห้องทันที
   - รองรับการสร้างห้องเลือก Setlist, เชิญเพื่อนรายคน หรือ **ดึงสมาชิกทั้งกรุ๊ปวงในคลิกเดียว** พร้อม `BroadcastChannel` Fallback สำหรับการซิงก์ข้ามแท็บในโหมด Local/Offline

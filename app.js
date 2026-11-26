@@ -3089,8 +3089,10 @@ if ($('#saveOcrBtn')) {
 $('#deleteBtn').onclick = () => removeSong(current.song.id, current.song.title);
 $('#editBtn').onclick = () => openEditor(current.song);
 
-function openLightbox(url) {
+let _lbSetlistEl = null;
+function setLightboxImgSrc(url) {
   const lbImg = $('#lbImg');
+  if (!lbImg || !url) return;
   lbImg.referrerPolicy = 'no-referrer';
   if (typeof url === 'string' && (url.includes('wsrv.nl') || url.includes('weserv.nl'))) {
     lbImg.crossOrigin = 'anonymous';
@@ -3098,10 +3100,70 @@ function openLightbox(url) {
     lbImg.removeAttribute('crossorigin');
   }
   lbImg.src = url;
+}
+
+function renderLightboxFloatingSetlist(opts) {
+  const lb = $('#lightbox');
+  if (!lb) return;
+  if (_lbSetlistEl && _lbSetlistEl.parentNode) _lbSetlistEl.remove();
+  _lbSetlistEl = null;
+  if (!opts || !Array.isArray(opts.songs) || !opts.songs.length) return;
+
+  const wrap = document.createElement('aside');
+  wrap.className = 'lr-floating-setlist';
+  wrap.id = 'lbFloatingSetlist';
+  wrap.setAttribute('aria-label', 'คิวเพลงแบบโปร่งแสง');
+
+  const curIdx = Math.max(0, Math.min(opts.songs.length - 1, Number(opts.currentIndex) || 0));
+  const head = document.createElement('div');
+  head.className = 'lr-floating-setlist-head';
+  head.innerHTML = `<span>🎼 คิวเพลง (${curIdx + 1}/${opts.songs.length})</span>`;
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.className = 'small ghost';
+  toggleBtn.style.cssText = 'padding:2px 6px;min-height:24px;font-size:0.72rem';
+  toggleBtn.textContent = '▾ ซ่อน';
+  toggleBtn.onclick = e => {
+    e.stopPropagation();
+    const collapsed = wrap.classList.toggle('is-collapsed');
+    toggleBtn.textContent = collapsed ? '▴ คิวเพลง' : '▾ ซ่อน';
+  };
+  head.appendChild(toggleBtn);
+  wrap.appendChild(head);
+
+  const list = document.createElement('div');
+  list.className = 'lr-floating-setlist-list';
+  opts.songs.forEach((s, idx) => {
+    const btnEl = document.createElement('button');
+    btnEl.type = 'button';
+    btnEl.className = 'lr-floating-song-btn' + (idx === curIdx ? ' active' : '');
+    btnEl.innerHTML = `<span class="lr-song-label">${idx + 1}. ${escapeHtml(s.title || 'ไม่ระบุชื่อ')}</span><small>${escapeHtml(s.key || '-')}</small>`;
+    btnEl.onclick = async e => {
+      e.stopPropagation();
+      if (typeof opts.onSelectSong === 'function') {
+        await opts.onSelectSong(idx);
+      }
+      opts.currentIndex = idx;
+      renderLightboxFloatingSetlist(opts);
+    };
+    list.appendChild(btnEl);
+  });
+  wrap.appendChild(list);
+  lb.appendChild(wrap);
+  _lbSetlistEl = wrap;
+}
+
+function openLightbox(url, opts = null) {
+  setLightboxImgSrc(url);
   $('#lbBody').classList.remove('zoom');
   $('#lightbox').hidden = false;
+  renderLightboxFloatingSetlist(opts);
 }
-$('#lbClose').onclick = () => ($('#lightbox').hidden = true);
+$('#lbClose').onclick = () => {
+  $('#lightbox').hidden = true;
+  if (_lbSetlistEl && _lbSetlistEl.parentNode) _lbSetlistEl.remove();
+  _lbSetlistEl = null;
+};
 $('#lbZoom').onclick = () => $('#lbBody').classList.toggle('zoom');
 
 let fs = LS.get(FSK, 1.65);
@@ -7638,8 +7700,14 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
       if (typeof showChordPopup === 'function') showChordPopup(ch);
     },
     onAddSongRequest: openLiveRoomSongPicker,
-    onOpenLightbox: (imgUrl) => {
-      if (typeof openLightbox === 'function') openLightbox(imgUrl);
+    onOpenLightbox: (imgUrl, opts) => {
+      if (typeof openLightbox === 'function') openLightbox(imgUrl, opts || null);
+    },
+    onUpdateLightboxImage: (imgUrl) => {
+      const lb = $('#lightbox');
+      if (lb && !lb.hidden && typeof setLightboxImgSrc === 'function') {
+        setLightboxImgSrc(imgUrl);
+      }
     },
     onToast: (msg, isErr) => toast(msg, isErr)
   });
