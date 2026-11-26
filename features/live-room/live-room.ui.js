@@ -28,6 +28,7 @@
     var friendsService = options.friendsService;
     var getSetlists = typeof options.getSetlists === 'function' ? options.getSetlists : function () { return []; };
     var getSongbook = typeof options.getSongbook === 'function' ? options.getSongbook : function () { return []; };
+    var resolveImageUrl = typeof options.resolveImageUrl === 'function' ? options.resolveImageUrl : null;
     var transposeText = typeof options.transposeText === 'function' ? options.transposeText : function (t) { return t; };
     var transposeChord = typeof options.transposeChord === 'function' ? options.transposeChord : function (c) { return c; };
     var renderChordHtml = typeof options.renderChordHtml === 'function' ? options.renderChordHtml : null;
@@ -518,35 +519,78 @@
           (curSong.parsedChordSheet && curSong.parsedChordSheet.monospaceText) ||
           curSong.text ||
           '';
-        if (Array.isArray(curSong.images)) {
-          validImgs = curSong.images
-            .map(function (u) {
-              if (typeof u !== 'string') return '';
-              var s = u.trim();
-              var m = s.match(/^ct-img-(\d+)$/i);
-              return m ? ('https://chordtabs.in.th/img/nm/' + m[1] + '.png') : s;
-            })
-            .filter(function (u) {
-              return /^(https?:|data:|blob:)/i.test(u);
+        var rawImgs = [];
+        function collectImgsFrom(srcObj) {
+          if (!srcObj) return;
+          if (Array.isArray(srcObj.images)) {
+            srcObj.images.forEach(function (u) {
+              if (typeof u === 'string' && u.trim()) rawImgs.push(u.trim());
             });
+          }
+          if (!rawImgs.length && Array.isArray(srcObj.imgUrls)) {
+            srcObj.imgUrls.forEach(function (u) {
+              if (typeof u === 'string' && u.trim()) rawImgs.push(u.trim());
+            });
+          }
+          if (!rawImgs.length && srcObj.imageUrl && typeof srcObj.imageUrl === 'string') {
+            rawImgs.push(srcObj.imageUrl.trim());
+          }
+          if (!rawImgs.length && srcObj._ctSongId) {
+            rawImgs.push('https://chordtabs.in.th/img/nm/' + String(srcObj._ctSongId) + '.png');
+          }
+          if (!rawImgs.length) {
+            var srcJoined = [srcObj.src, srcObj.url, srcObj.sourceUrl].filter(Boolean).join(' ');
+            var ctUrlMatch = srcJoined.match(/chordtabs\.in\.th\/(\d+)/i) || srcJoined.match(/[?&]song_id=(\d+)/i);
+            if (ctUrlMatch) {
+              rawImgs.push('https://chordtabs.in.th/img/nm/' + ctUrlMatch[1] + '.png');
+            }
+          }
         }
-        if (!validImgs.length && curSong._ctSongId) {
-          validImgs = ['https://chordtabs.in.th/img/nm/' + String(curSong._ctSongId) + '.png'];
+        collectImgsFrom(curSong);
+        if (!rawImgs.length) {
+          var book = getSongbook() || [];
+          var localMatch = book.find(function (b) {
+            return b && ((curSong.id && b.id === curSong.id) || (curSong.title && b.title === curSong.title));
+          });
+          if (localMatch) collectImgsFrom(localMatch);
         }
+
+        var seenImg = new Set();
+        validImgs = rawImgs
+          .map(function (u) {
+            var m = u.match(/^ct-img-(\d+)$/i);
+            return m ? ('https://chordtabs.in.th/img/nm/' + m[1] + '.png') : u;
+          })
+          .filter(function (u) {
+            if (!u || seenImg.has(u)) return false;
+            seenImg.add(u);
+            return true;
+          });
       }
 
       var hasImages = validImgs.length > 0;
       var hasText = !!(chordProSource && chordProSource.trim());
-      var showImageNow = displayMode === 'image' ? (hasImages || !hasText) : false;
+      var showImageNow = displayMode === 'image';
 
       var sheetHtml = '';
       if (curSong) {
-        if (showImageNow && hasImages) {
-          sheetHtml = '<div class="lr-chord-gallery" id="lrChordGallery">' +
-            validImgs.map(function (imgUrl, i) {
-              return '<img class="lr-chord-img" data-lr-img-idx="' + i + '" src="' + esc(imgUrl) + '" referrerpolicy="no-referrer" alt="' + esc(curSong.title) + '" title="แตะเพื่อขยายดูเต็มจอ">';
-            }).join('') +
-          '</div>';
+        if (showImageNow) {
+          if (hasImages) {
+            sheetHtml = '<div class="lr-chord-gallery" id="lrChordGallery">' +
+              validImgs.map(function (imgEntry, i) {
+                var isDirect = /^(https?:|data:|blob:)/i.test(imgEntry);
+                if (isDirect) {
+                  return '<img class="lr-chord-img" data-lr-img-idx="' + i + '" src="' + esc(imgEntry) + '" referrerpolicy="no-referrer" alt="' + esc(curSong.title) + '" title="แตะเพื่อขยายดูเต็มจอ">';
+                }
+                return '<img class="lr-chord-img" data-lr-img-idx="' + i + '" data-lr-img-key="' + esc(imgEntry) + '" alt="' + esc(curSong.title) + ' (กำลังโหลดรูปภาพ...)" title="แตะเพื่อขยายดูเต็มจอ">';
+              }).join('') +
+            '</div>';
+          } else {
+            sheetHtml = '<div class="lr-empty">' +
+              '<div style="margin-bottom:10px">เพลงนี้ยังไม่มีรูปภาพในคลัง</div>' +
+              (hasText ? '<button type="button" class="small primary" id="lrFallbackTextBtn">📝 เปิดดูแบบ Text ชั่วคราว</button>' : '') +
+            '</div>';
+          }
         } else if (hasText) {
           var renderedBody = Viewer
             ? Viewer.renderChordProToHtml(chordProSource, {
@@ -725,6 +769,25 @@
           setRoomDisplayMode('image');
         };
       }
+
+      var fallbackTextBtn = rootEl.querySelector('#lrFallbackTextBtn');
+      if (fallbackTextBtn) {
+        fallbackTextBtn.onclick = function () {
+          setRoomDisplayMode('text');
+        };
+      }
+
+      rootEl.querySelectorAll('img[data-lr-img-key]').forEach(function (imgEl) {
+        var key = imgEl.dataset.lrImgKey;
+        if (!key || !resolveImageUrl) return;
+        resolveImageUrl(key).then(function (resolvedUrl) {
+          if (resolvedUrl && imgEl.isConnected) {
+            imgEl.src = resolvedUrl;
+          } else if (imgEl.isConnected) {
+            imgEl.alt = 'ไม่พบไฟล์รูปภาพนี้บนอุปกรณ์ (' + key + ')';
+          }
+        }).catch(function () {});
+      });
 
       rootEl.querySelectorAll('[data-lr-acc]').forEach(function (accBtn) {
         accBtn.onclick = function () {

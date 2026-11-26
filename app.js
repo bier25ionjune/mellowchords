@@ -7261,11 +7261,30 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
     isCloudActive: () => cloudOn()
   });
 
+  const lrBlobUrlCache = new Map();
   liveRoomUIInstance = window.MellowLiveRoomUI.createLiveRoomUI({
     service: liveRoomServiceInstance,
     friendsService: friendsServiceInstance,
     getSetlists: getResolvedSetlistsForLiveRoom,
     getSongbook: () => loadBook(),
+    resolveImageUrl: async (rawKey) => {
+      if (!rawKey || typeof rawKey !== 'string') return '';
+      const key = rawKey.trim();
+      if (!key) return '';
+      if (/^(https?:|data:|blob:)/i.test(key)) return key;
+      if (lrBlobUrlCache.has(key)) return lrBlobUrlCache.get(key);
+      try {
+        const blob = await getImg(key);
+        if (blob instanceof Blob && blob.size > 0) {
+          const url = URL.createObjectURL(blob);
+          lrBlobUrlCache.set(key, url);
+          return url;
+        }
+      } catch (_) {}
+      const ctMatch = key.match(/^ct-img-(\d+)$/i);
+      if (ctMatch) return `https://chordtabs.in.th/img/nm/${ctMatch[1]}.png`;
+      return '';
+    },
     transposeText: (txt) => txt,
     transposeChord: (ch, sh) => transposeChord(ch, sh, preferFlat(ch, sh)),
     renderChordHtml: (txt, sh) => {

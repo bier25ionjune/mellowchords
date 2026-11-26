@@ -68,6 +68,13 @@
     if (!out.length && song._ctSongId) {
       pushUrl('https://chordtabs.in.th/img/nm/' + String(song._ctSongId) + '.png');
     }
+    if (!out.length) {
+      var srcJoined = [song.src, song.url, song.sourceUrl].filter(Boolean).join(' ');
+      var ctUrlMatch = srcJoined.match(/chordtabs\.in\.th\/(\d+)/i) || srcJoined.match(/[?&]song_id=(\d+)/i);
+      if (ctUrlMatch) {
+        pushUrl('https://chordtabs.in.th/img/nm/' + ctUrlMatch[1] + '.png');
+      }
+    }
     return out.slice(0, 12);
   }
 
