@@ -7381,12 +7381,91 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
     return loaded;
   }
 
+  async function prepareSetlistImagesForLiveRoom(rawSongs, onProgress) {
+    const list = Array.isArray(rawSongs) ? rawSongs.map(s => (s ? { ...s } : s)) : [];
+    const total = list.length;
+    if (!total) return list;
+
+    let done = 0;
+    const book = loadBook();
+    const concurrency = 3;
+    let cursor = 0;
+
+    async function worker() {
+      while (cursor < total) {
+        const idx = cursor++;
+        const song = list[idx];
+        if (!song || song.type === 'break') {
+          done++;
+          if (typeof onProgress === 'function') onProgress(done, total, song);
+          continue;
+        }
+
+        // 1) Sync latest images from local songbook if missing on snapshot
+        if ((!Array.isArray(song.images) || !song.images.length) && song.id) {
+          const match = book.find(b => b && b.id === song.id);
+          if (match && Array.isArray(match.images) && match.images.length) {
+            song.images = match.images.slice();
+            if (match._ctSongId && !song._ctSongId) song._ctSongId = match._ctSongId;
+            if (match.src && !song.src) song.src = match.src;
+          }
+        }
+
+        // 2) Resolve ct-img-<id> or chordtabs src URL to direct URL if needed
+        if ((!Array.isArray(song.images) || !song.images.length) && song._ctSongId) {
+          song.images = [`https://chordtabs.in.th/img/nm/${song._ctSongId}.png`];
+        }
+        if ((!Array.isArray(song.images) || !song.images.length) && song.src) {
+          const m = String(song.src).match(/chordtabs\.in\.th\/(\d+)/i);
+          if (m) {
+            song._ctSongId = m[1];
+            song.images = [`https://chordtabs.in.th/img/nm/${m[1]}.png`];
+          }
+        }
+
+        // 3) Verify local img-* / ct-img-* keys or fetch from Chordtabs if still missing
+        const hasAnyImg = Array.isArray(song.images) && song.images.some(u => typeof u === 'string' && u.trim());
+        if (!hasAnyImg && song.title && navigator.onLine !== false) {
+          try {
+            await Promise.race([
+              refetchSongImageByTitleAndArtist(song),
+              new Promise(resolve => setTimeout(resolve, 6000))
+            ]);
+          } catch (_) {}
+        } else if (hasAnyImg) {
+          // Ensure local IndexedDB image keys exist (try cloud download if missing locally)
+          for (const entry of song.images) {
+            if (typeof entry === 'string' && /^(?:img-|ct-img-)/i.test(entry.trim())) {
+              try {
+                await Promise.race([
+                  getImg(entry.trim()),
+                  new Promise(resolve => setTimeout(resolve, 2500))
+                ]);
+              } catch (_) {}
+            }
+          }
+        }
+
+        done++;
+        if (typeof onProgress === 'function') onProgress(done, total, song);
+      }
+    }
+
+    const workers = [];
+    for (let w = 0; w < Math.min(concurrency, total); w++) {
+      workers.push(worker());
+    }
+    await Promise.all(workers);
+    return list;
+  }
+
   const lrBlobUrlCache = new Map();
   liveRoomUIInstance = window.MellowLiveRoomUI.createLiveRoomUI({
     service: liveRoomServiceInstance,
     friendsService: friendsServiceInstance,
     getSetlists: getResolvedSetlistsForLiveRoom,
     getSongbook: () => loadBook(),
+    onPrepareSetlistImages: (songs, onProgress) => prepareSetlistImagesForLiveRoom(songs, onProgress),
     onRefetchSongImage: (song) => refetchSongImageByTitleAndArtist(song),
     resolveImageUrl: async (rawKey) => {
       if (!rawKey || typeof rawKey !== 'string') return '';

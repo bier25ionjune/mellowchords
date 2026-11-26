@@ -29,6 +29,7 @@
     var getSetlists = typeof options.getSetlists === 'function' ? options.getSetlists : function () { return []; };
     var getSongbook = typeof options.getSongbook === 'function' ? options.getSongbook : function () { return []; };
     var resolveImageUrl = typeof options.resolveImageUrl === 'function' ? options.resolveImageUrl : null;
+    var onPrepareSetlistImages = typeof options.onPrepareSetlistImages === 'function' ? options.onPrepareSetlistImages : null;
     var onRefetchSongImage = typeof options.onRefetchSongImage === 'function' ? options.onRefetchSongImage : null;
     var transposeText = typeof options.transposeText === 'function' ? options.transposeText : function (t) { return t; };
     var transposeChord = typeof options.transposeChord === 'function' ? options.transposeChord : function (c) { return c; };
@@ -450,19 +451,36 @@
             onToast('กรุณาเพิ่มเพลงลงคลังหรือเซ็ตลิสต์ก่อนสร้างห้อง', true);
             return;
           }
+          var submitBtn = rootEl.querySelector('#lrCreateSubmitBtn');
+          var origBtnText = submitBtn ? submitBtn.textContent : '';
+          if (submitBtn) submitBtn.disabled = true;
           try {
+            var preparedSongs = chosen.songs;
+            if (onPrepareSetlistImages) {
+              if (submitBtn) submitBtn.textContent = '⏳ กำลังรีเช็คและซิงก์ภาพ (' + chosen.songs.length + ' เพลง)…';
+              preparedSongs = await onPrepareSetlistImages(chosen.songs, function (done, total) {
+                if (submitBtn && submitBtn.isConnected) {
+                  submitBtn.textContent = '⏳ รีเช็คและซิงก์ภาพ (' + done + '/' + total + ')…';
+                }
+              });
+            }
+            if (submitBtn && submitBtn.isConnected) submitBtn.textContent = '🚀 กำลังสร้างห้อง Live…';
             var res = await service.createRoom({
               name: nameEl ? nameEl.value.trim() : 'Live Session',
               setlistId: chosenId,
               bandGroupId: preselectedGroupId,
               displayMode: chosenMode,
-              songs: chosen.songs,
+              songs: preparedSongs,
               invitedUserIds: Array.from(selectedFriendIds)
             });
             onToast('สร้างห้อง "' + res.room.name + '" สำเร็จ! โค้ด: ' + res.room.room_code);
             enterRoom(res.room, { forceRole: 'host' });
           } catch (err) {
             onToast('สร้างห้องไม่สำเร็จ: ' + (err.message || err), true);
+            if (submitBtn && submitBtn.isConnected) {
+              submitBtn.disabled = false;
+              submitBtn.textContent = origBtnText || '🎤 สร้างห้อง & เริ่มเล่นสด';
+            }
           }
         };
       }
@@ -629,7 +647,25 @@
           '</div>'
         : '';
 
-      var html = '<div class="lr-shell">' +
+      var floatingSetlistHtml = stageWide
+        ? '<aside class="lr-floating-setlist" aria-label="คิวเพลงแบบโปร่งแสง">' +
+            '<div class="lr-floating-setlist-head">' +
+              '<span>🎼 คิวเพลง (' + (curIdx + 1) + '/' + songs.length + ')</span>' +
+              '<span style="font-size:0.72rem;opacity:0.8">' + (canControl ? 'แตะเพื่อข้ามคิว' : 'ดูอิสระเพื่อกดข้าม') + '</span>' +
+            '</div>' +
+            '<div class="lr-floating-setlist-list">' +
+              songs.map(function (s, idx) {
+                var activeCls = idx === curIdx ? ' active' : '';
+                return '<button type="button" class="lr-floating-song-btn' + activeCls + '" data-lr-float-idx="' + idx + '"' + (!canControl ? ' disabled' : '') + '>' +
+                  '<span class="lr-song-label">' + (idx + 1) + '. ' + esc(s.title) + '</span>' +
+                  '<small>' + esc(s.key || '-') + '</small>' +
+                '</button>';
+              }).join('') +
+            '</div>' +
+          '</aside>'
+        : '';
+
+      var html = '<div class="lr-shell' + (stageWide ? ' is-fullscreen-stage' : '') + '">' +
         '<div class="lr-stage-top">' +
           '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
             '<h2 class="lr-title" style="font-size:1.12rem">🎤 ' + esc(activeRoom.name) + '</h2>' +
@@ -720,6 +756,7 @@
             sheetHtml +
           '</section>' +
         '</div>' +
+        floatingSetlistHtml +
       '</div>';
 
       rootEl.innerHTML = html;
@@ -735,6 +772,12 @@
           render();
         };
       }
+
+      rootEl.querySelectorAll('[data-lr-float-idx]').forEach(function (btn) {
+        btn.onclick = function () {
+          selectSong(Number(btn.dataset.lrFloatIdx));
+        };
+      });
 
       async function setRoomDisplayMode(nextMode) {
         displayMode = nextMode === 'text' ? 'text' : 'image';
