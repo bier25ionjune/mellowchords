@@ -7395,6 +7395,81 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
     return loaded;
   }
 
+  function verifyImageUrlLoads(url, timeoutMs = 4500) {
+    return new Promise(resolve => {
+      if (!url || typeof Image === 'undefined') {
+        resolve(false);
+        return;
+      }
+      let settled = false;
+      const done = ok => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(ok);
+      };
+      const timer = setTimeout(() => done(false), timeoutMs);
+      const im = new Image();
+      im.referrerPolicy = 'no-referrer';
+      im.onload = () => done(im.naturalWidth > 0);
+      im.onerror = () => {
+        if (/^https?:\/\//i.test(url) && !url.includes('wsrv.nl') && !url.includes('weserv.nl')) {
+          const proxyUrl = 'https://wsrv.nl/?url=' + encodeURIComponent(url) + '&output=webp&q=85&w=1400&we';
+          const im2 = new Image();
+          im2.crossOrigin = 'anonymous';
+          im2.onload = () => done(im2.naturalWidth > 0);
+          im2.onerror = () => done(false);
+          im2.src = proxyUrl;
+        } else {
+          done(false);
+        }
+      };
+      im.src = url;
+    });
+  }
+
+  async function verifySongImagesReady(song) {
+    if (!song || !Array.isArray(song.images) || !song.images.length) return false;
+    const validEntries = [];
+    for (const raw of song.images) {
+      if (typeof raw !== 'string') continue;
+      const entry = raw.trim();
+      if (!entry) continue;
+      if (/^(?:data:|blob:)/i.test(entry)) {
+        validEntries.push(entry);
+        continue;
+      }
+      if (/^(?:img-|ct-img-)/i.test(entry)) {
+        try {
+          const blob = await Promise.race([
+            getImg(entry),
+            new Promise(resolve => setTimeout(() => resolve(null), 2500))
+          ]);
+          if (blob instanceof Blob && blob.size > 0) {
+            validEntries.push(entry);
+            continue;
+          }
+        } catch (_) {}
+        const ctMatch = entry.match(/^ct-img-(\d+)$/i);
+        if (ctMatch) {
+          const ctUrl = `https://chordtabs.in.th/img/nm/${ctMatch[1]}.png`;
+          const ok = await verifyImageUrlLoads(ctUrl, 4000);
+          if (ok) validEntries.push(ctUrl);
+        }
+        continue;
+      }
+      if (/^https?:\/\//i.test(entry)) {
+        const ok = await verifyImageUrlLoads(entry, 4500);
+        if (ok) validEntries.push(entry);
+      }
+    }
+    if (validEntries.length) {
+      song.images = validEntries;
+      return true;
+    }
+    return false;
+  }
+
   async function prepareSetlistImagesForLiveRoom(rawSongs, onProgress) {
     const list = Array.isArray(rawSongs) ? rawSongs.map(s => (s ? { ...s } : s)) : [];
     const total = list.length;
@@ -7402,6 +7477,7 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
 
     let done = 0;
     const book = loadBook();
+    let bookDirty = false;
     const concurrency = 3;
     let cursor = 0;
 
@@ -7425,7 +7501,7 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
           }
         }
 
-        // 2) Resolve ct-img-<id> or chordtabs src URL to direct URL if needed
+        // 2) Derive initial Chordtabs URL if images still empty
         if ((!Array.isArray(song.images) || !song.images.length) && song._ctSongId) {
           song.images = [`https://chordtabs.in.th/img/nm/${song._ctSongId}.png`];
         }
@@ -7437,27 +7513,36 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
           }
         }
 
-        // 3) Verify local img-* / ct-img-* keys or fetch from Chordtabs if still missing
-        const hasAnyImg = Array.isArray(song.images) && song.images.some(u => typeof u === 'string' && u.trim());
-        if (!hasAnyImg && song.title && navigator.onLine !== false) {
+        // 3) Actually verify images load (not 404 or missing IndexedDB blob)
+        let ready = await verifySongImagesReady(song);
+
+        // 4) If broken/404 and we have a Chordtabs source URL, try resolving legacy chordImgUrl via Jina
+        if (!ready && song.src && song.src.includes('chordtabs.in.th') && navigator.onLine !== false) {
+          try {
+            const meta = await resolveChordtabsMetaViaJina(song.src, 4000);
+            if (meta && meta.chordImgUrl) {
+              const ok = await verifyImageUrlLoads(meta.chordImgUrl, 4500);
+              if (ok) {
+                song.images = [meta.chordImgUrl];
+                ready = true;
+                const bIdx = book.findIndex(b => b && b.id === song.id);
+                if (bIdx >= 0) {
+                  book[bIdx] = { ...book[bIdx], images: [meta.chordImgUrl] };
+                  bookDirty = true;
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
+        // 5) Still missing or broken? Re-fetch from Chordtabs by title & artist and save
+        if (!ready && song.title && navigator.onLine !== false) {
           try {
             await Promise.race([
               refetchSongImageByTitleAndArtist(song),
-              new Promise(resolve => setTimeout(resolve, 6000))
+              new Promise(resolve => setTimeout(resolve, 6500))
             ]);
           } catch (_) {}
-        } else if (hasAnyImg) {
-          // Ensure local IndexedDB image keys exist (try cloud download if missing locally)
-          for (const entry of song.images) {
-            if (typeof entry === 'string' && /^(?:img-|ct-img-)/i.test(entry.trim())) {
-              try {
-                await Promise.race([
-                  getImg(entry.trim()),
-                  new Promise(resolve => setTimeout(resolve, 2500))
-                ]);
-              } catch (_) {}
-            }
-          }
         }
 
         done++;
@@ -7470,6 +7555,7 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
       workers.push(worker());
     }
     await Promise.all(workers);
+    if (bookDirty) saveBook(book);
     return list;
   }
 

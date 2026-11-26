@@ -238,8 +238,8 @@ mellowchords/
     - เจ้าของห้องสามารถเลือกได้ตั้งแต่ตอนสร้างห้องและสลับได้แบบเรียลไทม์ระหว่างเล่นสดว่าจะให้ห้องแสดง **🖼️ รูปภาพทั้งหมด (`image`)** หรือ **📝 รูปแบบ Text (`text`)** โดยไม่บังคับเรียก AI/OCR ระหว่างเล่นสด
     - `sanitizeSongSnapshot` แปลงคีย์ภาพ `ct-img-<songId>` เป็น URL จริง (`https://chordtabs.in.th/img/nm/<id>.png`) อัตโนมัติ พร้อม `wsrv.nl` fallback และรองรับสูงสุด 12 หน้า/เพลง
     - สมาชิกที่เปิดโหมด **"ดูอิสระเฉพาะเครื่องนี้" (`localOverride`)** สามารถสลับดูภาพ/Text หรือทดคีย์เฉพาะเครื่องตัวเองได้โดยไม่กระทบทั้งวง
-  - **Pre-flight Image Check & Sync (`prepareSetlistImagesForLiveRoom`):**
-    - ก่อนสร้างห้อง Live ระบบจะรีเช็คและซิงก์ภาพทุกเพลงใน Setlist อัตโนมัติ (ตรวจสอบ `IndexedDB` / `Supabase Storage` / `ct-img-*` และหากเพลงใดยังไม่มีภาพจะค้นหาและดึงภาพจาก `chordtabs.in.th` ตามชื่อเพลง/ศิลปินมาบันทึกไว้ก่อนเปิดห้อง)
+  - **Pre-flight Image Check & Sync (`prepareSetlistImagesForLiveRoom` & `verifySongImagesReady`):**
+    - ก่อนสร้างห้อง Live ระบบจะรีเช็คความสมบูรณ์ของภาพทุกเพลงจริง (ตรวจ `Blob` ใน `IndexedDB`/`Supabase Storage` และทดสอบโหลดภาพจริงผ่าน `verifyImageUrlLoads` + `wsrv.nl` fallback) หากพบลิงก์เสีย/404 หรือภาพหาย จะ Resolve ลิงก์เก่าผ่าน Jina หรือค้นหาและดึงภาพจาก `chordtabs.in.th` ตามชื่อเพลง/ศิลปินมาบันทึกไว้ก่อนเปิดห้องเสมอ
   - **Full-Screen Stage & 30% Translucent Floating Setlist (`.lr-floating-setlist`):**
     - เมื่อกด `🖥️ ขยายเต็มจอ` (`stageWide`) พื้นที่คอร์ดจะขยายเต็มหน้าจอ พร้อมแสดงลิสต์คิวเพลงแบบโปร่งแสง (~30% opacity + `backdrop-filter: blur(8px)`) ที่มุมขวาล่าง เพื่อให้ดูคิวหรือแตะข้ามไปเพลงนั้นๆ ได้ทันที
   - **Quick Search Next Song (`openLiveRoomSongPicker`):**
