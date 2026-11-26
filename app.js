@@ -7214,7 +7214,8 @@ function openLiveRoomSongPicker({ room, existingSongs = [], onAddSong }) {
       listEl.innerHTML = '';
       try {
         const res = await searchRealWebChords(q);
-        const items = Array.isArray(res) ? res : [];
+        const rawItems = Array.isArray(res) ? res : (res && Array.isArray(res.results) ? res.results : []);
+        const items = rawItems.filter(it => it && it.source !== 'builtin');
         statusEl.textContent = `🌐 พบผลลัพธ์ออนไลน์ ${items.length} รายการ`;
         if (!items.length) {
           listEl.append(mk('div', 'muted small', 'ไม่พบเพลงออนไลน์ที่ตรงกับคำค้นหา'));
@@ -7230,13 +7231,23 @@ function openLiveRoomSongPicker({ room, existingSongs = [], onAddSong }) {
           row.style.marginBottom = '6px';
 
           const info = mk('div');
-          info.innerHTML = `<b>${escapeHtml(item.title || item.name || 'เพลงออนไลน์')}</b><div class="muted small">${escapeHtml(item.artist || '')}</div>`;
+          const domBadge = item.isChordtabs || (item.domain && item.domain.includes('chordtabs')) ? ' · chordtabs.in.th' : (item.domain ? ' · ' + item.domain : '');
+          info.innerHTML = `<b>${escapeHtml(item.title || item.name || 'เพลงออนไลน์')}</b><div class="muted small">${escapeHtml(item.artist || '')}${escapeHtml(domBadge)}</div>`;
 
           const addOnlineBtn = btn('⬇️ ดึงเข้าห้อง', async () => {
             addOnlineBtn.disabled = true;
             addOnlineBtn.textContent = '⏳ กำลังดึง...';
             try {
-              const loaded = await loadRealWebChordResult(item, { silentOpen: true });
+              const loaded = await loadRealWebChordResult(item, items);
+              if (loaded && loaded._metaPromise) {
+                try {
+                  const meta = await Promise.race([
+                    loaded._metaPromise,
+                    new Promise(resolve => setTimeout(() => resolve(null), 3500))
+                  ]);
+                  if (meta && meta.chordImgUrl) loaded.images = [meta.chordImgUrl];
+                } catch (_) {}
+              }
               const songObj = loaded && loaded.id ? loaded : {
                 id: 'web-' + Date.now().toString(36),
                 title: item.title || q,
@@ -7273,6 +7284,9 @@ function openLiveRoomSongPicker({ room, existingSongs = [], onAddSong }) {
     searchForm.onsubmit = (e) => {
       e.preventDefault();
       renderLocalList(searchInp.value);
+      if (searchInp.value.trim() && !listEl.querySelector('[data-lr-picker-add]')) {
+        runOnlineSearch();
+      }
     };
 
     const footer = mk('div', 'row');

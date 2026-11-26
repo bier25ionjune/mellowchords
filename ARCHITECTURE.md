@@ -242,6 +242,8 @@ mellowchords/
     - ก่อนสร้างห้อง Live ระบบจะรีเช็คและซิงก์ภาพทุกเพลงใน Setlist อัตโนมัติ (ตรวจสอบ `IndexedDB` / `Supabase Storage` / `ct-img-*` และหากเพลงใดยังไม่มีภาพจะค้นหาและดึงภาพจาก `chordtabs.in.th` ตามชื่อเพลง/ศิลปินมาบันทึกไว้ก่อนเปิดห้อง)
   - **Full-Screen Stage & 30% Translucent Floating Setlist (`.lr-floating-setlist`):**
     - เมื่อกด `🖥️ ขยายเต็มจอ` (`stageWide`) พื้นที่คอร์ดจะขยายเต็มหน้าจอ พร้อมแสดงลิสต์คิวเพลงแบบโปร่งแสง (~30% opacity + `backdrop-filter: blur(8px)`) ที่มุมขวาล่าง เพื่อให้ดูคิวหรือแตะข้ามไปเพลงนั้นๆ ได้ทันที
+  - **Quick Search Next Song (`openLiveRoomSongPicker`):**
+    - ปุ่ม `🔍 ค้นหาเพลงต่อไป` / `➕ เพิ่มเพลง` ในห้อง Live เปิด Modal ค้นหาทั้งจากคลังในเครื่องและออนไลน์ (`searchRealWebChords` โดยเรียง `chordtabs.in.th` ก่อนเสมอ), ดึงภาพ/บันทึกเข้าคลัง, และซิงก์เข้า Setlist ห้องทันที
   - รองรับการสร้างห้องเลือก Setlist, เชิญเพื่อนรายคน หรือ **ดึงสมาชิกทั้งกรุ๊ปวงในคลิกเดียว** พร้อม `BroadcastChannel` Fallback สำหรับการซิงก์ข้ามแท็บในโหมด Local/Offline
 
 ### 6.7 ระบบ Precision ChordPro Parser & Dynamic Few-Shot Learning (`components/chord-parser/`, `supabase/functions/parse-chord-image/`)
