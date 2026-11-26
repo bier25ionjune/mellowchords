@@ -49,11 +49,11 @@ mellowchords/
 │       ├── live-room.service.js                            # ซิงก์ผ่าน Supabase Realtime (Presence + Broadcast + Postgres Changes) และ BroadcastChannel (Local)
 │       ├── live-room.ui.js                                 # Lobby สร้าง/เข้าห้อง, เชิญทั้งกรุ๊ปวงใน 1 คลิก, แสดง ChordTextViewer (+/-12) และเชื่อมต่อ MIDI
 │       └── live-room.css                                   # สไตล์แบบ Scoped (.lr-*)
-├── sw.js                                                   # Service Worker (v27) สำหรับแคช App Shell, โมดูลทั้งหมด และรูปภาพจาก Proxy
+├── sw.js                                                   # Service Worker (v30) สำหรับแคช App Shell, โมดูลทั้งหมด และรูปภาพจาก Proxy
 ├── manifest.webmanifest                                    # PWA Web Manifest
 ├── supabase/
 │   ├── functions/
-│   │   └── parse-chord-image/index.ts                      # Edge Function (Gemini 3.8 Flash Low) ดึง chord_parser_memory ประกอบ Dynamic Few-Shot Prompt ยิง Vision AI
+│   │   └── parse-chord-image/index.ts                      # Edge Function (Gemini 2.5 Flash + OpenAI fallback) ดึง chord_parser_memory ประกอบ Dynamic Few-Shot Prompt ยิง Vision AI
 │   └── migrations/
 │       ├── 20261124000000_user_approval.sql                # Migration ระบบอนุมัติผู้สมัครเริ่มต้น (profiles, status, Restrictive RLS)
 │       ├── 20261124010000_rbac_user_management.sql         # Migration ระบบ RBAC (role, is_active, sync trigger, self-lockout protection, RLS grants)
@@ -232,15 +232,20 @@ mellowchords/
   - เปิดใช้งาน `supabase_realtime` Publication บน `live_rooms`, `live_room_members`, และ `friendships`
 - **Realtime Event Flow (3 ชั้นบน Channel `live-room:<room_id>`):**
   1. **Presence:** แสดงรายชื่อสมาชิกที่ออนไลน์ในห้องแบบเรียลไทม์ (`#lrOnlineBar`)
-  2. **Broadcast (`room_state_sync`, `room_closed`):** ซิงก์การเปลี่ยนเพลง (ปุ่ม UI / จิ้ม Setlist / MIDI Footswitch) และการเปลี่ยนคีย์ (`−` / `+` / `รีเซ็ต`) ไปยังหน้าจอสมาชิกทุกคนทันที (< 100ms) พร้อมเรนเดอร์ Text คอร์ดด้วย `ChordTextViewer`
+  2. **Broadcast (`room_state_sync`, `room_closed`):** ซิงก์การเปลี่ยนเพลง (ปุ่ม UI / จิ้ม Setlist / MIDI Footswitch), การเปลี่ยนคีย์ (`−` / `+` / `รีเซ็ต`), และ **โหมดแสดงผลของห้อง (`display_mode`: `'image'` | `'text'`)** จาก Host ไปยังหน้าจอสมาชิกทุกคนทันที (< 100ms)
   3. **Postgres Changes (`UPDATE` on `live_rooms`):** เก็บสถานะล่าสุดในฐานข้อมูลเป็น Authoritative Fallback สำหรับผู้ที่เพิ่งเข้าห้องหรือเน็ตหลุดแล้วต่อใหม่
+  - **Host Display Mode Control (`image` vs `text`):**
+    - เจ้าของห้องสามารถเลือกได้ตั้งแต่ตอนสร้างห้องและสลับได้แบบเรียลไทม์ระหว่างเล่นสดว่าจะให้ห้องแสดง **🖼️ รูปภาพทั้งหมด (`image`)** หรือ **📝 รูปแบบ Text (`text`)** โดยไม่บังคับเรียก AI/OCR ระหว่างเล่นสด
+    - `sanitizeSongSnapshot` แปลงคีย์ภาพ `ct-img-<songId>` เป็น URL จริง (`https://chordtabs.in.th/img/nm/<id>.png`) อัตโนมัติ พร้อม `wsrv.nl` fallback และรองรับสูงสุด 12 หน้า/เพลง
+    - สมาชิกที่เปิดโหมด **"ดูอิสระเฉพาะเครื่องนี้" (`localOverride`)** สามารถสลับดูภาพ/Text หรือทดคีย์เฉพาะเครื่องตัวเองได้โดยไม่กระทบทั้งวง
   - รองรับการสร้างห้องเลือก Setlist, เชิญเพื่อนรายคน หรือ **ดึงสมาชิกทั้งกรุ๊ปวงในคลิกเดียว** พร้อม `BroadcastChannel` Fallback สำหรับการซิงก์ข้ามแท็บในโหมด Local/Offline
 
 ### 6.7 ระบบ Precision ChordPro Parser & Dynamic Few-Shot Learning (`components/chord-parser/`, `supabase/functions/parse-chord-image/`)
 - **Namespace:** `window.MellowChordParser`, `window.MellowChordTextViewer`, `window.MellowChordVerifyModal`
-- **โมเดล AI หลัก:** **Google Gemini 3.8 Flash (Low Thinking Mode)**
-  - กำหนด `thinkingConfig: { thinkingBudget: 1024 }` ทำให้ประมวลผลเร็วระดับเสี้ยววินาที ประหยัด Token สูงสุด และลด Latency ลงกว่า 40–50%
-  - สถาปัตยกรรมรองรับ Fallback หลายระดับ: `Auto (Supabase Edge Function) → Gemini Direct API → OpenAI Direct API (gpt-4o-mini) → Offline Spatial OCR + Learned Rules`
+- **โมเดล AI หลัก & ความเสถียรระดับ Production (`v2.7.0`):**
+  - ใช้ **Google Gemini 2.5 Flash** (รองรับ Fallback ไป `gemini-2.0-flash`, `gemini-1.5-flash` และ `OpenAI gpt-4o-mini`)
+  - **Timeout, Retry & Image Optimization:** บีบอัด/ย่อภาพขนาดใหญ่ (>750KB / >1800px) ฝั่ง Client ก่อนแปลง Base64, ใช้ `AbortController` Timeout Guard (15s โหลดภาพ, 45–50s Vision API/Edge Function), Retry อัตโนมัติเมื่อเจอ `429 / 503 / 5xx`, และ **In-flight Request Deduplication (`inflightParses`)** ป้องกันการยิง API ซ้ำซ้อนเมื่อค้นหาและเปิดเพลงพร้อมกัน
+  - สถาปัตยกรรมรองรับ Fallback หลายระดับ: `Gemini/OpenAI Direct API → Supabase Edge Function (Gemini → OpenAI) → Offline Spatial OCR + Learned Rules`
   - **Zero-Token Cached Reload:** เมื่อเพลงถูกแกะและบันทึกลง Database หรือ Local Cache แล้ว การเปิดเพลงซ้ำหรือการทดคีย์จะไม่ยิง AI ซ้ำอีกเลย (0 Token 100%)
 - **Database Schema (`20261124030000_precision_chord_parser_memory.sql`):**
   - `public.songs`: เพิ่ม `original_key`, `chordpro_content`, `source_domain`, `is_verified`
@@ -254,26 +259,20 @@ mellowchords/
   - ปุ่ม **`🔄 ลองแกะใหม่ (Re-parse)`**: ยิง AI แกะรูปใหม่พร้อมนำความจำล่าสุดมาประกอบ Prompt
   - ปุ่ม **`🎓 บันทึกและสอนระบบ`**: ตรวจจับความต่าง (Diff) สกัดคู่คำที่มักแกะผิดและท่อนเพลงที่ถูกต้องลง `chord_parser_memory`
 - **ระบบทำความสะอาดคอร์ดและกำจัดสิ่งแปลกปลอม OCR (Intelligent OCR Chord Sanitizer & Purifier):**
-  - **Auto-Sanitize & Normalization (`cleanOcrArtifacts`):** ตรวจจับและแปลงคำที่ระบบ OCR ดั้งเดิมอ่านเพี้ยนกลับเป็นคอร์ดมาตรฐานอัตโนมัติ เช่น:
-    - `Intro / ” /` หรือ `Intro / ' /` → `Intro / F /`
-    - `Fn ' D` หรือ `Fn` → `F D`
-    - `_Am` → `Am` (ลบลักษณะขีดล่างหรือเครื่องหมายนำหน้าคอร์ด)
-    - `๑ท` หรือ `๑m` → `Gm` (แปลงเลขไทย/อักษรไทยที่มักอ่านสับสนกับ G และ m)
-    - `Gm o` / `Gm 0` / `Gm Cc` / `6 0` → `Gm C` / `C` (แปลงวงกลม o, 0 หรือ Cc ให้เป็นคอร์ด C)
-    - `6 ทาล ]7` / `6 ทา 7` → `Gmaj7`, `8 ทา 7` → `Bmaj7`, `คิเทา 7` → `Cmaj7`, `0 รนร 4` → `Dsus4`, `0 รนร 2` → `Dsus2`, `05 นร 2 87` → `Dsus2 B7`, `อ๒กา 7` → `Emaj7`, `โทรไหน` → `Intro`, และ `( 3 Times)` → `(x3)`
-  - **Non-Chord Garbage Purging:** สำหรับบรรทัดที่เป็นคอร์ดหรือห้องดนตรี (Instrumental Progression) ระบบจะตัดคำแปลกปลอมนอกรูปแบบคอร์ดและตัวเลขตกค้าง (เช่น เศษเลข `0`, `]7`, `87`, หรืออักษรไทยโดดเดี่ยวบนบรรทัดคอร์ด เช่น `Cc พ`) ออกทั้งหมด คงเหลือเฉพาะคอร์ดดนตรีและสัญลักษณ์ห้องเพลง (`|`, `/`) ที่ถูกต้อง
-  - **Direct Gemini 3.8 Flash API Key Auto-Detection:** รองรับการใส่ Google Gemini API Key ในช่อง `⚙️ Vision AI & Prompt` โดยตรงจากหน้าเว็บ ซึ่งระบบจะตรวจจับอัตโนมัติและส่งภาพไปแกะด้วยโมเดล `gemini-3.8-flash` ทันที พร้อมแจ้งเตือนชัดเจนหากระบบจำเป็นต้องถอยไปใช้ Offline OCR สำรอง
-  - **1-Click Clean Chords Button:** เพิ่มปุ่ม **`🧹 คลีนคอร์ด`** ทั้งในแถบเครื่องมือของ Dual View (`#cdvCleanChordsBtn`) และหน้าจอเทียบภาพ Verify Modal (`#cvmTopCleanBtn`, `#cvmCleanEditorBtn`) ให้ผู้ใช้กดทำความสะอาดคอร์ดในเพลงเก่าได้ในคลิกเดียว พร้อมปรับปรุงฟังก์ชัน `isChordLine()` และ `openSong()` ใน `app.js` ให้ตรวจสอบคอร์ดได้แม่นยำ 100%
+  - **Auto-Sanitize & Normalization (`cleanOcrArtifacts`):** ตรวจจับและแปลงคำที่ระบบ OCR ดั้งเดิมอ่านเพี้ยนกลับเป็นคอร์ดมาตรฐานอัตโนมัติ (เช่น `_Am` → `Am`, `๑ท` → `Gm`, `Fn` → `F`, `87` → `B7`)
+  - **Non-Chord Garbage Purging:** สำหรับบรรทัดที่เป็นคอร์ดหรือห้องดนตรี ระบบจะตัดคำแปลกปลอมนอกรูปแบบคอร์ดและตัวเลขตกค้างออกทั้งหมด
+  - **1-Click Clean Chords Button:** เพิ่มปุ่ม **`🧹 คลีนคอร์ด`** ทั้งในแถบเครื่องมือของ Dual View (`#cdvCleanChordsBtn`) และ Verify Modal (`#cvmTopCleanBtn`, `#cvmCleanEditorBtn`)
 
-### 6.8 ระบบคู่มือการใช้งานและแจ้งเตือนเวอร์ชัน (User Guide & Version Release Notice System — `v2.6.0`)
-- **เวอร์ชันระบบ:** `CURRENT_VERSION = 'v2.6.0'` (อัปเดตล่าสุด: 25 พ.ย. 2026)
+### 6.8 ระบบคู่มือการใช้งาน แจ้งเตือนเวอร์ชัน และ UX บน iPad (`v2.7.0`)
+- **เวอร์ชันระบบ:** `CURRENT_VERSION = 'v2.7.0'` (อัปเดตล่าสุด: 26 พ.ย. 2026)
 - **จุดเชื่อมต่อ UI:**
   - ปุ่ม **`📖 คู่มือ`** บน Top App Bar Header (`#userGuideNavBtn`)
-  - ปุ่ม **`📢 v2.6.0`** บน Top App Bar Header (`#noticeNavBtn`)
+  - ปุ่ม **`📢 v2.7.0`** บน Top App Bar Header (`#noticeNavBtn`) พร้อม Badge `• ใหม่` เมื่อมีอัปเดตที่ยังไม่ได้อ่าน
   - การ์ดคู่มือการใช้งาน (`.userGuideBanner`) และการ์ดแจ้งเตือนเวอร์ชัน (`.noticeBanner`) บนหน้าต่าง Login/Account Modal (`openAcct()`)
 - **การทำงาน:**
-  - **User Guide Modal (`openUserGuideModal`):** รวบรวมคำอธิบายปุ่มและฟังก์ชันสำคัญทั้งหมด 15+ รายการ แบ่งเป็น 3 หมวด (Vision AI, Live Room, คลังเพลง) ช่วยให้นักดนตรีใหม่เข้าใจวิธีใช้งานได้ทันที
-  - **Release Notice Modal (`openNoticeModal`):** แสดงรายละเอียดการอัปเดตเวอร์ชันล่าสุด (`RELEASE_NOTICES`) ตรวจสอบเวอร์ชันผ่าน `checkVersionNotice()` และเด้งเตือนอัตโนมัติเมื่อตรวจพบเวอร์ชันใหม่ (ข้ามการเด้งเตือนหากอยู่ในโหมด automated test runner / `navigator.webdriver`)
+  - **User Guide Modal (`openUserGuideModal`):** รวบรวมคำอธิบายปุ่มและฟังก์ชันสำคัญทั้งหมด 15+ รายการ แบ่งเป็น 3 หมวด (Vision AI, Live Room, คลังเพลง)
+  - **Release Notice Modal (`openNoticeModal`):** แสดงรายละเอียดการอัปเดตเวอร์ชันล่าสุด (`RELEASE_NOTICES`), ตรวจสอบเวอร์ชันผ่าน `checkVersionNotice()`, และเชื่อมกับ `updatefound` ของ Service Worker ใน `registerPWA()` เพื่อแจ้งเตือนใน Notice ทุกครั้งที่มีการอัปเดตแอป (โดยคงการทำงานพื้นหลังของ `sw.js` ไว้เหมือนเดิม)
+  - **iPad Portrait & Landscape Optimization (`app.css`):** แยก Layout ระหว่าง iPad แนวตั้ง (`768px–1099px` portrait → Single-pane เต็มจอ 100%) และ iPad แนวนอน (`>= 1024px` landscape → 2-pane แยก Scroll อิสระ) พร้อม Touch Target `44px+`, `touch-action: manipulation`, และ `env(safe-area-inset-*)`
 
 ---
 

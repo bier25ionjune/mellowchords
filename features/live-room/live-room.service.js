@@ -40,6 +40,37 @@
     } catch (_) {}
   }
 
+  function resolveSnapshotImages(song) {
+    var out = [];
+    var seen = new Set();
+    function pushUrl(raw) {
+      if (typeof raw !== 'string') return;
+      var u = raw.trim();
+      if (!u) return;
+      var ctMatch = u.match(/^ct-img-(\d+)$/i);
+      if (ctMatch) {
+        u = 'https://chordtabs.in.th/img/nm/' + ctMatch[1] + '.png';
+      }
+      if (!seen.has(u)) {
+        seen.add(u);
+        out.push(u);
+      }
+    }
+    if (Array.isArray(song.images)) {
+      song.images.forEach(pushUrl);
+    }
+    if (!out.length && Array.isArray(song.imgUrls)) {
+      song.imgUrls.forEach(pushUrl);
+    }
+    if (!out.length && song.imageUrl) {
+      pushUrl(song.imageUrl);
+    }
+    if (!out.length && song._ctSongId) {
+      pushUrl('https://chordtabs.in.th/img/nm/' + String(song._ctSongId) + '.png');
+    }
+    return out.slice(0, 12);
+  }
+
   function sanitizeSongSnapshot(songs) {
     if (!Array.isArray(songs)) return [];
     return songs
@@ -62,7 +93,8 @@
           targetKey: s.targetKey || '',
           shift: typeof s.shift === 'number' && !isNaN(s.shift) ? s.shift : 0,
           text: s.text || '',
-          images: Array.isArray(s.images) ? s.images.slice(0, 4) : [],
+          images: resolveSnapshotImages(s),
+          _ctSongId: s._ctSongId || null,
           parsedChordSheet: cached || s.parsedChordSheet || null
         };
       });
@@ -114,6 +146,7 @@
       var firstSong = snapshot[0];
       var initShift = typeof firstSong.shift === 'number' ? firstSong.shift : 0;
 
+      var displayMode = (params && params.displayMode === 'text') ? 'text' : 'image';
       if (useCloud()) {
         var sb = getSupabase();
         try {
@@ -136,6 +169,8 @@
 
           if (res.error) throw res.error;
           var created = res.data;
+          created.display_mode = displayMode;
+          try { localStorage.setItem('mellowchords.liveroom.mode.' + created.id, displayMode); } catch (_) {}
 
           if (invitedUserIds.length) {
             var memberRows = invitedUserIds.map(function (uid) {
@@ -158,6 +193,7 @@
         host_id: me.id,
         host_name: me.username || 'Host',
         band_group_id: bandGroupId,
+        display_mode: displayMode,
         setlist_id: setlistId,
         setlist_snapshot: snapshot,
         current_song_index: 0,
@@ -460,9 +496,12 @@
         current_song_index: Number(nextState.current_song_index) || 0,
         current_song_id: nextState.current_song_id || null,
         current_key_shift: Number(nextState.current_key_shift) || 0,
+        display_mode: nextState.display_mode === 'text' ? 'text' : (nextState.display_mode === 'image' ? 'image' : (room.display_mode || 'image')),
         source: nextState.source || 'ui',
         ts: Date.now()
       };
+      room.display_mode = payload.display_mode;
+      try { localStorage.setItem('mellowchords.liveroom.mode.' + room.id, payload.display_mode); } catch (_) {}
 
       // 1) Ultra-low-latency Broadcast
       if (activeChannel && typeof activeChannel.send === 'function') {
@@ -504,6 +543,7 @@
           target.current_song_index = payload.current_song_index;
           target.current_song_id = payload.current_song_id;
           target.current_key_shift = payload.current_key_shift;
+          target.display_mode = payload.display_mode;
           target.updated_at = new Date().toISOString();
           saveLocalRooms(rooms);
         }

@@ -113,6 +113,11 @@
       localOverride = false;
       localSongIndex = Number(room.current_song_index) || 0;
       localKeyShift = normShift(room.current_key_shift || 0);
+      var savedMode = '';
+      try { savedMode = localStorage.getItem('mellowchords.liveroom.mode.' + room.id) || ''; } catch (_) {}
+      displayMode = (room.display_mode === 'text' || room.display_mode === 'image')
+        ? room.display_mode
+        : ((savedMode === 'text' || savedMode === 'image') ? savedMode : 'image');
       onlineMembers = [];
 
       service.subscribeToRoom(room, {
@@ -127,18 +132,24 @@
           var songs = getSnapshotSongs();
           var nextIdx = Math.max(0, Math.min(songs.length - 1, Number(payload.current_song_index) || 0));
           var nextShift = normShift(payload.current_key_shift || 0);
+          var nextMode = (payload.display_mode === 'text' || payload.display_mode === 'image') ? payload.display_mode : null;
           var songChanged = nextIdx !== activeRoom.current_song_index;
           var keyChanged = nextShift !== activeRoom.current_key_shift;
+          var modeChanged = nextMode && nextMode !== activeRoom.display_mode;
 
           activeRoom.current_song_index = nextIdx;
           activeRoom.current_song_id = payload.current_song_id || (songs[nextIdx] && songs[nextIdx].id) || null;
           activeRoom.current_key_shift = nextShift;
+          if (nextMode) activeRoom.display_mode = nextMode;
 
           if (!localOverride) {
             localSongIndex = nextIdx;
             localKeyShift = nextShift;
+            if (nextMode) displayMode = nextMode;
             if (songChanged && songs[nextIdx]) {
               onToast('⚡ ซิงก์เพลงจาก Host: ' + songs[nextIdx].title + (payload.source === 'midi' ? ' (🎹 MIDI)' : ''));
+            } else if (modeChanged) {
+              onToast('⚡ Host เปลี่ยนโหมดแสดงผลเป็น: ' + (nextMode === 'image' ? '🖼️ รูปภาพทั้งหมด' : '📝 รูปแบบ Text'));
             } else if (keyChanged) {
               onToast('⚡ ซิงก์คีย์จาก Host: ' + (nextShift >= 0 ? '+' + nextShift : nextShift));
             }
@@ -339,6 +350,13 @@
                 '</select>' +
               '</div>' +
               '<div>' +
+                '<label class="lr-label" for="lrDisplayModeSelect">รูปแบบการแสดงคอร์ดในห้อง (Host กำหนดได้)</label>' +
+                '<select id="lrDisplayModeSelect" class="lr-select">' +
+                  '<option value="image" selected>🖼️ ดึงภาพมาแสดงทั้งหมด (แนะนำ — คมชัด 100%)</option>' +
+                  '<option value="text">📝 แสดงรูปแบบ Text (ใช้ข้อความคอร์ดที่มีอยู่)</option>' +
+                '</select>' +
+              '</div>' +
+              '<div>' +
                 '<label class="lr-label">🎸 ดึงเข้ามาทั้งกรุ๊ปวง (1 คลิก)</label>' +
                 (bandGroups.length
                   ? '<div class="lr-band-quick-list">' + bandGroups.map(function (g) {
@@ -422,7 +440,9 @@
           e.preventDefault();
           var nameEl = rootEl.querySelector('#lrRoomName');
           var selEl = rootEl.querySelector('#lrSetlistSelect');
+          var modeEl = rootEl.querySelector('#lrDisplayModeSelect');
           var chosenId = selEl ? selEl.value : '';
+          var chosenMode = (modeEl && modeEl.value === 'text') ? 'text' : 'image';
           var chosen = setlistOpts.find(function (o) { return o.id === chosenId; });
           if (!chosen || !chosen.songs || !chosen.songs.length) {
             onToast('กรุณาเพิ่มเพลงลงคลังหรือเซ็ตลิสต์ก่อนสร้างห้อง', true);
@@ -433,6 +453,7 @@
               name: nameEl ? nameEl.value.trim() : 'Live Session',
               setlistId: chosenId,
               bandGroupId: preselectedGroupId,
+              displayMode: chosenMode,
               songs: chosen.songs,
               invitedUserIds: Array.from(selectedFriendIds)
             });
@@ -498,19 +519,29 @@
           curSong.text ||
           '';
         if (Array.isArray(curSong.images)) {
-          validImgs = curSong.images.filter(function (u) {
-            return typeof u === 'string' && /^(https?:|data:|blob:)/i.test(u);
-          });
+          validImgs = curSong.images
+            .map(function (u) {
+              if (typeof u !== 'string') return '';
+              var s = u.trim();
+              var m = s.match(/^ct-img-(\d+)$/i);
+              return m ? ('https://chordtabs.in.th/img/nm/' + m[1] + '.png') : s;
+            })
+            .filter(function (u) {
+              return /^(https?:|data:|blob:)/i.test(u);
+            });
+        }
+        if (!validImgs.length && curSong._ctSongId) {
+          validImgs = ['https://chordtabs.in.th/img/nm/' + String(curSong._ctSongId) + '.png'];
         }
       }
 
       var hasImages = validImgs.length > 0;
       var hasText = !!(chordProSource && chordProSource.trim());
-      var showImageNow = hasImages && (displayMode === 'image' || !hasText);
+      var showImageNow = displayMode === 'image' ? (hasImages || !hasText) : false;
 
       var sheetHtml = '';
       if (curSong) {
-        if (showImageNow) {
+        if (showImageNow && hasImages) {
           sheetHtml = '<div class="lr-chord-gallery" id="lrChordGallery">' +
             validImgs.map(function (imgUrl, i) {
               return '<img class="lr-chord-img" data-lr-img-idx="' + i + '" src="' + esc(imgUrl) + '" referrerpolicy="no-referrer" alt="' + esc(curSong.title) + '" title="แตะเพื่อขยายดูเต็มจอ">';
@@ -526,6 +557,11 @@
               })
             : (renderChordHtml ? renderChordHtml(chordProSource, curShift) : esc(transposeText(chordProSource, curShift)));
           sheetHtml = '<div class="lr-chord-sheet" id="lrChordSheet">' + renderedBody + '</div>';
+        } else if (hasImages) {
+          sheetHtml = '<div class="lr-empty">' +
+            '<div style="margin-bottom:10px">เพลงนี้มีเฉพาะรูปภาพ (ยังไม่มีคอร์ดแบบ Text)</div>' +
+            '<button type="button" class="small primary" id="lrFallbackImgBtn">🖼️ เปิดดูรูปภาพทั้งหมด (' + validImgs.length + ' หน้า)</button>' +
+          '</div>';
         } else {
           sheetHtml = '<div class="lr-empty">เพลงนี้ยังไม่มีรูปภาพหรือเนื้อคอร์ด</div>';
         }
@@ -537,10 +573,11 @@
 
       var canControl = isHost || localOverride;
 
-      var modeSwitchHtml = (hasImages && hasText)
+      var canSwitchMode = isHost || localOverride || (hasImages && hasText);
+      var modeSwitchHtml = canSwitchMode
         ? '<div class="lr-mode-switch" role="tablist" aria-label="สลับโหมดแสดงคอร์ด">' +
-            '<button type="button" class="small' + (showImageNow ? ' primary' : ' ghost') + '" id="lrModeImageBtn">🖼️ รูปภาพ</button>' +
-            '<button type="button" class="small' + (!showImageNow ? ' primary' : ' ghost') + '" id="lrModeTextBtn">📝 ข้อความ</button>' +
+            '<button type="button" class="small' + (displayMode === 'image' ? ' primary' : ' ghost') + '" id="lrModeImageBtn" title="' + (isHost ? 'ซิงก์ให้ทั้งห้องแสดงรูปภาพทั้งหมด' : 'แสดงรูปภาพทั้งหมด') + '">🖼️ รูปภาพทั้งหมด</button>' +
+            '<button type="button" class="small' + (displayMode === 'text' ? ' primary' : ' ghost') + '" id="lrModeTextBtn" title="' + (isHost ? 'ซิงก์ให้ทั้งห้องแสดงรูปแบบ Text' : 'แสดงรูปแบบ Text') + '">📝 รูปแบบ Text</button>' +
           '</div>'
         : '';
 
@@ -651,19 +688,41 @@
         };
       }
 
+      async function setRoomDisplayMode(nextMode) {
+        displayMode = nextMode === 'text' ? 'text' : 'image';
+        render();
+        if (isHost && activeRoom) {
+          var songs = getSnapshotSongs();
+          var idx = activeRoom.current_song_index || 0;
+          await service.broadcastRoomState(activeRoom, {
+            current_song_index: idx,
+            current_song_id: songs[idx] ? songs[idx].id : null,
+            current_key_shift: activeRoom.current_key_shift || 0,
+            display_mode: displayMode,
+            source: 'display_mode'
+          });
+          onToast('⚡ ซิงก์โหมดแสดงผลทั้งห้องเป็น: ' + (displayMode === 'image' ? '🖼️ รูปภาพทั้งหมด' : '📝 รูปแบบ Text'));
+        }
+      }
+
       var modeImageBtn = rootEl.querySelector('#lrModeImageBtn');
       if (modeImageBtn) {
         modeImageBtn.onclick = function () {
-          displayMode = 'image';
-          render();
+          setRoomDisplayMode('image');
         };
       }
 
       var modeTextBtn = rootEl.querySelector('#lrModeTextBtn');
       if (modeTextBtn) {
         modeTextBtn.onclick = function () {
-          displayMode = 'text';
-          render();
+          setRoomDisplayMode('text');
+        };
+      }
+
+      var fallbackImgBtn = rootEl.querySelector('#lrFallbackImgBtn');
+      if (fallbackImgBtn) {
+        fallbackImgBtn.onclick = function () {
+          setRoomDisplayMode('image');
         };
       }
 
