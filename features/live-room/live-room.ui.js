@@ -50,6 +50,8 @@
     var displayMode = 'image'; // 'image' (Image-first default) | 'text'
     var stageWide = false;     // iPad stage toggle: hide sidebar for full-screen chord sheet
     var floatingCollapsed = false;
+    var setlistBulkMode = false;
+    var setlistSelectedIndices = new Set();
     var onlineMembers = [];
     var myRooms = [];
     var friends = [];
@@ -736,13 +738,34 @@
           '<aside class="lr-setlist-panel">' +
             '<div class="lr-setlist-head">' +
               '<span class="fr-sec-title">🎼 เซ็ตเพลง (' + songs.length + ')</span>' +
-              (isHost && onAddSongRequest
-                ? '<button type="button" class="small primary" id="lrAddSongBtn">➕ เพิ่มเพลง</button>'
-                : '') +
+              '<div style="display:flex;gap:4px;flex-wrap:wrap">' +
+                (isHost && songs.length
+                  ? '<button type="button" class="small ' + (setlistBulkMode ? 'primary' : 'ghost') + '" id="lrBulkSetlistBtn">' + (setlistBulkMode ? '✕ เสร็จ' : '☑️ ลบ') + '</button>'
+                  : '') +
+                (isHost && onAddSongRequest
+                  ? '<button type="button" class="small primary" id="lrAddSongBtn">➕ เพิ่มเพลง</button>'
+                  : '') +
+              '</div>' +
             '</div>' +
+            (isHost && setlistBulkMode
+              ? '<div style="display:flex;gap:6px;flex-wrap:wrap;padding:6px;border-radius:8px;background:rgba(255,255,255,0.04)">' +
+                  '<button type="button" class="small ghost" id="lrBulkSelectAllBtn">' +
+                    (songs.length && songs.every(function (_s, i) { return setlistSelectedIndices.has(i); }) ? 'ล้างที่เลือก' : '☑️ ทั้งหมด') +
+                  '</button>' +
+                  '<button type="button" class="small danger" id="lrBulkRemoveBtn">🗑 ลบ (' + setlistSelectedIndices.size + ')</button>' +
+                '</div>'
+              : '') +
             '<div class="lr-setlist-list">' +
               songs.map(function (s, idx) {
                 var activeCls = idx === curIdx ? ' active' : '';
+                if (isHost && setlistBulkMode) {
+                  var checked = setlistSelectedIndices.has(idx) ? ' checked' : '';
+                  return '<label class="lr-song-btn' + activeCls + '" style="display:flex;align-items:center;gap:8px;cursor:pointer">' +
+                    '<input type="checkbox" data-lr-bulk-idx="' + idx + '"' + checked + ' style="width:18px;height:18px;flex-shrink:0;accent-color:#10b981">' +
+                    '<span class="lr-song-label" style="flex:1">' + (idx + 1) + '. ' + esc(s.title) + '</span>' +
+                    '<small class="badge dim">' + esc(s.key || '-') + '</small>' +
+                  '</label>';
+                }
                 return '<button type="button" class="lr-song-btn' + activeCls + '" data-lr-song-idx="' + idx + '"' + (!canControl ? ' disabled' : '') + '>' +
                   '<span class="lr-song-label">' + (idx + 1) + '. ' + esc(s.title) + '</span>' +
                   '<small class="badge dim">' + esc(s.key || '-') + '</small>' +
@@ -806,6 +829,63 @@
       if (floatToggleBtn) {
         floatToggleBtn.onclick = function () {
           floatingCollapsed = !floatingCollapsed;
+          render();
+        };
+      }
+
+      var bulkSetlistBtn = rootEl.querySelector('#lrBulkSetlistBtn');
+      if (bulkSetlistBtn) {
+        bulkSetlistBtn.onclick = function () {
+          setlistBulkMode = !setlistBulkMode;
+          if (!setlistBulkMode) setlistSelectedIndices.clear();
+          render();
+        };
+      }
+
+      rootEl.querySelectorAll('[data-lr-bulk-idx]').forEach(function (cb) {
+        cb.onchange = function () {
+          var i = Number(cb.dataset.lrBulkIdx);
+          if (cb.checked) setlistSelectedIndices.add(i);
+          else setlistSelectedIndices.delete(i);
+          render();
+        };
+      });
+
+      var bulkSelectAllBtn = rootEl.querySelector('#lrBulkSelectAllBtn');
+      if (bulkSelectAllBtn) {
+        bulkSelectAllBtn.onclick = function () {
+          var songs = getSnapshotSongs();
+          var allSel = songs.length > 0 && songs.every(function (_s, i) { return setlistSelectedIndices.has(i); });
+          if (allSel) setlistSelectedIndices.clear();
+          else songs.forEach(function (_s, i) { setlistSelectedIndices.add(i); });
+          render();
+        };
+      }
+
+      var bulkRemoveBtn = rootEl.querySelector('#lrBulkRemoveBtn');
+      if (bulkRemoveBtn) {
+        bulkRemoveBtn.onclick = async function () {
+          if (!isHost || !activeRoom) return;
+          if (!setlistSelectedIndices.size) {
+            onToast('กรุณาติ๊กเลือกเพลงที่ต้องการลบก่อน', true);
+            return;
+          }
+          var songs = getSnapshotSongs();
+          var remaining = songs.filter(function (_s, i) { return !setlistSelectedIndices.has(i); });
+          if (!remaining.length) {
+            onToast('ต้องเหลืออย่างน้อย 1 เพลงในเซ็ตห้อง Live', true);
+            return;
+          }
+          var removedCount = songs.length - remaining.length;
+          var synced = await service.broadcastRoomSetlist(activeRoom, remaining);
+          activeRoom.setlist_snapshot = synced && synced.length ? synced : remaining;
+          if (activeRoom.current_song_index >= activeRoom.setlist_snapshot.length) {
+            activeRoom.current_song_index = Math.max(0, activeRoom.setlist_snapshot.length - 1);
+            localSongIndex = activeRoom.current_song_index;
+          }
+          setlistSelectedIndices.clear();
+          setlistBulkMode = false;
+          onToast('🗑 ลบ ' + removedCount + ' เพลงออกจากเซ็ตห้องแล้ว ✔');
           render();
         };
       }

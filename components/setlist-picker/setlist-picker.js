@@ -86,6 +86,7 @@
       onlineHasSearched: false,
       loadingResultKeys: new Set(),
       addedResultKeys: new Set(),
+      selectedBookIds: new Set(),
       currentSongIds: Array.isArray(opts.currentSongIds)
         ? opts.currentSongIds.map(String)
         : []
@@ -408,10 +409,72 @@
       var frag = document.createDocumentFragment();
       var canRemove = typeof opts.removeSongFromSetlist === 'function';
 
+      var bulkBar = el('div', '');
+      bulkBar.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:6px 8px;margin-bottom:8px;border-radius:8px;background:rgba(255,255,255,0.04)';
+      var allIds = items.map(function (it) { return it.song && it.song.id; }).filter(Boolean);
+      var allSelected = allIds.length > 0 && allIds.every(function (id) { return state.selectedBookIds.has(id); });
+      var selAllBtn = el('button', 'sp-btn-add', allSelected ? 'ล้างที่เลือก' : ('☑️ ทั้งหมด (' + allIds.length + ')'));
+      selAllBtn.type = 'button';
+      selAllBtn.style.background = 'rgba(255,255,255,0.08)';
+      selAllBtn.addEventListener('click', function () {
+        if (allSelected) allIds.forEach(function (id) { state.selectedBookIds.delete(id); });
+        else allIds.forEach(function (id) { state.selectedBookIds.add(id); });
+        renderBookList();
+      });
+      bulkBar.appendChild(selAllBtn);
+
+      var addableSelected = items.filter(function (it) { return !it.inSetlist && state.selectedBookIds.has(it.song.id); });
+      var bulkAddBtn = el('button', 'sp-btn-add', '➕ เพิ่มที่เลือก (' + addableSelected.length + ')');
+      bulkAddBtn.type = 'button';
+      bulkAddBtn.addEventListener('click', function () {
+        if (!addableSelected.length) {
+          toast('กรุณาติ๊กเลือกเพลงที่ยังไม่อยู่ในเซ็ตก่อน', true);
+          return;
+        }
+        addableSelected.forEach(function (it) {
+          handleBookAdd(it.song);
+          state.selectedBookIds.delete(it.song.id);
+        });
+        toast('เพิ่ม ' + addableSelected.length + ' เพลงเข้าเซ็ตแล้ว ✔', false);
+        renderBookList();
+      });
+      bulkBar.appendChild(bulkAddBtn);
+
+      if (canRemove) {
+        var removableSelected = items.filter(function (it) { return it.inSetlist && state.selectedBookIds.has(it.song.id); });
+        if (removableSelected.length) {
+          var bulkRemBtn = el('button', 'sp-btn-remove', '🗑 นำออก (' + removableSelected.length + ')');
+          bulkRemBtn.type = 'button';
+          bulkRemBtn.style.width = 'auto';
+          bulkRemBtn.style.padding = '4px 10px';
+          bulkRemBtn.addEventListener('click', function () {
+            removableSelected.forEach(function (it) {
+              handleBookRemove(it.song);
+              state.selectedBookIds.delete(it.song.id);
+            });
+            toast('นำออก ' + removableSelected.length + ' เพลงจากเซ็ตแล้ว', false);
+            renderBookList();
+          });
+          bulkBar.appendChild(bulkRemBtn);
+        }
+      }
+      frag.appendChild(bulkBar);
+
       for (var i = 0; i < items.length; i++) {
         (function (entry) {
           var song = entry.song;
           var row = el('div', 'sp-item' + (entry.inSetlist ? ' is-in-set' : ''));
+
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = state.selectedBookIds.has(song.id);
+          cb.style.cssText = 'width:18px;height:18px;flex-shrink:0;margin-right:8px;accent-color:#10b981;cursor:pointer';
+          cb.addEventListener('change', function () {
+            if (cb.checked) state.selectedBookIds.add(song.id);
+            else state.selectedBookIds.delete(song.id);
+            renderBookList();
+          });
+          row.appendChild(cb);
 
           var info = el('div', 'sp-item-info');
           var titleRow = el('div', 'sp-item-title-row');

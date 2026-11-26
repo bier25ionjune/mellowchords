@@ -183,8 +183,8 @@ mellowchords/
 - **จุดเชื่อมต่อ:** ปุ่ม `➕ เพิ่มเพลงเข้าเซ็ต` (`#plAddSongPickerBtn`) ในหน้า Setlist (`#plView`)
 - **การทำงาน:**
   - แสดงผลแบบ Responsive: **Side Panel** ด้านขวา (`420px`) บนเดสก์ท็อป (`>= 960px`) และ **Bottom Drawer** บนมือถือ (`< 960px`)
-  - **แท็บคลังเพลง:** ค้นหา/กรอง (`ทั้งหมด`, `ยังไม่ในเซ็ต`, `อยู่ในเซ็ตแล้ว`, `⭐ โปรด`) และแสดง Badge `✓ อยู่ในเซ็ตแล้ว` พร้อมเพิ่ม/นำออกได้ทันที
-  - **แท็บค้นหาออนไลน์:** ดึงคอร์ด/รูปภาพจากเว็บ -> ตรวจจับเพลงซ้ำ 4 ระดับ (`id`, `chordtabsId`, `url`, `title+artist`) -> บันทึกเข้าคลังเพลงอัตโนมัติ -> เพิ่มเข้าเซ็ตเพลงทันที
+  - **แท็บคลังเพลง:** ค้นหา/กรอง (`ทั้งหมด`, `ยังไม่ในเซ็ต`, `อยู่ในเซ็ตแล้ว`, `⭐ โปรด`), แสดง Badge `✓ อยู่ในเซ็ตแล้ว`, และรองรับ **เลือกหลายเพลง (`selectedBookIds`) เพื่อเพิ่ม/นำออกทีละหลายรายการพร้อมกัน** (เช่นเดียวกับโหมด `☑️ เลือก` ในคลังเพลง `#librarySection` และ `☑️ ลบหลายเพลง` ในหน้าเซ็ต `#plView`)
+  - **แท็บค้นหาออนไลน์:** ดึงคอร์ด/รูปภาพจาก `chordtabs.in.th` -> ตรวจจับเพลงซ้ำ 4 ระดับ (`id`, `chordtabsId`, `url`, `title+artist`) -> บันทึกเข้าคลังเพลงอัตโนมัติ -> เพิ่มเข้าเซ็ตเพลงทันที
 
 ### 6.2 Precision Chord Parser, `ChordTextViewer` & Dynamic Learning System (`components/chord-parser/`)
 - **Namespace:** `window.MellowChordTextViewer`, `window.MellowChordParser`, `window.MellowChordVerifyModal`, `window.MellowChordDualView`
@@ -244,8 +244,9 @@ mellowchords/
   - **Full-Screen Stage, Image Lightbox & Translucent Floating Setlist (`.lr-floating-setlist`):**
     - เมื่อกด `🖥️ ขยายเต็มจอ` (`stageWide`) หรือแตะที่รูปคอร์ดเพื่อเปิดเต็มจอ (`openLightbox` / `#lightbox`) จะแสดงลิสต์คิวเพลงแบบโปร่งแสง (`opacity: 0.30` ไม่ใช้ `backdrop-filter: blur` เพื่อไม่ให้บัง/เบลอตัวหนังสือด้านหลัง และชัดขึ้นเป็น `0.96` เมื่อชี้/แตะ พร้อมปุ่มย่อ/ซ่อน) ที่มุมขวาล่าง
     - เมื่อกดเลือกข้ามเพลงจากลิสต์ลอยด้านขวามือ จะเรียก `hostSelectSong` เพื่อเปลี่ยนเพลง ซิงก์ทั้งห้อง และอัปเดตภาพคอร์ด (`#lrChordGallery` และ `#lbImg` ใน `#lightbox`) ทันที
-  - **Quick Search Next Song (`openLiveRoomSongPicker`):**
-    - ปุ่ม `🔍 ค้นหาเพลงต่อไป` / `➕ เพิ่มเพลง` ในห้อง Live เปิด Modal ค้นหาทั้งจากคลังในเครื่องและออนไลน์ (`searchRealWebChords` โดยเรียง `chordtabs.in.th` ก่อนเสมอ), ดึงภาพ/บันทึกเข้าคลัง, และซิงก์เข้า Setlist ห้องทันที
+  - **Quick Search Next Song & Bulk Setlist Management (`openLiveRoomSongPicker`, `live-room.ui.js`):**
+    - ปุ่ม `🔍 ค้นหาเพลงต่อไป` / `➕ เพิ่มเพลง` ในห้อง Live รองรับการเลือกเพิ่มเพลงทีละหลายรายการ (`➕ เพิ่มที่เลือก (N) เข้าห้อง`) และค้นออนไลน์จาก `chordtabs.in.th` แล้วซิงก์เข้า Setlist ห้องทันที
+    - Host สามารถกด `☑️ ลบ` ในแผงเซ็ตเพลงเพื่อเลือกและลบเพลงออกจากเซ็ตห้อง Live ทีละหลายรายการพร้อมซิงก์ทั้งวงได้ทันที
   - รองรับการสร้างห้องเลือก Setlist, เชิญเพื่อนรายคน หรือ **ดึงสมาชิกทั้งกรุ๊ปวงในคลิกเดียว** พร้อม `BroadcastChannel` Fallback สำหรับการซิงก์ข้ามแท็บในโหมด Local/Offline
 
 ### 6.7 ระบบ Precision ChordPro Parser & Dynamic Few-Shot Learning (`components/chord-parser/`, `supabase/functions/parse-chord-image/`)
