@@ -946,14 +946,10 @@ async function searchRealWebChords(query, externalSignal = null) {
 
         const chordtabsItems = await fetchDdg(`${q} site:chordtabs.in.th`);
 
-        let secondaryItems = [];
-        if (chordtabsItems.length < 2) {
-          secondaryItems = await fetchDdg(`${q} คอร์ด site:musicatm.com`);
-        }
-
         const seenUrls = new Set();
         const rawWebList = [];
-        for (const item of [...chordtabsItems, ...secondaryItems]) {
+        for (const item of chordtabsItems) {
+          if (!item || !item.url || !item.url.includes('chordtabs.in.th')) continue;
           if (seenUrls.has(item.url)) continue;
           seenUrls.add(item.url);
           rawWebList.push(item);
@@ -1231,6 +1227,51 @@ function cacheChordtabsImageInBackground(songId, imageUrl, songRef = null) {
   })();
 }
 
+function autoSaveSearchedSongToLibrary(song) {
+  if (!song || !song.title) return song;
+  try {
+    const book = loadBook();
+    const normTitle = String(song.title || '').trim().toLowerCase();
+    const normArtist = String(song.artist || '').trim().toLowerCase();
+    const idx = book.findIndex(b =>
+      b && (
+        (song.id && b.id === song.id) ||
+        (song._ctSongId && b._ctSongId && String(b._ctSongId) === String(song._ctSongId)) ||
+        (song.src && b.src && b.src === song.src) ||
+        (normTitle && String(b.title || '').trim().toLowerCase() === normTitle && String(b.artist || '').trim().toLowerCase() === normArtist)
+      )
+    );
+    const cleanEntry = {
+      id: song.id || ('ct-' + (song._ctSongId || Date.now().toString(36))),
+      title: song.title,
+      artist: song.artist || '',
+      key: song.key || 'C',
+      text: song.text || '',
+      images: Array.isArray(song.images) ? song.images.slice() : [],
+      sections: Array.isArray(song.sections) ? song.sections : [],
+      src: song.src || '',
+      shift: typeof song.shift === 'number' ? song.shift : 0,
+      _ctSongId: song._ctSongId || null,
+      savedAt: Date.now()
+    };
+    if (idx >= 0) {
+      book[idx] = {
+        ...book[idx],
+        images: cleanEntry.images.length ? cleanEntry.images : (book[idx].images || []),
+        _ctSongId: cleanEntry._ctSongId || book[idx]._ctSongId || null,
+        src: cleanEntry.src || book[idx].src || ''
+      };
+      song.id = book[idx].id;
+    } else {
+      book.unshift(cleanEntry);
+      song.id = cleanEntry.id;
+    }
+    saveBook(book);
+    if (typeof renderSongbook === 'function') renderSongbook();
+  } catch (_) {}
+  return song;
+}
+
 // ดึงตารางคอร์ดจริง หรือรูปภาพคอร์ดจาก Chordtabs แบบความเร็วสูง (< 5 วินาที) พร้อมแคช IndexedDB ออฟไลน์
 async function loadRealWebChordResult(item, allResults = []) {
   const candidateUrls = [];
@@ -1251,7 +1292,7 @@ async function loadRealWebChordResult(item, allResults = []) {
         : null;
 
       if (cachedBlob) {
-        return {
+        return autoSaveSearchedSongToLibrary({
           id: item.id || ('ct-' + songId),
           title: item.title || `Chordtabs #${songId}`,
           artist: item.artist || '',
@@ -1263,7 +1304,7 @@ async function loadRealWebChordResult(item, allResults = []) {
           shift: 0,
           _ctSongId: songId,
           _metaPromise: metaPromise
-        };
+        });
       }
 
       const cachedImgUrl = getCachedCtImgUrl(songId);
@@ -1271,7 +1312,7 @@ async function loadRealWebChordResult(item, allResults = []) {
       // Always kick off X-Engine: direct in parallel on cold open so legacy IDs (e.g. 620 -> c0013003.png) resolve in ~0.8-1.5s without waiting!
       const parallelMetaPromise = metaPromise || resolveChordtabsMetaViaJina(targetUrl, 4000);
 
-      return {
+      return autoSaveSearchedSongToLibrary({
         id: item.id || ('ct-' + songId),
         title: item.title || `Chordtabs #${songId}`,
         artist: item.artist || '',
@@ -1283,13 +1324,13 @@ async function loadRealWebChordResult(item, allResults = []) {
         shift: 0,
         _ctSongId: songId,
         _metaPromise: parallelMetaPromise
-      };
+      });
     }
 
     // Non-numeric Chordtabs URL fallback: resolve via X-Engine: direct (4.0s timeout)
     const meta = await resolveChordtabsMetaViaJina(targetUrl, 4000);
     if (meta && meta.chordImgUrl) {
-      return {
+      return autoSaveSearchedSongToLibrary({
         id: item.id || ('ct-' + Date.now().toString(36)),
         title: meta.title || item.title || 'Chordtabs',
         artist: item.artist || meta.artist || '',
@@ -1299,7 +1340,7 @@ async function loadRealWebChordResult(item, allResults = []) {
         sections: [],
         src: targetUrl,
         shift: 0
-      };
+      });
     }
   }
 

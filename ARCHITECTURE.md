@@ -166,7 +166,8 @@ mellowchords/
 
 ## 5. ไปป์ไลน์โหลดคอร์ดและรูปภาพความเร็วสูง (< 5s Image Pipeline)
 
-- การค้นหา (`searchRealWebChords`) แคชผลลัพธ์ในหน่วยความจำและ `sessionStorage` (TTL 5–10 นาที) พร้อมรวม Promise ที่กำลังโหลดซ้ำและยกเลิกคำค้นเก่าด้วย `AbortController`
+- **แหล่งค้นหาเฉพาะ `chordtabs.in.th` (`searchRealWebChords`):** ค้นหาออนไลน์ทุกรายการในแอปดึงจาก **`site:chordtabs.in.th` เท่านั้น** แคชผลลัพธ์ในหน่วยความจำและ `sessionStorage` (TTL 5–10 นาที) พร้อมรวม Promise ที่กำลังโหลดซ้ำและยกเลิกคำค้นเก่าด้วย `AbortController`
+- **บันทึกเข้าคลังอัตโนมัติ (`autoSaveSearchedSongToLibrary`):** ทุกเพลงที่ดึงจากผลการค้นหา Chordtabs (`loadRealWebChordResult`) จะถูกบันทึกลงคลังเพลงในเครื่องอัตโนมัติทันทีเพื่อความสะดวกในการค้นหาและเปิดซ้ำ
 - การเปิดเพลงจาก Chordtabs (`loadRealWebChordResult` / `loadGallery`):
   1. ตรวจสอบรูปใน `IndexedDB` (`ct-img-<songId>`) ก่อน (เปิดซ้ำ/ออฟไลน์ใน `< 50ms`)
   2. แสดงรูปตรงพร้อม `referrerPolicy="no-referrer"` ควบคู่กับการดึงชื่อไฟล์จริงผ่าน `r.jina.ai` (`X-Engine: direct`) และมีลำดับ Fallback อัตโนมัติผ่าน `wsrv.nl` / `images.weserv.nl` ก่อนบันทึกลง `IndexedDB` เบื้องหลัง
