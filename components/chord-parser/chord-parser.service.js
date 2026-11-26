@@ -1486,6 +1486,60 @@
    * 6) Vision AI Runner (Edge Function / Gemini / OpenAI)
    * ============================================================================ */
 
+  function fetchWithTimeout(url, init, timeoutMs) {
+    const ms = typeof timeoutMs === 'number' && timeoutMs > 0 ? timeoutMs : 45000;
+    if (typeof AbortController === 'undefined') {
+      return fetch(url, init);
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(function () {
+      try { controller.abort(); } catch (_e) {}
+    }, ms);
+    const nextInit = Object.assign({}, init || {}, { signal: controller.signal });
+    return fetch(url, nextInit).finally(function () {
+      clearTimeout(timer);
+    });
+  }
+
+  function delayMs(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  async function optimizeImageBlobForVision(blob) {
+    if (!(typeof Blob !== 'undefined' && blob instanceof Blob)) return blob;
+    // Skip small images (< 750 KB) so we keep 100% lossless pixels
+    if (blob.size <= 750 * 1024) return blob;
+    if (typeof document === 'undefined' || typeof Image === 'undefined' || typeof URL === 'undefined') {
+      return blob;
+    }
+    try {
+      const img = await loadBlobAsImage(blob);
+      const maxDim = 1800;
+      const w = img.naturalWidth || img.width || 0;
+      const h = img.naturalHeight || img.height || 0;
+      if (!w || !h) return blob;
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      const targetW = Math.max(1, Math.round(w * scale));
+      const targetH = Math.max(1, Math.round(h * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return blob;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, targetW, targetH);
+      ctx.drawImage(img, 0, 0, targetW, targetH);
+
+      const optimized = await new Promise(function (resolve) {
+        canvas.toBlob(function (out) { resolve(out || null); }, 'image/jpeg', 0.9);
+      });
+      if (optimized && optimized.size > 0 && optimized.size < blob.size) {
+        return optimized;
+      }
+    } catch (_e) {}
+    return blob;
+  }
+
   function blobToBase64(blob) {
     return new Promise(function (resolve, reject) {
       if (typeof FileReader !== 'undefined') {
@@ -1523,69 +1577,80 @@
 
   async function invokeDirectVisionApi(cfg, systemPrompt, base64Data, mimeType) {
     if (cfg.provider === 'gemini') {
-      const preferred = cfg.model || 'gemini-2.5-flash';
+      const preferred = (cfg.model && cfg.model !== 'gemini-3.8-flash') ? cfg.model : 'gemini-2.5-flash';
       const modelsToTry = [
         preferred,
         'gemini-2.5-flash',
         'gemini-2.0-flash',
-        'gemini-1.5-flash',
-        'gemini-3.8-flash'
+        'gemini-1.5-flash'
       ].filter(function (m, i, arr) { return m && arr.indexOf(m) === i; });
 
       let lastErr = null;
 
       for (let mi = 0; mi < modelsToTry.length; mi++) {
         const model = modelsToTry[mi];
-        for (const withThinking of [true, false]) {
-          try {
-            const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
-              encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(cfg.apiKey);
-            
-            const genConfig = {
-              temperature: 0.1,
-              responseMimeType: 'application/json'
-            };
-            if (withThinking && (model.includes('3.8') || model.includes('2.5') || model.includes('2.0'))) {
-              genConfig.thinkingConfig = { thinkingBudget: 1024 };
-            }
+        const thinkingModes = model.includes('2.5') ? [false, true] : [false];
+        for (let ti = 0; ti < thinkingModes.length; ti++) {
+          const withThinking = thinkingModes[ti];
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+                encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(cfg.apiKey);
 
-            const res = await fetch(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                systemInstruction: { parts: [{ text: systemPrompt }] },
-                contents: [{
-                  role: 'user',
-                  parts: [
-                    { inlineData: { mimeType: mimeType || 'image/png', data: base64Data } },
-                    { text: 'Transcribe this Thai chord sheet image into the exact ChordPro JSON schema.' }
-                  ]
-                }],
-                generationConfig: genConfig
-              })
-            });
+              const genConfig = {
+                temperature: 0.1,
+                responseMimeType: 'application/json'
+              };
+              if (withThinking && model.includes('2.5')) {
+                genConfig.thinkingConfig = { thinkingBudget: 512 };
+              }
 
-            if (res.ok) {
-              const data = await res.json();
-              const txt = data && data.candidates && data.candidates[0] &&
-                data.candidates[0].content && data.candidates[0].content.parts &&
-                data.candidates[0].content.parts[0] ? data.candidates[0].content.parts[0].text : '';
-              const payload = extractJsonPayload(txt);
-              payload.modelUsed = model;
-              return payload;
-            }
+              const res = await fetchWithTimeout(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  systemInstruction: { parts: [{ text: systemPrompt }] },
+                  contents: [{
+                    role: 'user',
+                    parts: [
+                      { inlineData: { mimeType: mimeType || 'image/png', data: base64Data } },
+                      { text: 'Transcribe this Thai chord sheet image into the exact ChordPro JSON schema.' }
+                    ]
+                  }],
+                  generationConfig: genConfig
+                })
+              }, 45000);
 
-            const errBody = await res.text();
-            console.warn('[Gemini API ' + model + ' (thinking:' + withThinking + ') error ' + res.status + ']: ' + errBody.slice(0, 150));
-            lastErr = new Error('Gemini API error (' + res.status + ' on ' + model + '): ' + errBody.slice(0, 180));
+              if (res.ok) {
+                const data = await res.json();
+                const txt = data && data.candidates && data.candidates[0] &&
+                  data.candidates[0].content && data.candidates[0].content.parts &&
+                  data.candidates[0].content.parts[0] ? data.candidates[0].content.parts[0].text : '';
+                const payload = extractJsonPayload(txt);
+                payload.modelUsed = model;
+                return payload;
+              }
 
-            // If 503 (High demand) or 404 (Not found) or 429 (Rate limit), skip thinking toggle and try next model
-            if (res.status === 503 || res.status === 404 || res.status === 429) {
+              const errBody = await res.text();
+              console.warn('[Gemini API ' + model + ' (thinking:' + withThinking + ', attempt:' + (attempt + 1) + ') error ' + res.status + ']: ' + errBody.slice(0, 150));
+              lastErr = new Error('Gemini API error (' + res.status + ' on ' + model + '): ' + errBody.slice(0, 180));
+
+              if (res.status === 404 || res.status === 400) {
+                break;
+              }
+              if ((res.status === 429 || res.status === 503 || res.status >= 500) && attempt === 0) {
+                await delayMs(800);
+                continue;
+              }
+              break;
+            } catch (e) {
+              lastErr = e;
+              if (attempt === 0) {
+                await delayMs(600);
+                continue;
+              }
               break;
             }
-          } catch (e) {
-            lastErr = e;
-            break;
           }
         }
       }
@@ -1595,33 +1660,52 @@
 
     if (cfg.provider === 'openai') {
       const model = cfg.model || 'gpt-4o-mini';
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + cfg.apiKey
-        },
-        body: JSON.stringify({
-          model: model,
-          temperature: 0.1,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Transcribe this Thai chord sheet image into the exact ChordPro JSON schema.' },
-                { type: 'image_url', image_url: { url: 'data:' + (mimeType || 'image/png') + ';base64,' + base64Data, detail: 'high' } }
+      let lastOpenAiErr = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer ' + cfg.apiKey
+            },
+            body: JSON.stringify({
+              model: model,
+              temperature: 0.1,
+              response_format: { type: 'json_object' },
+              messages: [
+                { role: 'system', content: systemPrompt },
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'text', text: 'Transcribe this Thai chord sheet image into the exact ChordPro JSON schema.' },
+                    { type: 'image_url', image_url: { url: 'data:' + (mimeType || 'image/png') + ';base64,' + base64Data, detail: 'high' } }
+                  ]
+                }
               ]
-            }
-          ]
-        })
-      });
-      if (!res.ok) throw new Error('OpenAI API error (' + res.status + ')');
-      const data = await res.json();
-      const txt = data && data.choices && data.choices[0] && data.choices[0].message
-        ? data.choices[0].message.content : '';
-      return extractJsonPayload(txt);
+            })
+          }, 45000);
+          if (res.ok) {
+            const data = await res.json();
+            const txt = data && data.choices && data.choices[0] && data.choices[0].message
+              ? data.choices[0].message.content : '';
+            return extractJsonPayload(txt);
+          }
+          lastOpenAiErr = new Error('OpenAI API error (' + res.status + ')');
+          if ((res.status === 429 || res.status === 503 || res.status >= 500) && attempt === 0) {
+            await delayMs(800);
+            continue;
+          }
+          throw lastOpenAiErr;
+        } catch (err) {
+          lastOpenAiErr = err;
+          if (attempt === 0) {
+            await delayMs(600);
+            continue;
+          }
+          throw lastOpenAiErr;
+        }
+      }
     }
 
     return null;
@@ -1650,6 +1734,10 @@
 
     if (!(typeof Blob !== 'undefined' && imageBlob instanceof Blob)) return null;
 
+    const preparedBlob = await optimizeImageBlobForVision(imageBlob);
+    const base64 = await blobToBase64(preparedBlob);
+    const mimeType = preparedBlob.type || 'image/png';
+
     // 2) Direct Gemini / OpenAI Vision API if user configured an API key
     const trimmedKey = (cfg.apiKey || '').trim();
     const effectiveProvider = (cfg.provider === 'auto' || !cfg.provider)
@@ -1663,68 +1751,86 @@
         model: cfg.model || (effectiveProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini')
       });
       context.onProgress('กำลังส่งภาพให้ Vision AI (' + (effectiveProvider === 'gemini' ? 'Gemini Flash' : 'OpenAI') + ') แกะเป็น ChordPro...', 45);
-      const base64 = await blobToBase64(imageBlob);
       try {
-        return await invokeDirectVisionApi(activeCfg, context.systemPrompt, base64, imageBlob.type || 'image/png');
+        return await invokeDirectVisionApi(activeCfg, context.systemPrompt, base64, mimeType);
       } catch (directErr) {
         context.lastVisionError = directErr && directErr.message ? directErr.message : String(directErr);
         console.warn('[Direct Vision AI error]', directErr);
       }
     }
 
-    // 3) Supabase Edge Function `parse-chord-image`
+    // 3) Supabase Edge Function `parse-chord-image` with automatic retry
     const sb = backendDeps.getSupabase();
     if (sb && sb.functions && typeof sb.functions.invoke === 'function') {
-      try {
-        context.onProgress('กำลังส่งภาพไปยัง Vision AI (Edge Function)...', 40);
-        const base64 = await blobToBase64(imageBlob);
-        const res = await sb.functions.invoke('parse-chord-image', {
-          body: {
-            imageBase64: base64,
-            image_base64: base64,
-            model: cfg.model || 'gemini-2.5-flash',
-            provider: cfg.model || 'gemini-2.5-flash',
-            mimeType: imageBlob.type || 'image/png',
-            mime_type: imageBlob.type || 'image/png',
-            sourceDomain: context.sourceDomain,
-            source_domain: context.sourceDomain,
-            song_title: (context.song && context.song.title) || '',
-            artist: (context.song && context.song.artist) || '',
-            correctionRules: context.memory.correctionRules,
-            verifiedExamples: context.memory.verifiedExamples
-          }
-        });
-        if (res.error) {
-          let detailedMsg = res.error && res.error.message ? res.error.message : JSON.stringify(res.error);
-          if (res.error.context) {
-            try {
-              const errJson = typeof res.error.context.json === 'function' ? await res.error.context.json() : null;
-              if (errJson && errJson.error) {
-                detailedMsg = typeof errJson.error === 'string' ? errJson.error : JSON.stringify(errJson.error);
-              }
-            } catch (_) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          context.onProgress(
+            attempt === 0
+              ? 'กำลังส่งภาพไปยัง Vision AI (Edge Function)...'
+              : 'กำลังเชื่อมต่อ Vision AI ใหม่อีกครั้ง...',
+            attempt === 0 ? 40 : 48
+          );
+          const invokePromise = sb.functions.invoke('parse-chord-image', {
+            body: {
+              imageBase64: base64,
+              image_base64: base64,
+              model: cfg.model || 'gemini-2.5-flash',
+              provider: cfg.model || 'gemini-2.5-flash',
+              mimeType: mimeType,
+              mime_type: mimeType,
+              sourceDomain: context.sourceDomain,
+              source_domain: context.sourceDomain,
+              song_title: (context.song && context.song.title) || '',
+              artist: (context.song && context.song.artist) || '',
+              correctionRules: context.memory.correctionRules,
+              verifiedExamples: context.memory.verifiedExamples
+            }
+          });
+          const timeoutPromise = new Promise(function (_resolve, reject) {
+            setTimeout(function () { reject(new Error('Edge Function timeout (50s)')); }, 50000);
+          });
+          const res = await Promise.race([invokePromise, timeoutPromise]);
+
+          if (res.error) {
+            let detailedMsg = res.error && res.error.message ? res.error.message : JSON.stringify(res.error);
+            if (res.error.context) {
               try {
-                const errTxt = typeof res.error.context.text === 'function' ? await res.error.context.text() : '';
-                if (errTxt) detailedMsg = errTxt;
-              } catch (_) {}
+                const errJson = typeof res.error.context.json === 'function' ? await res.error.context.json() : null;
+                if (errJson && errJson.error) {
+                  detailedMsg = typeof errJson.error === 'string' ? errJson.error : JSON.stringify(errJson.error);
+                }
+              } catch (_) {
+                try {
+                  const errTxt = typeof res.error.context.text === 'function' ? await res.error.context.text() : '';
+                  if (errTxt) detailedMsg = errTxt;
+                } catch (_) {}
+              }
+            }
+            context.lastVisionError = detailedMsg;
+            console.warn('[Vision AI Edge Function Warning]', detailedMsg);
+            if (attempt === 0 && !String(detailedMsg).includes('VISION_KEY_NOT_CONFIGURED')) {
+              await delayMs(900);
+              continue;
             }
           }
-          context.lastVisionError = detailedMsg;
-          console.warn('[Vision AI Edge Function Warning]', detailedMsg);
-        }
-        if (!res.error && res.data) {
-          const payload = (res.data.data && res.data.data.chordpro_content) ? res.data.data : res.data;
-          if (payload && payload.chordpro_content) {
-            return payload;
+          if (!res.error && res.data) {
+            const payload = (res.data.data && res.data.data.chordpro_content) ? res.data.data : res.data;
+            if (payload && payload.chordpro_content) {
+              return payload;
+            }
+            if (res.data.error) {
+              context.lastVisionError = typeof res.data.error === 'string' ? res.data.error : JSON.stringify(res.data.error);
+            }
           }
-          if (res.data.error) {
-            context.lastVisionError = typeof res.data.error === 'string' ? res.data.error : JSON.stringify(res.data.error);
+          break;
+        } catch (_edgeErr) {
+          context.lastVisionError = _edgeErr && _edgeErr.message ? _edgeErr.message : String(_edgeErr);
+          console.warn('[Vision AI Network/Edge exception]', _edgeErr);
+          if (attempt === 0) {
+            await delayMs(900);
+            continue;
           }
         }
-      } catch (_edgeErr) {
-        context.lastVisionError = _edgeErr && _edgeErr.message ? _edgeErr.message : String(_edgeErr);
-        console.warn('[Vision AI Network/Edge exception]', _edgeErr);
-        // Fallback smoothly to local Spatial OCR + ChordPro converter
       }
     }
 
@@ -2370,7 +2476,7 @@
     if (!src) throw new Error('ไม่พบ URL รูปภาพ');
 
     if (src.startsWith('blob:') || src.startsWith('data:')) {
-      const res = await fetch(src);
+      const res = await fetchWithTimeout(src, {}, 15000);
       if (!res.ok) throw new Error('โหลดรูปภาพไม่สำเร็จ (' + res.status + ')');
       return await res.blob();
     }
@@ -2384,7 +2490,7 @@
     let lastErr = null;
     for (let i = 0; i < candidates.length; i++) {
       try {
-        const res = await fetch(candidates[i], { mode: 'cors' });
+        const res = await fetchWithTimeout(candidates[i], { mode: 'cors' }, 15000);
         if (res.ok) {
           const b = await res.blob();
           if (b && b.size > 0) return b;
@@ -2437,7 +2543,29 @@
    * 3. Dispatches to Vision AI (or Spatial OCR + Learned Memory Post-Processor fallback)
    * 4. Always outputs standardized ChordPro format (`chordpro_content`, `original_key`, `source_domain`, `is_verified`)
    */
+  const inflightParses = new Map();
+
   async function parseChordImage(imageSource, options) {
+    const opts = options || {};
+    const dedupeKey = !opts.ocrRunner && !opts.visionRunner
+      ? (opts.songId ? 'song:' + String(opts.songId) : (typeof imageSource === 'string' && imageSource.length < 300 ? 'url:' + imageSource : ''))
+      : '';
+
+    if (dedupeKey && inflightParses.has(dedupeKey)) {
+      return inflightParses.get(dedupeKey);
+    }
+
+    const runPromise = parseChordImageInternal(imageSource, opts).finally(function () {
+      if (dedupeKey) inflightParses.delete(dedupeKey);
+    });
+
+    if (dedupeKey) {
+      inflightParses.set(dedupeKey, runPromise);
+    }
+    return runPromise;
+  }
+
+  async function parseChordImageInternal(imageSource, options) {
     const opts = options || {};
     const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : function () {};
     const fetcher = typeof opts.fetchImageBlob === 'function' ? opts.fetchImageBlob : fetchImageBlob;

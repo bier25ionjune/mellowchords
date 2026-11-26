@@ -585,13 +585,13 @@
     /* ------------------------------------------------------------------------
      * Vision AI / OCR Trigger & Lifecycle Methods
      * ------------------------------------------------------------------------ */
-    async function triggerParse(force) {
+    async function triggerParse(force, isSilentAuto) {
       if (destroyed || !currentSong || !hasSongImages(currentSong)) return null;
 
       const Parser = getParser();
       if (!Parser) {
         parseError = 'ไม่พบโมดูล MellowChordParser';
-        onToast(parseError, true);
+        if (!isSilentAuto) onToast(parseError, true);
         renderView();
         return null;
       }
@@ -683,7 +683,9 @@
         parseError = (err && err.message) ? err.message : 'ไม่สามารถแกะคอร์ดจากรูปภาพได้';
         renderToolbar();
         renderView();
-        onToast(parseError, true);
+        if (!isSilentAuto) {
+          onToast(parseError, true);
+        }
         return null;
       }
     }
@@ -741,7 +743,7 @@
       if (shouldAutoParse) {
         setTimeout(function () {
           if (!destroyed && !parsedData && !isParsing && currentSong === song) {
-            triggerParse(false);
+            triggerParse(false, true);
           }
         }, 150);
       }

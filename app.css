@@ -310,14 +310,14 @@ body[data-view="live-room"] #side {
   display: none;
 }
 
-/* iPad Landscape & Desktop 2-pane split layout (>= 1024px) */
-@media (min-width: 1024px) {
+/* iPad Landscape & Desktop 2-pane split layout (>= 1024px landscape, or >= 1100px desktop) */
+@media (min-width: 1024px) and (orientation: landscape), (min-width: 1100px) {
   body {
     padding-bottom: 0;
   }
   .app {
     display: grid;
-    grid-template-columns: 340px 1fr;
+    grid-template-columns: 330px 1fr;
     align-items: start;
   }
   #side {
@@ -328,7 +328,7 @@ body[data-view="live-room"] #side {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     border-right: 1px solid var(--line);
-    padding: 16px;
+    padding: 16px 14px calc(24px + env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px));
   }
   #side #librarySection,
   #side #plSection,
@@ -337,7 +337,8 @@ body[data-view="live-room"] #side {
   }
   #pane {
     display: block !important;
-    padding: 18px 24px;
+    padding: 18px max(24px, env(safe-area-inset-right, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)) 24px;
+    min-width: 0;
   }
   .topBack, #bottomNav {
     display: none !important;
@@ -2441,8 +2442,8 @@ button,
   flex-shrink: 0;
 }
 
-/* iPad Portrait (768px–1023px): Full-width 100% single-pane for huge chord readability */
-@media (min-width: 768px) and (max-width: 1023px) {
+/* iPad Portrait (768px–1099px portrait): Full-width 100% single-pane for huge chord readability */
+@media (min-width: 768px) and (max-width: 1023px), (min-width: 768px) and (max-width: 1099px) and (orientation: portrait) {
   .app {
     display: block !important;
     width: 100%;
@@ -2452,13 +2453,13 @@ button,
   #side {
     width: 100%;
     max-width: 100%;
-    padding: 14px 18px calc(80px + env(safe-area-inset-bottom, 0px));
+    padding: 14px max(18px, env(safe-area-inset-right, 0px)) calc(84px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
   }
 
   #pane {
     width: 100%;
     max-width: 100%;
-    padding: 12px 18px calc(88px + env(safe-area-inset-bottom, 0px));
+    padding: 12px max(18px, env(safe-area-inset-right, 0px)) calc(92px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
   }
 
   #songView .card {
@@ -2468,19 +2469,23 @@ button,
   .songTopBar {
     gap: 8px;
     margin-bottom: 10px;
+    flex-wrap: wrap;
   }
 
   .songTopActions {
     gap: 6px;
+    flex-wrap: wrap;
   }
 
   .songTopActions button,
   .setlistNav button,
   .keyBar button,
   .keyBar .keyPill,
-  #hdr button {
-    min-height: 40px;
-    padding: 6px 12px;
+  #hdr button,
+  .bottomNav button {
+    min-height: 44px;
+    padding: 8px 14px;
+    touch-action: manipulation;
   }
 
   #gallery img {
@@ -2492,8 +2497,8 @@ button,
   }
 }
 
-/* iPad Landscape & Desktop (>= 1024px): Crisp 2-pane for Songbook, Full-width for Live Room / Friends / Focus */
-@media (min-width: 1024px) {
+/* iPad Landscape & Desktop (>= 1024px landscape or >= 1100px): Crisp 2-pane for Songbook, Full-width for Live Room / Friends / Focus */
+@media (min-width: 1024px) and (orientation: landscape), (min-width: 1100px) {
   body.focus .app,
   body[data-view="live-room"] .app,
   body[data-view="friends"] .app,
@@ -2509,11 +2514,17 @@ button,
     display: none !important;
   }
 
+  .songTopBar {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
   .songTopActions button,
   .setlistNav button,
   .keyBar button,
   #hdr button {
-    min-height: 40px;
+    min-height: 42px;
+    touch-action: manipulation;
   }
 
   #gallery img {

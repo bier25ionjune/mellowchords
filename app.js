@@ -4507,10 +4507,33 @@ if ($('#adminSearchClearBtn')) {
 /* ==============================================================================
  * 12.5) User Guide & Version Release Notice System
  * ============================================================================== */
-const CURRENT_VERSION = 'v2.6.0';
-const RELEASE_DATE = '25 พ.ย. 2026';
+const CURRENT_VERSION = 'v2.7.0';
+const RELEASE_DATE = '26 พ.ย. 2026';
 
 const RELEASE_NOTICES = [
+  {
+    version: 'v2.7.0',
+    date: '26 พ.ย. 2026',
+    title: 'เสถียรภาพ API 100%, ปรับแต่งหน้าจอ iPad แนวตั้ง/แนวนอน & แจ้งอัปเดตใน Notice',
+    items: [
+      {
+        title: '🔌 แกะเพลงผ่าน API เสถียร 100% ไม่หลุดกลางทาง',
+        desc: 'เพิ่มระบบ Timeout, Retry อัตโนมัติ, ย่อขนาดภาพก่อนส่ง และป้องกันการยิง API ซ้ำซ้อน พร้อม Fallback ไป Spatial OCR ทันทีหากเครือข่ายมีปัญหา'
+      },
+      {
+        title: '⚡ ค้นหา → ดึงภาพ → แกะคอร์ดต่อเนื่องอัตโนมัติ',
+        desc: 'กดเลือกเพลงจากผลการค้นหาแล้วดึงภาพพร้อมแกะคอร์ดในพื้นหลังแบบไม่รบกวนและไม่ซ้ำซ้อน'
+      },
+      {
+        title: '📱 ปรับแต่งหน้าจอ iPad ทั้งแนวตั้งและแนวนอน',
+        desc: 'รองรับ iPad Portrait เต็มจอ 100% และ iPad Landscape 2-Pane อิสระ พร้อมปุ่มสัมผัสขนาดใหญ่ 44px+ และ Safe-Area iPadOS'
+      },
+      {
+        title: '📢 แจ้งเตือนอัปเดตแอปทุกครั้งใน Notice',
+        desc: 'เมื่อมีเวอร์ชันใหม่หรือ Service Worker อัปเดต ระบบจะแจ้งเตือนผ่าน Notice ทันทีโดยไม่กระทบการทำงานพื้นหลังเดิม'
+      }
+    ]
+  },
   {
     version: 'v2.6.0',
     date: '25 พ.ย. 2026',
@@ -4755,17 +4778,26 @@ function checkVersionNotice() {
   try {
     if (typeof navigator !== 'undefined' && navigator.webdriver) return;
     const last = LS.get('mellowchords.lastSeenVersion', '');
+    const navBtn = $('#noticeNavBtn');
     if (last !== CURRENT_VERSION) {
+      if (navBtn) navBtn.textContent = `📢 ${CURRENT_VERSION} • ใหม่`;
       setTimeout(() => {
         if (document.querySelector('.modal')) return;
+        if (navBtn) navBtn.textContent = `📢 ${CURRENT_VERSION}`;
         openNoticeModal(false);
       }, 1000);
+    } else if (navBtn) {
+      navBtn.textContent = `📢 ${CURRENT_VERSION}`;
     }
   } catch {}
 }
 
 if ($('#userGuideNavBtn')) $('#userGuideNavBtn').onclick = () => openUserGuideModal();
-if ($('#noticeNavBtn')) $('#noticeNavBtn').onclick = () => openNoticeModal(true);
+if ($('#noticeNavBtn')) $('#noticeNavBtn').onclick = () => {
+  const navBtn = $('#noticeNavBtn');
+  if (navBtn) navBtn.textContent = `📢 ${CURRENT_VERSION}`;
+  openNoticeModal(true);
+};
 $('#acct').onclick = () => openAcct();
 
 function signInLocalProfile(email, forceAdmin = false) {
@@ -6226,9 +6258,18 @@ function registerPWA() {
         try { if (typeof reg.update === 'function') reg.update().catch(() => {}); } catch (_) {}
         reg.addEventListener('updatefound', () => {
           const newWorker = reg.installing;
+          if (!newWorker) return;
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              toast('💡 อัปเดตแอปเป็นเวอร์ชันใหม่แล้ว');
+              try {
+                LS.set('mellowchords.lastSeenVersion', '');
+                const navBtn = $('#noticeNavBtn');
+                if (navBtn) navBtn.textContent = `📢 ${CURRENT_VERSION} • ใหม่`;
+                if (!document.querySelector('.modal')) {
+                  openNoticeModal(false);
+                }
+              } catch (_) {}
+              toast('💡 อัปเดตแอปเป็นเวอร์ชันใหม่แล้ว (ดูรายละเอียดใน Notice)');
             }
           });
         });
