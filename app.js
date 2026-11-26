@@ -965,6 +965,10 @@ async function searchRealWebChords(query, externalSignal = null) {
           : rawWebList;
 
         filtered.sort((a, b) => {
+          const aCt = (a.isChordtabs || (a.domain && a.domain.includes('chordtabs')) || (a.url && a.url.includes('chordtabs.in.th'))) ? 1 : 0;
+          const bCt = (b.isChordtabs || (b.domain && b.domain.includes('chordtabs')) || (b.url && b.url.includes('chordtabs.in.th'))) ? 1 : 0;
+          if (aCt !== bCt) return bCt - aCt;
+
           let scA = 0, scB = 0;
           const aT = (a.title || '').toLowerCase(), bT = (b.title || '').toLowerCase();
           const aA = (a.artist || '').toLowerCase(), bA = (b.artist || '').toLowerCase();
@@ -7290,17 +7294,48 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
 
   async function refetchSongImageByTitleAndArtist(song) {
     if (!song || !song.title) throw new Error('ไม่พบชื่อเพลงสำหรับค้นหา');
-    const q = `${song.title} ${song.artist || ''}`.trim();
-    const results = await searchRealWebChords(q);
-    if (!results || !results.length) {
-      throw new Error(`ไม่พบผลการค้นหาสำหรับ “${q}”`);
+    const queries = [];
+    const fullQ = `${song.title} ${song.artist || ''}`.trim();
+    if (fullQ) queries.push(fullQ);
+    if (song.artist && song.title.trim() && song.title.trim() !== fullQ) {
+      queries.push(song.title.trim());
     }
-    const imgCandidates = results.filter(it => it.isChordtabs || (it.domain && it.domain.includes('chordtabs')));
-    const ordered = [...imgCandidates, ...results.filter(it => !imgCandidates.includes(it))];
+
+    let webResults = [];
+    for (const q of queries) {
+      try {
+        const resp = await searchRealWebChords(q);
+        const list = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.results) ? resp.results : []);
+        const webOnly = list.filter(it => it && it.source !== 'builtin' && it.url);
+        if (webOnly.length) {
+          webResults = webOnly;
+          const hasCt = webOnly.some(it => it.isChordtabs || (it.domain && it.domain.includes('chordtabs')) || (it.url && it.url.includes('chordtabs.in.th')));
+          if (hasCt) break;
+        }
+      } catch (_) {}
+    }
+
+    if (!webResults.length) {
+      throw new Error(`ไม่พบผลการค้นหาจาก Chordtabs สำหรับ “${fullQ}”`);
+    }
+
+    const ctCandidates = webResults.filter(it => it.isChordtabs || (it.domain && it.domain.includes('chordtabs')) || (it.url && it.url.includes('chordtabs.in.th')));
+    const ordered = [...ctCandidates, ...webResults.filter(it => !ctCandidates.includes(it))];
     let loaded = null;
     for (const candidate of ordered.slice(0, 3)) {
       try {
-        const res = await loadRealWebChordResult(candidate, results);
+        const res = await loadRealWebChordResult(candidate, webResults);
+        if (res && res._metaPromise) {
+          try {
+            const meta = await Promise.race([
+              res._metaPromise,
+              new Promise(resolve => setTimeout(() => resolve(null), 3500))
+            ]);
+            if (meta && meta.chordImgUrl) {
+              res.images = [meta.chordImgUrl];
+            }
+          } catch (_) {}
+        }
         if (res && Array.isArray(res.images) && res.images.length) {
           loaded = res;
           break;
@@ -7308,7 +7343,7 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
       } catch (_) {}
     }
     if (!loaded || !Array.isArray(loaded.images) || !loaded.images.length) {
-      throw new Error('ไม่พบไฟล์ภาพคอร์ดจากผลการค้นหา');
+      throw new Error('ไม่พบไฟล์ภาพคอร์ดจาก Chordtabs');
     }
 
     song.images = loaded.images.slice();
@@ -7324,8 +7359,21 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
         _ctSongId: loaded._ctSongId || book[idx]._ctSongId || null,
         src: loaded.src || book[idx].src || ''
       };
-      saveBook(book);
+    } else {
+      book.unshift({
+        id: song.id || loaded.id || ('ct-' + Date.now().toString(36)),
+        title: song.title,
+        artist: song.artist || loaded.artist || '',
+        key: song.key || loaded.key || 'C',
+        text: song.text || '',
+        images: loaded.images.slice(),
+        sections: song.sections || [],
+        src: loaded.src || '',
+        _ctSongId: loaded._ctSongId || null,
+        shift: song.shift || 0
+      });
     }
+    saveBook(book);
     if (current && current.song && (current.song.id === song.id || current.song === song)) {
       current.song.images = loaded.images.slice();
       if (loaded._ctSongId) current.song._ctSongId = loaded._ctSongId;
