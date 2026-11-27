@@ -52,6 +52,7 @@
     var floatingCollapsed = false;
     var setlistBulkMode = false;
     var setlistSelectedIndices = new Set();
+    var setlistReorderMode = false;
     var onlineMembers = [];
     var myRooms = [];
     var friends = [];
@@ -739,6 +740,9 @@
             '<div class="lr-setlist-head">' +
               '<span class="fr-sec-title">🎼 เซ็ตเพลง (' + songs.length + ')</span>' +
               '<div style="display:flex;gap:4px;flex-wrap:wrap">' +
+                (isHost && songs.length > 1
+                  ? '<button type="button" class="small ' + (setlistReorderMode ? 'primary' : 'ghost') + '" id="lrReorderSetlistBtn" title="ลากหรือกดย้ายลำดับเพลง">' + (setlistReorderMode ? '✕ เสร็จ' : '↕️ จัดลำดับ') + '</button>'
+                  : '') +
                 (isHost && songs.length
                   ? '<button type="button" class="small ' + (setlistBulkMode ? 'primary' : 'ghost') + '" id="lrBulkSetlistBtn">' + (setlistBulkMode ? '✕ เสร็จ' : '☑️ ลบ') + '</button>'
                   : '') +
@@ -755,9 +759,18 @@
                   '<button type="button" class="small danger" id="lrBulkRemoveBtn">🗑 ลบ (' + setlistSelectedIndices.size + ')</button>' +
                 '</div>'
               : '') +
-            '<div class="lr-setlist-list">' +
+            '<div class="lr-setlist-list" id="lrSetlistList">' +
               songs.map(function (s, idx) {
                 var activeCls = idx === curIdx ? ' active' : '';
+                if (isHost && setlistReorderMode) {
+                  return '<div class="lr-reorder-row' + activeCls + '" data-lr-reorder-idx="' + idx + '">' +
+                    '<span class="lr-drag-handle" title="ลากเพื่อจัดลำดับ">⠿</span>' +
+                    '<span class="lr-song-label" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (idx + 1) + '. ' + esc(s.title) + '</span>' +
+                    '<button type="button" class="small ghost" data-lr-mv-top="' + idx + '" title="ย้ายขึ้นบนสุด"' + (idx === 0 ? ' disabled' : '') + ' style="padding:3px 6px;min-height:30px">⏫</button>' +
+                    '<button type="button" class="small ghost" data-lr-mv-up="' + idx + '" title="เลื่อนขึ้น"' + (idx === 0 ? ' disabled' : '') + ' style="padding:3px 6px;min-height:30px">↑</button>' +
+                    '<button type="button" class="small ghost" data-lr-mv-down="' + idx + '" title="เลื่อนลง"' + (idx === songs.length - 1 ? ' disabled' : '') + ' style="padding:3px 6px;min-height:30px">↓</button>' +
+                  '</div>';
+                }
                 if (isHost && setlistBulkMode) {
                   var checked = setlistSelectedIndices.has(idx) ? ' checked' : '';
                   return '<label class="lr-song-btn' + activeCls + '" style="display:flex;align-items:center;gap:8px;cursor:pointer">' +
@@ -833,10 +846,113 @@
         };
       }
 
+      async function hostMoveSongOrder(fromIdx, toIdx) {
+        if (!isHost || !activeRoom || fromIdx === toIdx) return;
+        var songs = getSnapshotSongs().slice();
+        if (fromIdx < 0 || fromIdx >= songs.length || toIdx < 0 || toIdx >= songs.length) return;
+        var curPlayingSong = songs[curIdx] || null;
+        var curPlayingId = curPlayingSong ? curPlayingSong.id : null;
+        var moved = songs.splice(fromIdx, 1)[0];
+        songs.splice(toIdx, 0, moved);
+
+        var nextCurIdx = curPlayingId
+          ? songs.findIndex(function (s) { return s && s.id === curPlayingId; })
+          : curIdx;
+        if (nextCurIdx < 0) nextCurIdx = 0;
+
+        activeRoom.setlist_snapshot = songs;
+        activeRoom.current_song_index = nextCurIdx;
+        localSongIndex = nextCurIdx;
+        render();
+
+        var synced = await service.broadcastRoomSetlist(activeRoom, songs);
+        if (synced && synced.length) activeRoom.setlist_snapshot = synced;
+        if (nextCurIdx !== curIdx) {
+          await service.broadcastRoomState(activeRoom, {
+            current_song_index: nextCurIdx,
+            current_song_id: songs[nextCurIdx] ? songs[nextCurIdx].id : null,
+            current_key_shift: activeRoom.current_key_shift || 0,
+            source: 'reorder'
+          });
+        }
+      }
+
+      var reorderBtn = rootEl.querySelector('#lrReorderSetlistBtn');
+      if (reorderBtn) {
+        reorderBtn.onclick = function () {
+          setlistReorderMode = !setlistReorderMode;
+          if (setlistReorderMode) {
+            setlistBulkMode = false;
+            setlistSelectedIndices.clear();
+          }
+          render();
+        };
+      }
+
+      rootEl.querySelectorAll('[data-lr-mv-top]').forEach(function (b) {
+        b.onclick = function () { hostMoveSongOrder(Number(b.dataset.lrMvTop), 0); };
+      });
+      rootEl.querySelectorAll('[data-lr-mv-up]').forEach(function (b) {
+        b.onclick = function () {
+          var i = Number(b.dataset.lrMvUp);
+          hostMoveSongOrder(i, Math.max(0, i - 1));
+        };
+      });
+      rootEl.querySelectorAll('[data-lr-mv-down]').forEach(function (b) {
+        b.onclick = function () {
+          var i = Number(b.dataset.lrMvDown);
+          hostMoveSongOrder(i, Math.min(getSnapshotSongs().length - 1, i + 1));
+        };
+      });
+
+      var lrSetlistContainer = rootEl.querySelector('#lrSetlistList');
+      if (lrSetlistContainer && isHost && setlistReorderMode) {
+        lrSetlistContainer.querySelectorAll('.lr-drag-handle').forEach(function (handle) {
+          handle.onpointerdown = function (e) {
+            var srcRow = handle.closest('[data-lr-reorder-idx]');
+            if (!srcRow) return;
+            e.preventDefault();
+            var fromIdx = Number(srcRow.dataset.lrReorderIdx);
+            var targetIdx = fromIdx;
+            srcRow.classList.add('is-dragging');
+            try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+
+            function clearOver() {
+              lrSetlistContainer.querySelectorAll('[data-lr-reorder-idx]').forEach(function (el) {
+                el.classList.remove('is-drag-over');
+              });
+            }
+            function onMoveEv(ev) {
+              clearOver();
+              var hit = document.elementFromPoint(ev.clientX, ev.clientY);
+              var overEl = hit ? hit.closest('[data-lr-reorder-idx]') : null;
+              if (overEl && lrSetlistContainer.contains(overEl)) {
+                targetIdx = Number(overEl.dataset.lrReorderIdx);
+                if (targetIdx !== fromIdx) overEl.classList.add('is-drag-over');
+              }
+            }
+            function onUpEv() {
+              window.removeEventListener('pointermove', onMoveEv);
+              window.removeEventListener('pointerup', onUpEv);
+              window.removeEventListener('pointercancel', onUpEv);
+              srcRow.classList.remove('is-dragging');
+              clearOver();
+              if (!isNaN(fromIdx) && !isNaN(targetIdx) && targetIdx !== fromIdx) {
+                hostMoveSongOrder(fromIdx, targetIdx);
+              }
+            }
+            window.addEventListener('pointermove', onMoveEv);
+            window.addEventListener('pointerup', onUpEv);
+            window.addEventListener('pointercancel', onUpEv);
+          };
+        });
+      }
+
       var bulkSetlistBtn = rootEl.querySelector('#lrBulkSetlistBtn');
       if (bulkSetlistBtn) {
         bulkSetlistBtn.onclick = function () {
           setlistBulkMode = !setlistBulkMode;
+          if (setlistBulkMode) setlistReorderMode = false;
           if (!setlistBulkMode) setlistSelectedIndices.clear();
           render();
         };

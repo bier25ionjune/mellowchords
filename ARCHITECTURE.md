@@ -246,9 +246,10 @@ mellowchords/
   - **Full-Screen Stage, Image Lightbox & Translucent Floating Setlist (`.lr-floating-setlist`):**
     - เมื่อกด `🖥️ ขยายเต็มจอ` (`stageWide`) หรือแตะที่รูปคอร์ดเพื่อเปิดเต็มจอ (`openLightbox` / `#lightbox`) จะแสดงลิสต์คิวเพลงแบบโปร่งแสง (`opacity: 0.30` ไม่ใช้ `backdrop-filter: blur` เพื่อไม่ให้บัง/เบลอตัวหนังสือด้านหลัง และชัดขึ้นเป็น `0.96` เมื่อชี้/แตะ พร้อมปุ่มย่อ/ซ่อน) ที่มุมขวาล่าง
     - เมื่อกดเลือกข้ามเพลงจากลิสต์ลอยด้านขวามือ จะเรียก `hostSelectSong` เพื่อเปลี่ยนเพลง ซิงก์ทั้งห้อง และอัปเดตภาพคอร์ด (`#lrChordGallery` และ `#lbImg` ใน `#lightbox`) ทันที
-  - **Quick Search Next Song & Bulk Setlist Management (`openLiveRoomSongPicker`, `live-room.ui.js`):**
+  - **Quick Search Next Song, Bulk Setlist & Convenient Reordering (`openLiveRoomSongPicker`, `live-room.ui.js`, `renderPlView`):**
     - ปุ่ม `🔍 ค้นหาเพลงต่อไป` / `➕ เพิ่มเพลง` ในห้อง Live รองรับการเลือกเพิ่มเพลงทีละหลายรายการ (`➕ เพิ่มที่เลือก (N) เข้าห้อง`) และค้นออนไลน์จาก `chordtabs.in.th` แล้วซิงก์เข้า Setlist ห้องทันที
-    - Host สามารถกด `☑️ ลบ` ในแผงเซ็ตเพลงเพื่อเลือกและลบเพลงออกจากเซ็ตห้อง Live ทีละหลายรายการพร้อมซิงก์ทั้งวงได้ทันที
+    - Host สามารถกด `☑️ ลบ` เพื่อลบหลายเพลงพร้อมกัน และกด `↕️ จัดลำดับ` เพื่อ **ลากวาง (`⠿` Pointer Drag & Drop)**, กด **`⏫` ขึ้นบนสุด**, หรือ `↑` / `↓` โดยระบบจะปรับ `current_song_index` ตามเพลงที่กำลังเล่นอยู่และซิงก์ทั้งวงอัตโนมัติ
+    - ในหน้า Setlist (`#plView`) รองรับทั้ง **ลากวาง (`⠿` Pointer Drag & Drop)** บนคอม/iPad และ **แตะป้ายเลขลำดับ (`#N`) เพื่อย้ายข้ามคิวทันที** (`openQuickMoveModal`)
   - รองรับการสร้างห้องเลือก Setlist, เชิญเพื่อนรายคน หรือ **ดึงสมาชิกทั้งกรุ๊ปวงในคลิกเดียว** พร้อม `BroadcastChannel` Fallback สำหรับการซิงก์ข้ามแท็บในโหมด Local/Offline
 
 ### 6.7 ระบบ Precision ChordPro Parser & Dynamic Few-Shot Learning (`components/chord-parser/`, `supabase/functions/parse-chord-image/`)

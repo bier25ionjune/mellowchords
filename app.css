@@ -2648,5 +2648,64 @@ button,
   line-height: 1.4;
 }
 
+/* Playlist Drag & Quick-Jump Reorder Controls */
+.dragHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  min-height: 36px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #a1a1aa;
+  font-size: 1.05rem;
+  letter-spacing: -1px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  flex-shrink: 0;
+}
+
+.dragHandle:active {
+  cursor: grabbing;
+  background: rgba(16, 185, 129, 0.22);
+  color: #10b981;
+}
+
+.orderJumpBtn {
+  min-width: 36px;
+  min-height: 34px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e4e4e7;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  touch-action: manipulation;
+}
+
+.orderJumpBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.plItemCard.is-dragging,
+.plBreakCard.is-dragging {
+  opacity: 0.45;
+  transform: scale(0.99);
+}
+
+.plItemCard.is-drag-over,
+.plBreakCard.is-drag-over {
+  outline: 2px dashed #10b981;
+  outline-offset: 2px;
+  background: rgba(16, 185, 129, 0.12) !important;
+}
+
+
 
 

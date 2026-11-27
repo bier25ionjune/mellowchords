@@ -5820,6 +5820,82 @@ function openPlaylist(id) {
 let plBulkMode = false;
 const plSelectedIndices = new Set();
 
+function movePlaylistItem(plId, fromIdx, toIdx) {
+  if (fromIdx === toIdx) return;
+  mutPl(plId, x => {
+    if (!Array.isArray(x.songIds)) return;
+    if (fromIdx < 0 || fromIdx >= x.songIds.length || toIdx < 0 || toIdx >= x.songIds.length) return;
+    const [item] = x.songIds.splice(fromIdx, 1);
+    x.songIds.splice(toIdx, 0, item);
+  });
+  renderPlView();
+}
+
+function openQuickMoveModal(title, fromIdx, total, onMove) {
+  modal(`🎯 ย้าย “${title}” (คิว #${fromIdx + 1}) ไปลำดับที่...`, (box, close) => {
+    const topBar = mk('div', 'row');
+    topBar.style.cssText = 'gap:8px;flex-wrap:wrap;margin-bottom:12px';
+    topBar.append(
+      btn('⏫ ขึ้นบนสุด (#1)', () => { close(); onMove(fromIdx, 0); }, 'small primary'),
+      btn(`⏬ ลงล่างสุด (#${total})`, () => { close(); onMove(fromIdx, total - 1); }, 'small secondary')
+    );
+    const grid = mk('div', 'row');
+    grid.style.cssText = 'gap:6px;flex-wrap:wrap;max-height:46vh;overflow-y:auto';
+    for (let i = 0; i < total; i++) {
+      const b = btn(`#${i + 1}`, () => { close(); onMove(fromIdx, i); }, i === fromIdx ? 'small primary' : 'small ghost');
+      b.style.minWidth = '48px';
+      b.style.minHeight = '42px';
+      if (i === fromIdx) b.disabled = true;
+      grid.appendChild(b);
+    }
+    box.append(topBar, grid);
+  });
+}
+
+function attachPointerReorder(container, itemSelector, handleSelector, idxAttr, onMove) {
+  if (!container) return;
+  container.querySelectorAll(handleSelector).forEach(handle => {
+    handle.onpointerdown = e => {
+      const srcEl = handle.closest(itemSelector);
+      if (!srcEl) return;
+      e.preventDefault();
+      const fromIdx = Number(srcEl.dataset[idxAttr]);
+      let targetIdx = fromIdx;
+      srcEl.classList.add('is-dragging');
+      try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+
+      const clearOver = () => {
+        container.querySelectorAll(itemSelector).forEach(el => el.classList.remove('is-drag-over'));
+      };
+
+      const onMoveEv = ev => {
+        clearOver();
+        const hit = document.elementFromPoint(ev.clientX, ev.clientY);
+        const overEl = hit ? hit.closest(itemSelector) : null;
+        if (overEl && container.contains(overEl)) {
+          targetIdx = Number(overEl.dataset[idxAttr]);
+          if (targetIdx !== fromIdx) overEl.classList.add('is-drag-over');
+        }
+      };
+
+      const onUpEv = () => {
+        window.removeEventListener('pointermove', onMoveEv);
+        window.removeEventListener('pointerup', onUpEv);
+        window.removeEventListener('pointercancel', onUpEv);
+        srcEl.classList.remove('is-dragging');
+        clearOver();
+        if (!isNaN(fromIdx) && !isNaN(targetIdx) && targetIdx !== fromIdx) {
+          onMove(fromIdx, targetIdx);
+        }
+      };
+
+      window.addEventListener('pointermove', onMoveEv);
+      window.addEventListener('pointerup', onUpEv);
+      window.addEventListener('pointercancel', onUpEv);
+    };
+  });
+}
+
 function renderPlView() {
   const box = $('#plSongs'), bar = $('#plBar'), lk = $('#plLink');
   [box, bar, lk].forEach(e => e.replaceChildren());
@@ -6003,12 +6079,22 @@ function renderPlView() {
       }
       left.append(mk('span', 'plBreakIcon', '🎙️'), bTitleWrap);
 
-      const actions = mk('div', 'itemActions');
       const curPlIndex = p ? p.songIds.findIndex(x => {
         const norm = normalizePlItem(x);
         return norm.id === s.id;
       }) : -1;
       const targetPlIdx = curPlIndex >= 0 ? curPlIndex : idx;
+
+      if (p) {
+        breakCard.dataset.plIdx = String(targetPlIdx);
+        const handle = mk('span', 'dragHandle', '⠿');
+        handle.title = 'ลากเพื่อจัดลำดับ';
+        const jumpBtn = btn(`#${targetPlIdx + 1}`, () => openQuickMoveModal(s.title, targetPlIdx, p.songIds.length, (f, t) => movePlaylistItem(p.id, f, t)), 'orderJumpBtn');
+        jumpBtn.title = 'แตะเพื่อย้ายคิว';
+        left.prepend(handle, jumpBtn);
+      }
+
+      const actions = mk('div', 'itemActions');
 
       const mv = d => {
         if (!p) return;
@@ -6103,6 +6189,23 @@ function renderPlView() {
       topRow.appendChild(cb);
     }
 
+    if (p) {
+      const curPlIndexForOrder = p.songIds.findIndex(x => {
+        const norm = normalizePlItem(x);
+        return (norm.id && s.itemId ? norm.id === s.itemId : norm.songId === s.id);
+      });
+      const targetOrderIdx = curPlIndexForOrder >= 0 ? curPlIndexForOrder : idx;
+      row.dataset.plIdx = String(targetOrderIdx);
+      const handle = mk('span', 'dragHandle', '⠿');
+      handle.title = 'ลากเพื่อจัดลำดับ';
+      const jumpBtn = btn(`#${targetOrderIdx + 1}`, e => {
+        e.stopPropagation();
+        openQuickMoveModal(s.title, targetOrderIdx, p.songIds.length, (f, t) => movePlaylistItem(p.id, f, t));
+      }, 'orderJumpBtn');
+      jumpBtn.title = 'แตะเพื่อย้ายคิว';
+      topRow.append(handle, jumpBtn);
+    }
+
     topRow.appendChild(mainBtn);
 
     if (p) {
@@ -6147,6 +6250,12 @@ function renderPlView() {
 
     box.appendChild(row);
   });
+
+  if (p) {
+    attachPointerReorder(box, '[data-pl-idx]', '.dragHandle', 'plIdx', (fromIdx, toIdx) => {
+      movePlaylistItem(p.id, fromIdx, toIdx);
+    });
+  }
 }
 
 function openEditPlaylistItemModal(plId, item, song) {
