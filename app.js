@@ -902,6 +902,83 @@ function writeSearchCache(qLower, items) {
 }
 
 // ค้นหาหน้าคอร์ดจริงจากเว็บ โดยอิง Chordtabs เป็นหลักพร้อมระบบแคชและรวมคำขอที่ซ้ำกัน
+async function searchChordtabsDatabaseFirst(q) {
+  if (!q || typeof sb === 'undefined' || !sb || typeof cloudOn !== 'function' || !cloudOn()) return [];
+  const clean = q.replace(/[%_,()]/g, ' ').trim();
+  if (!clean) return [];
+  const out = [];
+  const seen = new Set();
+
+  try {
+    const songsQuery = sb
+      .from('songs')
+      .select('id,title,artist,key,original_key,text,chordpro_content,images,src,source_domain,_ctSongId')
+      .or(`title.ilike.%${clean}%,artist.ilike.%${clean}%`)
+      .limit(6);
+    const cacheQuery = sb
+      .from('chordtabs_cache')
+      .select('chordtabs_id,title,artist,original_key,source_url,image_url,chordpro_content')
+      .or(`title.ilike.%${clean}%,artist.ilike.%${clean}%`)
+      .order('hit_count', { ascending: false })
+      .limit(8);
+
+    const timeoutP = new Promise(res => setTimeout(() => res([null, null]), 1800));
+    const [songsRes, cacheRes] = await Promise.race([
+      Promise.all([songsQuery.catch(() => null), cacheQuery.catch(() => null)]),
+      timeoutP
+    ]);
+
+    if (songsRes && Array.isArray(songsRes.data)) {
+      for (const r of songsRes.data) {
+        if (!r || !r.title) continue;
+        const key = (r.src || r.id || r.title).toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const imgs = Array.isArray(r.images) ? r.images.slice() : [];
+        if (!imgs.length && r._ctSongId) imgs.push(`https://chordtabs.in.th/img/nm/${r._ctSongId}.png`);
+        out.push({
+          ...r,
+          key: r.original_key || r.key || 'C',
+          images: imgs,
+          source: 'db-cache',
+          isChordtabs: Boolean((r.src && r.src.includes('chordtabs')) || r._ctSongId || r.source_domain === 'chordtabs'),
+          domain: '⚡ ในฐานข้อมูล',
+          realChords: extractUniqueChordsFromSheet(r.chordpro_content || r.text || '')
+        });
+      }
+    }
+
+    if (cacheRes && Array.isArray(cacheRes.data)) {
+      for (const c of cacheRes.data) {
+        if (!c || !c.title) continue;
+        const ctId = String(c.chordtabs_id || '').trim();
+        const url = c.source_url || (ctId ? `https://chordtabs.in.th/${ctId}/` : '');
+        const dedupeKey = (url || ctId || c.title).toLowerCase();
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        const imgUrl = c.image_url || (ctId ? `https://chordtabs.in.th/img/nm/${ctId}.png` : '');
+        out.push({
+          id: ctId ? `ct-${ctId}` : ('ct-' + hash(c.title + c.artist)),
+          title: c.title,
+          artist: c.artist || '',
+          key: c.original_key || 'C',
+          text: '',
+          chordpro_content: c.chordpro_content || '',
+          images: imgUrl ? [imgUrl] : [],
+          src: url,
+          url: url,
+          _ctSongId: ctId || null,
+          source: 'db-cache',
+          isChordtabs: true,
+          domain: '⚡ แคชฐานข้อมูล (Chordtabs)',
+          realChords: extractUniqueChordsFromSheet(c.chordpro_content || '')
+        });
+      }
+    }
+  } catch (_) {}
+  return out;
+}
+
 async function searchRealWebChords(query, externalSignal = null) {
   const q = query.trim();
   if (!q) return { results: [], webTrueKey: '' };
@@ -909,11 +986,13 @@ async function searchRealWebChords(query, externalSignal = null) {
   const results = [];
   const qLower = q.toLowerCase();
   const t = qLower.split(/\s+/).filter(Boolean);
+  const seenKeys = new Set();
 
   // 1. คลังเพลงในเครื่องของผู้ใช้
   for (const s of loadBook()) {
     const h = (s.title + ' ' + (s.artist || '')).toLowerCase();
     if (t.every(x => h.includes(x))) {
+      seenKeys.add((s.src || s.id || s.title).toLowerCase());
       results.push({
         ...s,
         source: 'builtin',
@@ -923,7 +1002,24 @@ async function searchRealWebChords(query, externalSignal = null) {
     }
   }
 
-  // 2. ตรวจแคช (in-memory + sessionStorage) และรวม in-flight promise
+  // 2. แอบค้นหาจาก Database (public.songs + public.chordtabs_cache) ก่อนเสมอ
+  const dbHits = await searchChordtabsDatabaseFirst(q);
+  for (const hit of dbHits) {
+    const k = (hit.src || hit.id || hit.title).toLowerCase();
+    if (seenKeys.has(k)) continue;
+    seenKeys.add(k);
+    results.push(hit);
+  }
+
+  // หากพบเพลงที่ตรงชื่อเพลงในคลังหรือฐานข้อมูลแล้ว >= 2 รายการ (หรือตรงเป๊ะ 1 รายการ) ไม่ต้องยิงเว็บให้เปลือง
+  const hasStrongDbMatch = results.some(r => String(r.title || '').toLowerCase() === qLower) || results.length >= 2;
+  if (hasStrongDbMatch) {
+    const finalResults = results.slice(0, 8);
+    const bestKey = finalResults.find(r => r.key)?.key || '';
+    return { results: finalResults, webTrueKey: bestKey };
+  }
+
+  // 3. ตรวจแคช (in-memory + sessionStorage) และรวม in-flight promise (เฉพาะ chordtabs.in.th)
   let relevantWeb = readSearchCache(qLower);
 
   if (!relevantWeb) {
@@ -1227,6 +1323,26 @@ function cacheChordtabsImageInBackground(songId, imageUrl, songRef = null) {
   })();
 }
 
+function saveChordtabsGlobalCache(song) {
+  if (!song || !song.title || typeof sb === 'undefined' || !sb || typeof cloudOn !== 'function' || !cloudOn()) return;
+  const ctId = song._ctSongId || extractChordtabsId(song.src || song.url || '') || '';
+  if (!ctId) return;
+  const firstImg = Array.isArray(song.images) && song.images.length
+    ? song.images.find(u => typeof u === 'string' && /^https?:\/\//i.test(u)) || `https://chordtabs.in.th/img/nm/${ctId}.png`
+    : `https://chordtabs.in.th/img/nm/${ctId}.png`;
+  sb.from('chordtabs_cache').upsert({
+    chordtabs_id: String(ctId),
+    title: String(song.title).trim(),
+    artist: String(song.artist || '').trim(),
+    original_key: String(song.original_key || song.key || '').trim(),
+    source_url: song.src || song.url || `https://chordtabs.in.th/${ctId}/`,
+    image_url: firstImg,
+    chordpro_content: String(song.chordpro_content || ''),
+    created_by: (typeof user !== 'undefined' && user && user.id) ? user.id : null,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'chordtabs_id' }).then(() => {}).catch(() => {});
+}
+
 function autoSaveSearchedSongToLibrary(song) {
   if (!song || !song.title) return song;
   try {
@@ -1268,6 +1384,7 @@ function autoSaveSearchedSongToLibrary(song) {
     }
     saveBook(book);
     if (typeof renderSongbook === 'function') renderSongbook();
+    saveChordtabsGlobalCache(song);
   } catch (_) {}
   return song;
 }
@@ -1897,8 +2014,16 @@ async function runInAppOnlineSearch() {
 
     b.onclick = async () => {
       activeSetlistContext = null;
+      recordSearchHistory(it.title || $('#q').value.trim());
+      hideSearchHistoryDropdown();
       if (it.source === 'builtin') {
         openSong({ ...it }, 0);
+        return;
+      }
+      if (it.source === 'db-cache') {
+        const saved = autoSaveSearchedSongToLibrary({ ...it });
+        openSong(saved, 0);
+        toast(`เปิดเพลง “${saved.title}” จากแคชฐานข้อมูล ✔`);
         return;
       }
 
@@ -1927,8 +2052,119 @@ async function runInAppOnlineSearch() {
   }
 }
 
+const SEARCH_HISTORY_KEY = 'mellowchords.searchHistory.v1';
+function getSearchHistory() {
+  try {
+    const arr = LS.get(SEARCH_HISTORY_KEY, []);
+    return Array.isArray(arr) ? arr.filter(x => typeof x === 'string' && x.trim()) : [];
+  } catch {
+    return [];
+  }
+}
+
+function recordSearchHistory(term) {
+  const clean = String(term || '').trim();
+  if (!clean || clean.length < 2) return;
+  const list = getSearchHistory().filter(x => x.toLowerCase() !== clean.toLowerCase());
+  list.unshift(clean);
+  LS.set(SEARCH_HISTORY_KEY, list.slice(0, 15));
+}
+
+function hideSearchHistoryDropdown() {
+  const dd = $('#searchHistoryDropdown');
+  if (dd) dd.hidden = true;
+}
+
+function renderSearchHistoryDropdown() {
+  const dd = $('#searchHistoryDropdown');
+  const qEl = $('#q');
+  if (!dd || !qEl) return;
+  const typed = qEl.value.trim().toLowerCase();
+  const history = getSearchHistory().filter(h => !typed || h.toLowerCase().includes(typed));
+  const bookMatches = typed
+    ? loadBook().filter(s => (s.title + ' ' + (s.artist || '')).toLowerCase().includes(typed)).slice(0, 5)
+    : [];
+
+  if (!history.length && !bookMatches.length) {
+    dd.hidden = true;
+    return;
+  }
+
+  dd.replaceChildren();
+  if (history.length) {
+    const head = mk('div', 'shHead');
+    head.appendChild(mk('span', null, '🕒 ชื่อเพลง / คำค้นหาล่าสุด'));
+    const clrAll = btn('ล้างทั้งหมด', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      LS.set(SEARCH_HISTORY_KEY, []);
+      hideSearchHistoryDropdown();
+    }, 'small ghost');
+    clrAll.style.cssText = 'padding:2px 6px;min-height:24px;font-size:0.72rem';
+    head.appendChild(clrAll);
+    dd.appendChild(head);
+
+    history.slice(0, 8).forEach(term => {
+      const row = mk('div', 'shRow');
+      const itemBtn = mk('button', 'shItemBtn');
+      itemBtn.type = 'button';
+      itemBtn.innerHTML = `<span class="shItemText">🕒 ${escapeHtml(term)}</span><span class="small muted">ค้นหา</span>`;
+      itemBtn.onclick = () => {
+        qEl.value = term;
+        if ($('#clearSearchBtn')) $('#clearSearchBtn').hidden = false;
+        hideSearchHistoryDropdown();
+        doInstantLocalFilter();
+        runInAppOnlineSearch();
+      };
+      const delBtn = mk('button', 'shDelBtn', '✕');
+      delBtn.type = 'button';
+      delBtn.title = 'ลบประวัตินี้';
+      delBtn.onclick = e => {
+        e.stopPropagation();
+        LS.set(SEARCH_HISTORY_KEY, getSearchHistory().filter(x => x !== term));
+        renderSearchHistoryDropdown();
+      };
+      row.append(itemBtn, delBtn);
+      dd.appendChild(row);
+    });
+  }
+
+  if (bookMatches.length) {
+    const head2 = mk('div', 'shHead');
+    head2.appendChild(mk('span', null, '💾 เพลงในคลังที่ตรงกัน'));
+    dd.appendChild(head2);
+    bookMatches.forEach(s => {
+      const row = mk('div', 'shRow');
+      const itemBtn = mk('button', 'shItemBtn');
+      itemBtn.type = 'button';
+      itemBtn.innerHTML = `<span class="shItemText">🎵 ${escapeHtml(s.title)}${s.artist ? ' - ' + escapeHtml(s.artist) : ''}</span><span class="badge green">เปิด</span>`;
+      itemBtn.onclick = () => {
+        recordSearchHistory(s.title);
+        hideSearchHistoryDropdown();
+        activeSetlistContext = null;
+        openSong(s, s.shift || 0);
+      };
+      row.appendChild(itemBtn);
+      dd.appendChild(row);
+    });
+  }
+
+  dd.hidden = false;
+}
+
+if ($('#q')) {
+  $('#q').addEventListener('focus', () => renderSearchHistoryDropdown());
+  $('#q').addEventListener('input', () => renderSearchHistoryDropdown());
+}
+document.addEventListener('click', e => {
+  const form = $('#searchForm');
+  if (form && !form.contains(e.target)) hideSearchHistoryDropdown();
+});
+
 $('#searchForm').onsubmit = e => {
   e.preventDefault();
+  recordSearchHistory($('#q') ? $('#q').value.trim() : '');
+  hideSearchHistoryDropdown();
   runInAppOnlineSearch();
 };
 

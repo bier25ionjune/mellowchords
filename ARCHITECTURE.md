@@ -168,8 +168,13 @@ mellowchords/
 
 ## 5. ไปป์ไลน์โหลดคอร์ดและรูปภาพความเร็วสูง (< 5s Image Pipeline)
 
-- **แหล่งค้นหาเฉพาะ `chordtabs.in.th` (`searchRealWebChords`):** ค้นหาออนไลน์ทุกรายการในแอปดึงจาก **`site:chordtabs.in.th` เท่านั้น** แคชผลลัพธ์ในหน่วยความจำและ `sessionStorage` (TTL 5–10 นาที) พร้อมรวม Promise ที่กำลังโหลดซ้ำและยกเลิกคำค้นเก่าด้วย `AbortController`
-- **บันทึกเข้าคลังอัตโนมัติ (`autoSaveSearchedSongToLibrary`):** ทุกเพลงที่ดึงจากผลการค้นหา Chordtabs (`loadRealWebChordResult`) จะถูกบันทึกลงคลังเพลงในเครื่องอัตโนมัติทันทีเพื่อความสะดวกในการค้นหาและเปิดซ้ำ
+- **ระบบค้นหา 4 ชั้น DB-First (`searchRealWebChords` & `searchChordtabsDatabaseFirst`):**
+  1. คลังเพลงในเครื่อง (`loadBook()`)
+  2. ฐานข้อมูลส่วนตัวบน Supabase (`public.songs`)
+  3. ฐานข้อมูลแคชกลางที่ใช้ร่วมกันทั้งระบบ (`public.chordtabs_cache` — สมาชิกที่อนุมัติแล้วแชร์ผลค้นหาและลิงก์ภาพ Chordtabs ร่วมกันได้)
+  4. เว็บ **`site:chordtabs.in.th` เท่านั้น** (จะยิงเว็บต่อเมื่อในคลังและฐานข้อมูลยังไม่พบเพลงที่ตรงตามคำค้น)
+- **ประวัติการค้นหาแบบ Dropdown (`#searchHistoryDropdown`):** บันทึกคำค้น/ชื่อเพลงล่าสุด (สูงสุด 15 รายการใน `localStorage`) และแสดง Dropdown แนะนำพร้อมเพลงในคลังที่ตรงกันทันทีเมื่อแตะหรือพิมพ์ในช่อง `#q`
+- **บันทึกเข้าคลัง & แคชกลางอัตโนมัติ (`autoSaveSearchedSongToLibrary` & `saveChordtabsGlobalCache`):** ตรวจซ้ำ 4 ระดับ (`id`, `_ctSongId`, `src`, `title+artist`) ก่อนบันทึกเข้าคลังเครื่องและ Upsert ลง `public.chordtabs_cache` (`onConflict: 'chordtabs_id'`) ทันที
 - การเปิดเพลงจาก Chordtabs (`loadRealWebChordResult` / `loadGallery`):
   1. ตรวจสอบรูปใน `IndexedDB` (`ct-img-<songId>`) ก่อน (เปิดซ้ำ/ออฟไลน์ใน `< 50ms`)
   2. แสดงรูปตรงพร้อม `referrerPolicy="no-referrer"` ควบคู่กับการดึงชื่อไฟล์จริงผ่าน `r.jina.ai` (`X-Engine: direct`) และมีลำดับ Fallback อัตโนมัติผ่าน `wsrv.nl` / `images.weserv.nl` ก่อนบันทึกลง `IndexedDB` เบื้องหลัง
