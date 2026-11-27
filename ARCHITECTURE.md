@@ -86,6 +86,8 @@ mellowchords/
 
 ## 4. ระบบจัดการผู้ใช้และสิทธิ์ Admin (Authentication, Approval & RBAC)
 
+- **บังคับสมัคร/เข้าสู่ระบบก่อนใช้งาน (`openAcct({ required: true })`):** ผู้ใช้ต้องสมัครสมาชิกและเข้าสู่ระบบด้วยบัญชี Supabase จึงจะเข้าใช้งานแอปได้ (ปิดการใช้งานโหมด Guest/Local Bypass และนำแถบตั้งค่า Custom Proxy ออกจากหน้า Login ผู้ใช้ทั่วไปแล้ว โดยการตั้งค่า Supabase URL/Key จะแสดงเฉพาะ Admin เท่านั้น)
+
 ### 4.1 โครงสร้างตาราง `public.profiles` (Database Schema)
 
 เชื่อมโยงแบบ `1:1` กับ `auth.users` ผ่าน Foreign Key `id`:

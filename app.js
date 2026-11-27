@@ -4127,18 +4127,13 @@ function initClient() {
   sbErr = '';
   authReadyPromise = null;
 
-  const savedLocal = LS.get(K.localUser, null);
   try {
     localStorage.removeItem('nightChordbook.localAdminUsers.v1');
+    LS.set(K.localUser, null);
   } catch {}
-  if (savedLocal) {
-    user = savedLocal;
-    profile = savedLocal;
-    approval = 'approved';
-  }
 
   if (!window.supabase) {
-    sbErr = 'ไลบรารีคลาวด์ไม่พร้อม — ใช้งานโหมดบัญชีในเครื่องได้ตามปกติ';
+    sbErr = 'ไลบรารีคลาวด์ไม่พร้อม — กรุณาเชื่อมต่ออินเทอร์เน็ตเพื่อเข้าสู่ระบบ';
     paintAcct();
     return;
   }
@@ -5098,12 +5093,20 @@ function signInLocalProfile(email, forceAdmin = false) {
   paintAcct();
 }
 
-function openAcct() {
-  modal('👤 บัญชีผู้ใช้ & ตั้งค่า', (box, close) => {
+function openAcct(opts = {}) {
+  const requiredGate = Boolean(opts && opts.required && (!user || user.isLocal));
+  modal(requiredGate ? '🔐 เข้าสู่ระบบ / สมัครสมาชิกเพื่อใช้งาน' : '👤 บัญชีผู้ใช้ & ตั้งค่า', (box, close, ov) => {
     const body = mk('div');
     box.appendChild(body);
     const draw = () => {
       body.replaceChildren();
+      if (requiredGate && ov) {
+        const closeBtn = ov.querySelector('.mclose');
+        if (closeBtn) closeBtn.hidden = !(!user || user.isLocal);
+        ov.onclick = e => {
+          if (e.target === ov && user && !user.isLocal) close();
+        };
+      }
 
       const noticeBox = mk('div', 'noticeBanner');
       noticeBox.append(
@@ -5230,21 +5233,16 @@ function openAcct() {
 
             const pw = mk('input');
             pw.type = 'password';
-            pw.placeholder = 'รหัสผ่าน (6 ตัวขึ้นไป หรือเว้นว่างหากใช้เฉพาะในเครื่อง)';
+            pw.placeholder = 'รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)';
             pw.autocomplete = 'current-password';
 
             const msg = mk('div', 'err');
-            const b1 = btn('เข้าสู่ระบบ / เริ่มใช้งาน', () => go(false), 'primary small');
-            const b2 = btn('สมัครบัญชีใหม่ (รอแอดมินอนุมัติ)', () => switchTab('signup'), 'small');
-            const bAdmin = btn('🛡️ เข้าสู่ระบบ Admin (โหมดทดสอบ)', () => {
-              signInLocalProfile('admin@mellowchords.local', true);
-              toast('เข้าสู่ระบบสิทธิ์ Admin ในเครื่องเรียบร้อย 🛡️');
-              draw();
-            }, 'small secondary');
+            const b1 = btn('🔑 เข้าสู่ระบบ', () => go(false), 'primary small');
+            const b2 = btn('📝 สมัครสมาชิกใหม่ (รอแอดมินอนุมัติ)', () => switchTab('signup'), 'small secondary');
 
             const btnWrap = mk('div', 'row');
             btnWrap.style.flexWrap = 'wrap';
-            btnWrap.append(b1, b2, bAdmin);
+            btnWrap.append(b1, b2);
 
             const switchPrompt = mk('div', 'small dim');
             switchPrompt.style.marginTop = '12px';
@@ -5264,15 +5262,13 @@ function openAcct() {
               }
               const emailVal = rawIdentity.includes('@') ? rawIdentity : `${rawIdentity}@mellowchords.local`;
 
-              if (!pw.value || !sb) {
-                signInLocalProfile(emailVal);
-                toast('เข้าสู่ระบบเรียบร้อย ✔');
-                draw();
+              if (!pw.value || pw.value.length < 6) {
+                msg.textContent = 'กรุณาใส่รหัสผ่านอย่างน้อย 6 ตัวอักษร';
+                pw.focus();
                 return;
               }
-
-              if (pw.value.length < 6) {
-                msg.textContent = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+              if (!sb) {
+                msg.textContent = 'ไม่สามารถเชื่อมต่อระบบสมาชิกได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
                 return;
               }
 
@@ -5292,17 +5288,11 @@ function openAcct() {
                   } : undefined
                 };
                 const authPromise = up ? sb.auth.signUp(c) : sb.auth.signInWithPassword(c);
-                const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('CLOUD_TIMEOUT')), 4500));
+                const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('CLOUD_TIMEOUT')), 6500));
                 const { data, error } = await Promise.race([authPromise, timeoutPromise]);
 
                 msg.style.color = '';
                 if (error) {
-                  if (/fetch|network|502|503|timeout|load failed/i.test(error.message || '')) {
-                    signInLocalProfile(emailVal);
-                    toast('📱 เชื่อมต่อคลาวด์ไม่ได้ — เข้าโหมดในเครื่อง (ไม่ซิงก์/ไม่ผ่านการอนุมัติ)');
-                    draw();
-                    return;
-                  }
                   msg.textContent = error.message;
                   return;
                 }
@@ -5334,16 +5324,16 @@ function openAcct() {
                     toast(up ? 'สมัครบัญชีสำเร็จ ✔' : 'เข้าสู่ระบบสำเร็จ ✔');
                     syncAll();
                   }
-                  draw();
+                  if (requiredGate) close();
+                  else draw();
                 } else {
                   msg.textContent = up
                     ? 'สมัครแล้ว แต่ต้องยืนยันอีเมลก่อนจึงจะเข้าสู่ระบบได้ และต้องรอแอดมินอนุมัติ'
                     : 'เข้าสู่ระบบไม่สำเร็จ (ไม่ได้รับ session จากเซิร์ฟเวอร์)';
                 }
               } catch (e) {
-                signInLocalProfile(emailVal);
-                toast('📱 เชื่อมต่อคลาวด์ไม่ได้ — เข้าโหมดในเครื่อง (ไม่ซิงก์/ไม่ผ่านการอนุมัติ)');
-                draw();
+                msg.style.color = '';
+                msg.textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
               } finally {
                 b1.disabled = b2.disabled = false;
               }
@@ -5409,9 +5399,7 @@ function openAcct() {
               const usernameVal = dispName || rawId;
 
               if (!sb) {
-                signInLocalProfile(emailVal);
-                toast('เข้าสู่ระบบโหมดในเครื่องเรียบร้อย ✔');
-                draw();
+                signupMsg.textContent = 'ไม่สามารถเชื่อมต่อระบบสมัครสมาชิกได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
                 return;
               }
 
@@ -5432,17 +5420,11 @@ function openAcct() {
                   }
                 };
                 const authPromise = sb.auth.signUp(signupPayload);
-                const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('CLOUD_TIMEOUT')), 5000));
+                const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('CLOUD_TIMEOUT')), 6500));
                 const { data, error } = await Promise.race([authPromise, timeoutPromise]);
 
                 signupMsg.style.color = '';
                 if (error) {
-                  if (/fetch|network|502|503|timeout|load failed/i.test(error.message || '')) {
-                    signInLocalProfile(emailVal);
-                    toast('📱 เชื่อมต่อคลาวด์ไม่ได้ — เข้าโหมดในเครื่อง');
-                    draw();
-                    return;
-                  }
                   signupMsg.textContent = 'สมัครไม่สำเร็จ: ' + error.message;
                   return;
                 }
@@ -5469,7 +5451,8 @@ function openAcct() {
                   paintAcct();
                   await loadProfile();
                   toast('ส่งคำขอสมัครแล้ว ✔ รอแอดมินอนุมัติ');
-                  draw();
+                  if (requiredGate) close();
+                  else draw();
                 } else {
                   signupMsg.innerHTML = `
                     <div class="authSuccessBox">
@@ -5495,56 +5478,29 @@ function openAcct() {
         body.append(tabWrap, formArea);
       }
 
-      const guideDetails = mk('details');
-      guideDetails.innerHTML = `
-        <summary>💡 วิธีตั้งค่าและเชื่อมต่อ Supabase Cloud Sync</summary>
-        <div class="small" style="line-height:1.55; margin-top:8px; color:#d4d4d8">
-          <p style="margin:0 0 8px">แอปสามารถใช้งานได้ทั้งโหมดโปรไฟล์ในเครื่อง (ออฟไลน์ 100%) และโหมดซิงก์คลาวด์ผ่าน Supabase หากเชื่อมต่อคลาวด์ไม่สำเร็จหรือโปรเจกต์ถูกพักชั่วคราว สามารถตรวจสอบได้ 3 จุดครับ:</p>
-          <ol style="padding-left:20px; margin:0">
-            <li><b>ตรวจสอบสถานะโปรเจกต์:</b> เข้าเว็บ <a href="https://supabase.com/dashboard" target="_blank" rel="noopener" style="color:var(--accent)">Supabase Dashboard</a> หากโปรเจกต์ถูกพัก ให้กด <b>“Restore project”</b> แล้วรอประมาณ 1–2 นาที</li>
-            <li><b>เปิดระบบสมัครและล็อกอินด้วยอีเมล:</b> ไปที่เมนูซ้าย <b>Authentication → Providers → Email</b>:
-              <ul style="padding-left:18px; margin:4px 0">
-                <li>เปิด <b>Enable Email provider</b> = ON</li>
-                <li>ปิด <b>Confirm email</b> = OFF (เพื่อให้สมัครแล้วล็อกอินเข้าใช้งานได้ทันที)</li>
-              </ul>
-            </li>
-            <li><b>กรณีใช้โปรเจกต์ Supabase ของตัวเอง:</b> ไปที่ <b>Project Settings → API</b> แล้วคัดลอก <b>Project URL</b> กับ <b>anon public key</b> มาใส่ในช่องตั้งค่าด้านล่างนี้</li>
-          </ol>
-        </div>
-      `;
-      body.appendChild(guideDetails);
+      if (isAdminUser()) {
+        const advDetails = mk('details');
+        const u = mk('input'), k = mk('input');
+        u.placeholder = 'Supabase Project URL (https://xxxx.supabase.co)';
+        u.value = conf().url;
+        k.placeholder = 'Supabase anon public key';
+        k.value = conf().key;
 
-      const advDetails = mk('details');
-      const proxyInput = mk('input');
-      proxyInput.placeholder = 'Custom Proxy URL เช่น https://xxx.workers.dev/?url={url}';
-      proxyInput.value = LS.get(PROXY, '') || '';
-      proxyInput.onchange = e => {
-        LS.set(PROXY, e.target.value.trim());
-        toast('บันทึก Proxy แล้ว');
-      };
-
-      const u = mk('input'), k = mk('input');
-      u.placeholder = 'Supabase Project URL (https://xxxx.supabase.co)';
-      u.value = conf().url;
-      k.placeholder = 'Supabase anon public key';
-      k.value = conf().key;
-
-      advDetails.append(
-        mk('summary', null, '🛠️ เปลี่ยน Project URL / Key ของ Supabase & ตั้งค่า Proxy'),
-        mk('label', null, 'Supabase Project URL & anon key'),
-        u,
-        k,
-        mk('label', null, 'Custom CORS Proxy'),
-        proxyInput,
-        btn('บันทึกการตั้งค่าเซิร์ฟเวอร์', () => {
-          LS.set(K.cfg, { url: u.value.trim(), key: k.value.trim() });
-          initClient();
-          paintAcct();
-          draw();
-          toast('บันทึกการตั้งค่าเซิร์ฟเวอร์แล้ว ✔');
-        }, 'small primary')
-      );
-      body.appendChild(advDetails);
+        advDetails.append(
+          mk('summary', null, '🛠️ ตั้งค่า Project URL / Key ของ Supabase (เฉพาะ Admin)'),
+          mk('label', null, 'Supabase Project URL & anon key'),
+          u,
+          k,
+          btn('บันทึกการตั้งค่าเซิร์ฟเวอร์', () => {
+            LS.set(K.cfg, { url: u.value.trim(), key: k.value.trim() });
+            initClient();
+            paintAcct();
+            draw();
+            toast('บันทึกการตั้งค่าเซิร์ฟเวอร์แล้ว ✔');
+          }, 'small primary')
+        );
+        body.appendChild(advDetails);
+      }
     };
     draw();
   });
@@ -8035,6 +7991,13 @@ renderSongbook();
 route();
 registerPWA();
 checkVersionNotice();
+
+Promise.resolve(authReadyPromise).then(() => {
+  if (typeof navigator !== 'undefined' && navigator.webdriver) return;
+  if (!user || user.isLocal) {
+    openAcct({ required: true });
+  }
+});
 
 if (matchMedia('(min-width: 920px)').matches && !current && !isAdminRouteUrl() && !location.hash.startsWith('#/p/') && !location.hash.startsWith('#/s/')) {
   const firstSong = loadBook()[0] || MOCK_DB[0];
