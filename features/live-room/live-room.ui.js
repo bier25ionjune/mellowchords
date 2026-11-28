@@ -165,6 +165,9 @@
             }
           }
           render();
+          if (!localOverride && songs[nextIdx]) {
+            syncLightboxToSong(songs[nextIdx], nextIdx);
+          }
         },
         onSetlistSync: function (updatedSnapshot) {
           if (!activeRoom || !Array.isArray(updatedSnapshot)) return;
@@ -175,6 +178,10 @@
             onToast('⚡ Host เพิ่มเพลงเข้าเซ็ต: ' + (added ? added.title : 'เพลงใหม่'));
           }
           render();
+          var dIdx = getDisplayedIndex();
+          if (updatedSnapshot[dIdx]) {
+            syncLightboxToSong(updatedSnapshot[dIdx], dIdx);
+          }
         },
         onRoomClosed: function () {
           onToast('ห้อง Live Room ถูกปิดโดย Host แล้ว');
@@ -276,27 +283,59 @@
       await refreshLobbyData();
     }
 
-    function syncLightboxToSong(target) {
+    function syncLightboxToSong(target, targetIndex) {
       if (!onUpdateLightboxImage || !target) return;
+      var songs = getSnapshotSongs();
+      var idx = typeof targetIndex === 'number' ? targetIndex : getDisplayedIndex();
+      var syncMeta = { songs: songs, currentIndex: idx };
+
       var firstImg = '';
       if (Array.isArray(target.images) && target.images.length) firstImg = target.images[0];
       else if (target._ctSongId) firstImg = 'https://chordtabs.in.th/img/nm/' + String(target._ctSongId) + '.png';
+      if (!firstImg && target.src) {
+        var urlM = String(target.src).match(/chordtabs\.in\.th\/(\d+)/i);
+        if (urlM) firstImg = 'https://chordtabs.in.th/img/nm/' + urlM[1] + '.png';
+      }
       if (!firstImg) {
         var book = getSongbook() || [];
         var m = book.find(function (b) { return b && ((target.id && b.id === target.id) || (target.title && b.title === target.title)); });
         if (m && Array.isArray(m.images) && m.images.length) firstImg = m.images[0];
       }
-      if (!firstImg) return;
+
+      if (!firstImg) {
+        onUpdateLightboxImage('', syncMeta);
+        if (onRefetchSongImage) {
+          onRefetchSongImage(target).then(function (loaded) {
+            if (loaded && Array.isArray(loaded.images) && loaded.images.length) {
+              target.images = loaded.images.slice();
+              if (getDisplayedIndex() === idx) {
+                onUpdateLightboxImage(loaded.images[0], { songs: getSnapshotSongs(), currentIndex: idx });
+              }
+            }
+          }).catch(function () {});
+        }
+        return;
+      }
+
       var ctMatch = String(firstImg).match(/^ct-img-(\d+)$/i);
       if (ctMatch) {
-        onUpdateLightboxImage('https://chordtabs.in.th/img/nm/' + ctMatch[1] + '.png');
+        onUpdateLightboxImage('https://chordtabs.in.th/img/nm/' + ctMatch[1] + '.png', syncMeta);
         return;
       }
       if (/^(https?:|data:|blob:)/i.test(firstImg)) {
-        onUpdateLightboxImage(firstImg);
+        onUpdateLightboxImage(firstImg, syncMeta);
       } else if (resolveImageUrl) {
         resolveImageUrl(firstImg).then(function (u) {
-          if (u) onUpdateLightboxImage(u);
+          if (u) {
+            onUpdateLightboxImage(u, syncMeta);
+          } else if (onRefetchSongImage) {
+            onRefetchSongImage(target).then(function (loaded) {
+              if (loaded && Array.isArray(loaded.images) && loaded.images.length && getDisplayedIndex() === idx) {
+                target.images = loaded.images.slice();
+                onUpdateLightboxImage(loaded.images[0], { songs: getSnapshotSongs(), currentIndex: idx });
+              }
+            }).catch(function () {});
+          }
         }).catch(function () {});
       }
     }
@@ -309,14 +348,17 @@
       var nextShift = typeof target.shift === 'number' && !isNaN(target.shift) ? normShift(target.shift) : 0;
 
       if (!isHost) {
-        if (!localOverride) {
+        if (!localOverride && opts && opts.allowMemberLocal) {
+          localOverride = true;
+          onToast('🔓 สลับดูเพลงอิสระเฉพาะหน้าจอคุณ (ไม่กระทบวง)');
+        } else if (!localOverride) {
           onToast('🔒 โหมดซิงก์ตาม Host — เปิด "ดูอิสระเฉพาะเครื่องนี้" หากต้องการเลื่อนเอง');
           return;
         }
         localSongIndex = index;
         localKeyShift = nextShift;
         render();
-        syncLightboxToSong(target);
+        syncLightboxToSong(target, index);
         return;
       }
 
@@ -326,7 +368,7 @@
       localSongIndex = index;
       localKeyShift = nextShift;
       render();
-      syncLightboxToSong(target);
+      syncLightboxToSong(target, index);
 
       await service.broadcastRoomState(activeRoom, {
         current_song_index: index,
@@ -761,7 +803,7 @@
             '<div class="lr-floating-setlist-list">' +
               songs.map(function (s, idx) {
                 var activeCls = idx === curIdx ? ' active' : '';
-                return '<button type="button" class="lr-floating-song-btn' + activeCls + '" data-lr-float-idx="' + idx + '"' + (!canControl ? ' disabled' : '') + '>' +
+                return '<button type="button" class="lr-floating-song-btn' + activeCls + '" data-lr-float-idx="' + idx + '">' +
                   '<span class="lr-song-label">' + (idx + 1) + '. ' + esc(s.title) + '</span>' +
                   '<small>' + esc(s.key || '-') + '</small>' +
                 '</button>';
@@ -1099,7 +1141,7 @@
 
       rootEl.querySelectorAll('[data-lr-float-idx]').forEach(function (btn) {
         btn.onclick = function () {
-          hostSelectSong(Number(btn.dataset.lrFloatIdx));
+          hostSelectSong(Number(btn.dataset.lrFloatIdx), { allowMemberLocal: true });
         };
       });
 
@@ -1362,7 +1404,7 @@
             onOpenLightbox(img.src, {
               songs: getSnapshotSongs(),
               currentIndex: curIdx,
-              onSelectSong: function (idx) { return hostSelectSong(idx); }
+              onSelectSong: function (idx) { return hostSelectSong(idx, { allowMemberLocal: true }); }
             });
           }
         };

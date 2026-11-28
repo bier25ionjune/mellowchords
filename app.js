@@ -1208,12 +1208,24 @@ function setCachedCtImgUrl(songId, imgUrl) {
   } catch {}
 }
 
-function resolveChordtabsMetaViaJina(targetUrl, timeoutMs = 4000) {
+function resolveChordtabsMetaViaJina(targetUrl, timeoutMs = 4500) {
   if (!targetUrl) return Promise.resolve(null);
   if (inFlightCtMeta.has(targetUrl)) return inFlightCtMeta.get(targetUrl);
 
   const p = (async () => {
     const songId = extractChordtabsId(targetUrl);
+    const extractFromText = (rawText) => {
+      if (!rawText) return '';
+      const fullMatch =
+        rawText.match(/!\[.*?\]\((https?:\/\/(?:www\.)?chordtabs\.in\.th\/img\/nm\/[^\s)"']+\.(?:png|webp|jpe?g|gif))\)/i) ||
+        rawText.match(/(https?:\/\/(?:www\.)?chordtabs\.in\.th\/img\/nm\/[^\s)"'<>]+\.(?:png|webp|jpe?g|gif))/i);
+      if (fullMatch) return fullMatch[1].replace(/^http:\/\//i, 'https://');
+      const relMatch = rawText.match(/(?:src|href|content)=["']?(?:https?:\/\/(?:www\.)?chordtabs\.in\.th)?\/?(img\/nm\/[^\s)"'<>]+\.(?:png|webp|jpe?g|gif))/i) ||
+        rawText.match(/\b(img\/nm\/[^\s)"'<>]+\.(?:png|webp|jpe?g|gif))/i);
+      if (relMatch) return 'https://chordtabs.in.th/' + relMatch[1].replace(/^\/+/, '');
+      return '';
+    };
+
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -1223,42 +1235,55 @@ function resolveChordtabsMetaViaJina(targetUrl, timeoutMs = 4000) {
         signal: ctrl.signal
       });
       clearTimeout(timer);
-      if (!res.ok) return null;
-      const md = await res.text();
+      if (res.ok) {
+        const md = await res.text();
+        let chordImgUrl = extractFromText(md);
+        if (chordImgUrl && songId) setCachedCtImgUrl(songId, chordImgUrl);
 
-      let chordImgUrl = '';
-      const imgMatch = md.match(/!\[.*?\]\((https:\/\/chordtabs\.in\.th\/img\/nm\/[^\s)]+\.(?:png|webp|jpg))\)/i) ||
-                       md.match(/(https:\/\/chordtabs\.in\.th\/img\/nm\/[^\s)]+\.(?:png|webp|jpg))/i);
-      if (imgMatch) {
-        chordImgUrl = imgMatch[1];
-        if (songId) setCachedCtImgUrl(songId, chordImgUrl);
-      }
+        let { title, artist, key } = parseTitleAndArtist('', md, targetUrl);
+        const titleLine = md.split('\n').find(l => l.startsWith('Title:') || l.startsWith('# '));
+        if (titleLine) {
+          const parsedH = parseTitleAndArtist(titleLine.replace(/^Title:\s*|^#\s*/, ''), md, targetUrl);
+          if (parsedH.title) title = parsedH.title;
+          if (parsedH.artist && !artist) artist = parsedH.artist;
+          if (parsedH.key && !key) key = parsedH.key;
+        }
 
-      let { title, artist, key } = parseTitleAndArtist('', md, targetUrl);
-      const titleLine = md.split('\n').find(l => l.startsWith('Title:') || l.startsWith('# '));
-      if (titleLine) {
-        const parsedH = parseTitleAndArtist(titleLine.replace(/^Title:\s*|^#\s*/, ''), md, targetUrl);
-        if (parsedH.title) title = parsedH.title;
-        if (parsedH.artist && !artist) artist = parsedH.artist;
-        if (parsedH.key && !key) key = parsedH.key;
-      }
-
-      const chordsUsed = [];
-      for (const cm of md.matchAll(/chord-([A-G][#b]?(?:m|maj|dim|aug|sus|\d+)*)/gi)) {
-        if (!chordsUsed.includes(cm[1])) chordsUsed.push(cm[1]);
-      }
-      if (!chordsUsed.length) {
-        for (const cm of md.matchAll(/\/([A-G][#b]?(?:m|maj|dim|aug|sus|\d+)*)\.webp/gi)) {
+        const chordsUsed = [];
+        for (const cm of md.matchAll(/chord-([A-G][#b]?(?:m|maj|dim|aug|sus|\d+)*)/gi)) {
           if (!chordsUsed.includes(cm[1])) chordsUsed.push(cm[1]);
         }
+        if (!chordsUsed.length) {
+          for (const cm of md.matchAll(/\/([A-G][#b]?(?:m|maj|dim|aug|sus|\d+)*)\.webp/gi)) {
+            if (!chordsUsed.includes(cm[1])) chordsUsed.push(cm[1]);
+          }
+        }
+        if (!key && chordsUsed.length) key = chordsUsed[0];
+        if (chordImgUrl) {
+          return { chordImgUrl, title, artist, key, chordsUsed };
+        }
       }
-      if (!key && chordsUsed.length) key = chordsUsed[0];
-
-      return { chordImgUrl, title, artist, key, chordsUsed };
     } catch {
       clearTimeout(timer);
-      return null;
     }
+
+    // Secondary fallback: scrape Chordtabs HTML via allorigins if Jina was rate-limited or missed image
+    try {
+      const ctrl2 = new AbortController();
+      const timer2 = setTimeout(() => ctrl2.abort(), 4500);
+      const proxyRes = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`, { signal: ctrl2.signal });
+      clearTimeout(timer2);
+      if (proxyRes.ok) {
+        const html = await proxyRes.text();
+        const chordImgUrl = extractFromText(html);
+        if (chordImgUrl) {
+          if (songId) setCachedCtImgUrl(songId, chordImgUrl);
+          return { chordImgUrl, title: '', artist: '', key: '', chordsUsed: [] };
+        }
+      }
+    } catch {}
+
+    return null;
   })().finally(() => {
     inFlightCtMeta.delete(targetUrl);
   });
@@ -3485,27 +3510,54 @@ $('#deleteBtn').onclick = () => removeSong(current.song.id, current.song.title);
 $('#editBtn').onclick = () => openEditor(current.song);
 
 let _lbSetlistEl = null;
+let _lbCurrentOpts = null;
+
 function setLightboxImgSrc(url) {
   const lbImg = $('#lbImg');
   if (!lbImg || !url) return;
+  const cleanOrig = String(url).replace(/^https:\/\/(?:wsrv\.nl|images\.weserv\.nl)\/\?url=([^&]+).*$/i, (_m, enc) => {
+    try { return decodeURIComponent(enc); } catch { return url; }
+  });
+  lbImg.dataset.origSrc = cleanOrig;
+  lbImg.dataset.fallbackStep = '0';
   lbImg.referrerPolicy = 'no-referrer';
   if (typeof url === 'string' && (url.includes('wsrv.nl') || url.includes('weserv.nl'))) {
     lbImg.crossOrigin = 'anonymous';
   } else {
     lbImg.removeAttribute('crossorigin');
   }
+  lbImg.onerror = () => {
+    const step = Number(lbImg.dataset.fallbackStep || '0');
+    const base = lbImg.dataset.origSrc || lbImg.src || '';
+    if (!/^https?:\/\//i.test(base)) return;
+    if (step === 0) {
+      lbImg.dataset.fallbackStep = '1';
+      lbImg.crossOrigin = 'anonymous';
+      lbImg.src = 'https://wsrv.nl/?url=' + encodeURIComponent(base) + '&output=webp&q=85&w=1400&we';
+    } else if (step === 1) {
+      lbImg.dataset.fallbackStep = '2';
+      lbImg.crossOrigin = 'anonymous';
+      lbImg.src = 'https://images.weserv.nl/?url=' + encodeURIComponent(base) + '&output=png&we';
+    } else if (step === 2) {
+      lbImg.dataset.fallbackStep = '3';
+      lbImg.removeAttribute('crossorigin');
+      lbImg.src = base + (base.includes('?') ? '&' : '?') + '_lb=' + Date.now();
+    }
+  };
   lbImg.src = url;
 }
 
 function renderLightboxFloatingSetlist(opts) {
   const lb = $('#lightbox');
   if (!lb) return;
+  const wasCollapsed = _lbSetlistEl ? _lbSetlistEl.classList.contains('is-collapsed') : false;
   if (_lbSetlistEl && _lbSetlistEl.parentNode) _lbSetlistEl.remove();
   _lbSetlistEl = null;
+  _lbCurrentOpts = opts || null;
   if (!opts || !Array.isArray(opts.songs) || !opts.songs.length) return;
 
   const wrap = document.createElement('aside');
-  wrap.className = 'lr-floating-setlist';
+  wrap.className = 'lr-floating-setlist' + (wasCollapsed ? ' is-collapsed' : '');
   wrap.id = 'lbFloatingSetlist';
   wrap.setAttribute('aria-label', 'คิวเพลงแบบโปร่งแสง');
 
@@ -3517,7 +3569,7 @@ function renderLightboxFloatingSetlist(opts) {
   toggleBtn.type = 'button';
   toggleBtn.className = 'small ghost';
   toggleBtn.style.cssText = 'padding:2px 6px;min-height:24px;font-size:0.72rem';
-  toggleBtn.textContent = '▾ ซ่อน';
+  toggleBtn.textContent = wasCollapsed ? '▴ คิวเพลง' : '▾ ซ่อน';
   toggleBtn.onclick = e => {
     e.stopPropagation();
     const collapsed = wrap.classList.toggle('is-collapsed');
@@ -3558,6 +3610,7 @@ $('#lbClose').onclick = () => {
   $('#lightbox').hidden = true;
   if (_lbSetlistEl && _lbSetlistEl.parentNode) _lbSetlistEl.remove();
   _lbSetlistEl = null;
+  _lbCurrentOpts = null;
 };
 $('#lbZoom').onclick = () => $('#lbBody').classList.toggle('zoom');
 
@@ -8317,10 +8370,16 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
     onOpenLightbox: (imgUrl, opts) => {
       if (typeof openLightbox === 'function') openLightbox(imgUrl, opts || null);
     },
-    onUpdateLightboxImage: (imgUrl) => {
+    onUpdateLightboxImage: (imgUrl, syncMeta = null) => {
       const lb = $('#lightbox');
-      if (lb && !lb.hidden && typeof setLightboxImgSrc === 'function') {
+      if (!lb || lb.hidden) return;
+      if (imgUrl && typeof setLightboxImgSrc === 'function') {
         setLightboxImgSrc(imgUrl);
+      }
+      if (syncMeta && _lbCurrentOpts) {
+        if (Array.isArray(syncMeta.songs)) _lbCurrentOpts.songs = syncMeta.songs;
+        if (typeof syncMeta.currentIndex === 'number') _lbCurrentOpts.currentIndex = syncMeta.currentIndex;
+        renderLightboxFloatingSetlist(_lbCurrentOpts);
       }
     },
     onToast: (msg, isErr) => toast(msg, isErr)
