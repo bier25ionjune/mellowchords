@@ -5933,6 +5933,9 @@ async function syncAll() {
     renderPlaylists();
     renderSongbook();
     if (!$('#plView').hidden) renderPlView();
+    if (typeof liveRoomUIInstance !== 'undefined' && liveRoomUIInstance && typeof liveRoomUIInstance.syncLinkedSetlist === 'function') {
+      liveRoomUIInstance.syncLinkedSetlist();
+    }
     if (current) paintFav();
   }
 }
@@ -6016,6 +6019,9 @@ function mutPl(id, fn) {
   p.updatedAt = Date.now();
   setPls(P);
   renderPlaylists();
+  if (typeof liveRoomUIInstance !== 'undefined' && liveRoomUIInstance && typeof liveRoomUIInstance.syncLinkedSetlist === 'function') {
+    liveRoomUIInstance.syncLinkedSetlist(id);
+  }
   schedSync();
   return p;
 }
@@ -7659,18 +7665,27 @@ function getResolvedSetlistsForLiveRoom() {
   const book = loadBook();
   const songMap = new Map(book.map(s => [s.id, s]));
   return pls.map(p => {
-    const rawItems = Array.isArray(p.items) && p.items.length
-      ? p.items
-      : (Array.isArray(p.songIds) ? p.songIds.map(id => ({ songId: id })) : []);
+    const rawSource = Array.isArray(p.songIds) && p.songIds.length
+      ? p.songIds
+      : (Array.isArray(p.items) ? p.items : []);
     const resolvedSongs = [];
-    rawItems.forEach(item => {
+    rawSource.forEach(raw => {
+      const item = normalizePlItem(raw);
       if (!item || item.type === 'break') return;
-      const found = songMap.get(item.songId);
+      let found = item.songId ? songMap.get(item.songId) : null;
+      if (!found && raw && typeof raw === 'object' && raw.title) {
+        found = raw;
+      }
       if (found) {
+        const origKey = (found.text ? detectKey(found.text) : '') || found.key || '';
+        const targetKey = item.targetKey || found.targetKey || '';
         resolvedSongs.push({
           ...found,
-          targetKey: item.targetKey || found.targetKey || '',
-          shift: item.targetKey && found.key ? calcKeyShift(found.key, item.targetKey) : (found.shift || 0)
+          targetKey,
+          singer: item.singer || found.singer || '',
+          bpm: item.bpm || found.bpm || '',
+          cue: item.cue || found.cue || '',
+          shift: targetKey && origKey ? calcKeyShift(origKey, targetKey) : (found.shift || 0)
         });
       }
     });

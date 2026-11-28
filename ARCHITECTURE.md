@@ -255,6 +255,7 @@ mellowchords/
     - ปุ่ม `🔍 ค้นหาเพลงต่อไป` / `➕ เพิ่มเพลง` ในห้อง Live รองรับการเลือกเพิ่มเพลงทีละหลายรายการ (`➕ เพิ่มที่เลือก (N) เข้าห้อง`) และค้นออนไลน์จาก `chordtabs.in.th` แล้วซิงก์เข้า Setlist ห้องทันที
     - Host สามารถกด `☑️ ลบ` เพื่อลบหลายเพลงพร้อมกัน และกด `↕️ จัดลำดับ` เพื่อ **ลากวาง (`⠿` Pointer Drag & Drop)**, กด **`⏫` ขึ้นบนสุด**, หรือ `↑` / `↓` โดยระบบจะปรับ `current_song_index` ตามเพลงที่กำลังเล่นอยู่และซิงก์ทั้งวงอัตโนมัติ
     - ในหน้า Setlist (`#plView`) รองรับทั้ง **ลากวาง (`⠿` Pointer Drag & Drop)** บนคอม/iPad และ **แตะป้ายเลขลำดับ (`#N`) เพื่อย้ายข้ามคิวทันที** (`openQuickMoveModal`)
+    - **ซิงก์เพลย์ลิสต์ที่แก้ไขเข้าห้อง Live อัตโนมัติ (`getResolvedSetlistsForLiveRoom` & `syncLinkedSetlist`):** แปลงข้อมูลทุกรายการผ่าน `normalizePlItem` จาก `p.songIds` อย่างครบถ้วน (รวมถึงคีย์/สคริปต์/ลำดับใหม่) และเมื่อแก้ไขเพลย์ลิสต์ผ่าน `mutPl()` หรือกลับเข้าห้อง Live ระบบจะอัปเดต `setlist_snapshot` ของห้องที่ผูกไว้ให้อัตโนมัติทันที (พร้อมปุ่ม `🔄 ซิงก์เซ็ต` สำหรับกดดึงด้วยตนเอง)
   - รองรับการสร้างห้องเลือก Setlist, เชิญเพื่อนรายคน หรือ **ดึงสมาชิกทั้งกรุ๊ปวงในคลิกเดียว** พร้อม `BroadcastChannel` Fallback สำหรับการซิงก์ข้ามแท็บในโหมด Local/Offline
 
 ### 6.7 ระบบ Precision ChordPro Parser & Dynamic Few-Shot Learning (`components/chord-parser/`, `supabase/functions/parse-chord-image/`)

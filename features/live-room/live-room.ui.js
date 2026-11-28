@@ -181,6 +181,73 @@
       });
 
       render();
+      if (isHost && room && room.setlist_id) {
+        syncLinkedSetlist(null, { silent: true });
+      }
+    }
+
+    function resolveLinkedSetlistSongs(room) {
+      if (!room || !room.setlist_id) return null;
+      var sid = String(room.setlist_id);
+      if (sid === 'book:all') {
+        var book = getSongbook() || [];
+        return book.length ? book : null;
+      }
+      var rawPlId = sid.startsWith('pl:') ? sid.slice(3) : sid;
+      var lists = getSetlists() || [];
+      var found = lists.find(function (p) { return p && (String(p.id) === rawPlId || ('pl:' + p.id) === sid); });
+      return found && Array.isArray(found.songs) ? found.songs : null;
+    }
+
+    async function syncLinkedSetlist(changedPlId, opts) {
+      var silent = Boolean(opts && opts.silent);
+      if (!activeRoom) {
+        if (rootEl) render();
+        return false;
+      }
+      if (!isHost || !activeRoom.setlist_id) return false;
+      var sid = String(activeRoom.setlist_id);
+      if (changedPlId) {
+        var rawTarget = sid.startsWith('pl:') ? sid.slice(3) : sid;
+        if (String(changedPlId) !== rawTarget && ('pl:' + changedPlId) !== sid) {
+          return false;
+        }
+      }
+      var latestSongs = resolveLinkedSetlistSongs(activeRoom);
+      if (!latestSongs || !latestSongs.length) return false;
+
+      var prevSongs = getSnapshotSongs();
+      var prevSig = prevSongs.map(function (s) { return (s.id || '') + ':' + (s.targetKey || '') + ':' + (s.shift || 0); }).join('|');
+      var nextSig = latestSongs.map(function (s) { return (s.id || '') + ':' + (s.targetKey || '') + ':' + (s.shift || 0); }).join('|');
+      if (prevSig === nextSig && silent) return false;
+
+      var curSongId = activeRoom.current_song_id || (prevSongs[activeRoom.current_song_index || 0] && prevSongs[activeRoom.current_song_index || 0].id) || null;
+      var syncedSnapshot = await service.broadcastRoomSetlist(activeRoom, latestSongs);
+      var finalSnap = syncedSnapshot && syncedSnapshot.length ? syncedSnapshot : latestSongs;
+      activeRoom.setlist_snapshot = finalSnap;
+
+      var nextIdx = curSongId
+        ? finalSnap.findIndex(function (s) { return s && s.id === curSongId; })
+        : (activeRoom.current_song_index || 0);
+      if (nextIdx < 0 || nextIdx >= finalSnap.length) {
+        nextIdx = Math.max(0, Math.min(finalSnap.length - 1, activeRoom.current_song_index || 0));
+      }
+      activeRoom.current_song_index = nextIdx;
+      activeRoom.current_song_id = finalSnap[nextIdx] ? finalSnap[nextIdx].id : null;
+      localSongIndex = nextIdx;
+      render();
+
+      await service.broadcastRoomState(activeRoom, {
+        current_song_index: nextIdx,
+        current_song_id: activeRoom.current_song_id,
+        current_key_shift: activeRoom.current_key_shift || 0,
+        source: 'setlist_refresh'
+      });
+
+      if (!silent) {
+        onToast('🔄 อัปเดตเพลย์ลิสต์ล่าสุดเข้าห้อง Live แล้ว (' + finalSnap.length + ' เพลง) ✔');
+      }
+      return true;
     }
 
     async function hostAddSongToRoom(song) {
@@ -740,6 +807,9 @@
             '<div class="lr-setlist-head">' +
               '<span class="fr-sec-title">🎼 เซ็ตเพลง (' + songs.length + ')</span>' +
               '<div style="display:flex;gap:4px;flex-wrap:wrap">' +
+                (isHost && activeRoom && activeRoom.setlist_id
+                  ? '<button type="button" class="small ghost" id="lrSyncPlaylistBtn" title="ดึงรายการเพลงล่าสุดจากเพลย์ลิสต์ที่ผูกไว้">🔄 ซิงก์เซ็ต</button>'
+                  : '') +
                 (isHost && songs.length > 1
                   ? '<button type="button" class="small ' + (setlistReorderMode ? 'primary' : 'ghost') + '" id="lrReorderSetlistBtn" title="ลากหรือกดย้ายลำดับเพลง">' + (setlistReorderMode ? '✕ เสร็จ' : '↕️ จัดลำดับ') + '</button>'
                   : '') +
@@ -875,6 +945,21 @@
             source: 'reorder'
           });
         }
+      }
+
+      var syncPlBtn = rootEl.querySelector('#lrSyncPlaylistBtn');
+      if (syncPlBtn) {
+        syncPlBtn.onclick = async function () {
+          syncPlBtn.disabled = true;
+          try {
+            var ok = await syncLinkedSetlist(null, { silent: false });
+            if (!ok) {
+              onToast('ไม่พบเพลย์ลิสต์ต้นทาง หรือเพลย์ลิสต์ว่างเปล่า', true);
+            }
+          } finally {
+            if (syncPlBtn.isConnected) syncPlBtn.disabled = false;
+          }
+        };
       }
 
       var reorderBtn = rootEl.querySelector('#lrReorderSetlistBtn');
@@ -1291,7 +1376,17 @@
 
     return {
       mount: mount,
-      refresh: refreshLobbyData,
+      refresh: async function () {
+        if (activeRoom) {
+          if (isHost && activeRoom.setlist_id) {
+            await syncLinkedSetlist(null, { silent: true });
+          }
+          render();
+          return;
+        }
+        return refreshLobbyData();
+      },
+      syncLinkedSetlist: syncLinkedSetlist,
       openWithBandGroup: openWithBandGroup,
       joinByCodeAndEnter: joinByCodeAndEnter,
       handleMidiStep: function (direction) {
