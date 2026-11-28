@@ -3551,6 +3551,8 @@ function renderLightboxFloatingSetlist(opts) {
   const lb = $('#lightbox');
   if (!lb) return;
   const wasCollapsed = _lbSetlistEl ? _lbSetlistEl.classList.contains('is-collapsed') : false;
+  const prevListEl = _lbSetlistEl ? _lbSetlistEl.querySelector('.lr-floating-setlist-list') : null;
+  const savedScrollTop = prevListEl ? prevListEl.scrollTop : 0;
   if (_lbSetlistEl && _lbSetlistEl.parentNode) _lbSetlistEl.remove();
   _lbSetlistEl = null;
   _lbCurrentOpts = opts || null;
@@ -3580,10 +3582,12 @@ function renderLightboxFloatingSetlist(opts) {
 
   const list = document.createElement('div');
   list.className = 'lr-floating-setlist-list';
+  let activeBtnRef = null;
   opts.songs.forEach((s, idx) => {
     const btnEl = document.createElement('button');
     btnEl.type = 'button';
     btnEl.className = 'lr-floating-song-btn' + (idx === curIdx ? ' active' : '');
+    if (idx === curIdx) activeBtnRef = btnEl;
     btnEl.innerHTML = `<span class="lr-song-label">${idx + 1}. ${escapeHtml(s.title || 'ไม่ระบุชื่อ')}</span><small>${escapeHtml(s.key || '-')}</small>`;
     btnEl.onclick = async e => {
       e.stopPropagation();
@@ -3598,6 +3602,11 @@ function renderLightboxFloatingSetlist(opts) {
   wrap.appendChild(list);
   lb.appendChild(wrap);
   _lbSetlistEl = wrap;
+
+  if (savedScrollTop > 0) list.scrollTop = savedScrollTop;
+  if (activeBtnRef && typeof activeBtnRef.scrollIntoView === 'function') {
+    try { activeBtnRef.scrollIntoView({ block: 'nearest' }); } catch {}
+  }
 }
 
 function openLightbox(url, opts = null) {

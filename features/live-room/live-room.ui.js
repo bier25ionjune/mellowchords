@@ -55,6 +55,7 @@
     var setlistReorderMode = false;
     var autoRecoveryInFlight = new Map();
     var autoRecoveryAttempts = new Map();
+    var lastScrolledSongIdx = -1;
     var onlineMembers = [];
     var myRooms = [];
     var friends = [];
@@ -942,7 +943,35 @@
         floatingSetlistHtml +
       '</div>';
 
+      var prevPanel = rootEl.querySelector('.lr-setlist-panel');
+      var prevList = rootEl.querySelector('#lrSetlistList');
+      var prevFloatList = rootEl.querySelector('.lr-floating-setlist-list');
+      var savedPanelTop = prevPanel ? prevPanel.scrollTop : 0;
+      var savedListTop = prevList ? prevList.scrollTop : 0;
+      var savedFloatTop = prevFloatList ? prevFloatList.scrollTop : 0;
+      var songIdxChanged = curIdx !== lastScrolledSongIdx;
+      lastScrolledSongIdx = curIdx;
+
       rootEl.innerHTML = html;
+
+      var nextPanel = rootEl.querySelector('.lr-setlist-panel');
+      var nextList = rootEl.querySelector('#lrSetlistList');
+      var nextFloatList = rootEl.querySelector('.lr-floating-setlist-list');
+      if (nextPanel && savedPanelTop > 0) nextPanel.scrollTop = savedPanelTop;
+      if (nextList && savedListTop > 0) nextList.scrollTop = savedListTop;
+      if (nextFloatList && savedFloatTop > 0) nextFloatList.scrollTop = savedFloatTop;
+
+      if (songIdxChanged) {
+        var activeLeftBtn = rootEl.querySelector('#lrSetlistList .active');
+        if (activeLeftBtn && typeof activeLeftBtn.scrollIntoView === 'function') {
+          try { activeLeftBtn.scrollIntoView({ block: 'nearest' }); } catch (_) {}
+        }
+        var activeFloatBtn = rootEl.querySelector('.lr-floating-setlist-list .active');
+        if (activeFloatBtn && typeof activeFloatBtn.scrollIntoView === 'function') {
+          try { activeFloatBtn.scrollIntoView({ block: 'nearest' }); } catch (_) {}
+        }
+      }
+
       renderOnlineBar();
       bindActiveRoomEvents(curIdx, curShift);
     }
