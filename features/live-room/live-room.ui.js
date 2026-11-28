@@ -53,6 +53,8 @@
     var setlistBulkMode = false;
     var setlistSelectedIndices = new Set();
     var setlistReorderMode = false;
+    var autoRecoveryInFlight = new Map();
+    var autoRecoveryAttempts = new Map();
     var onlineMembers = [];
     var myRooms = [];
     var friends = [];
@@ -704,10 +706,14 @@
               }).join('') +
             '</div>';
           } else {
-            sheetHtml = '<div class="lr-empty">' +
-              '<div style="margin-bottom:10px">เพลงนี้ยังไม่มีรูปภาพในคลัง</div>' +
+            var recKey = (curSong.id || curSong.title || 'cur');
+            var exhausted = (autoRecoveryAttempts.get(recKey) || 0) >= 5 && !autoRecoveryInFlight.has(recKey);
+            sheetHtml = '<div class="lr-empty" id="lrAutoRecoverBox" data-lr-autorecover="' + (exhausted ? '0' : '1') + '">' +
+              '<div id="lrAutoRecoverMsg" style="margin-bottom:10px">' +
+                (exhausted ? 'ยังไม่พบรูปภาพคอร์ดสำหรับเพลงนี้' : '⏳ กำลังค้นหาและดาวน์โหลดรูปภาพคอร์ดอัตโนมัติ…') +
+              '</div>' +
               '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">' +
-                (onRefetchSongImage ? '<button type="button" class="small primary" id="lrRefetchImgBtn">🔍 ค้นหาและดึงภาพใหม่</button>' : '') +
+                (onRefetchSongImage ? '<button type="button" class="small primary" id="lrRefetchImgBtn">🔄 ดึงภาพใหม่อีกครั้ง</button>' : '') +
                 (hasText ? '<button type="button" class="small ghost" id="lrFallbackTextBtn">📝 เปิดดูแบบ Text ชั่วคราว</button>' : '') +
               '</div>' +
             '</div>';
@@ -1142,35 +1148,72 @@
         };
       }
 
+      async function autoRecoverSongImage(songIdx, statusEl) {
+        var songs = getSnapshotSongs();
+        var targetSong = songs[songIdx];
+        if (!targetSong || !onRefetchSongImage) return false;
+        var key = targetSong.id || targetSong.title || String(songIdx);
+        if (autoRecoveryInFlight.has(key)) return autoRecoveryInFlight.get(key);
+
+        var job = (async function () {
+          var prevTries = autoRecoveryAttempts.get(key) || 0;
+          for (var attempt = prevTries + 1; attempt <= 5; attempt++) {
+            autoRecoveryAttempts.set(key, attempt);
+            if (!activeRoom) return false;
+            if (statusEl && statusEl.isConnected) {
+              statusEl.textContent = '⏳ กำลังดาวน์โหลดภาพคอร์ดอัตโนมัติ (รอบที่ ' + attempt + '/5)…';
+            }
+            try {
+              var loaded = await onRefetchSongImage(targetSong);
+              if (loaded && Array.isArray(loaded.images) && loaded.images.length) {
+                targetSong.images = loaded.images.slice();
+                if (loaded._ctSongId) targetSong._ctSongId = loaded._ctSongId;
+                if (loaded.src) targetSong.src = loaded.src;
+                autoRecoveryAttempts.delete(key);
+                if (isHost && activeRoom && typeof service.broadcastRoomSetlist === 'function') {
+                  var synced = await service.broadcastRoomSetlist(activeRoom, songs);
+                  if (synced && synced.length) activeRoom.setlist_snapshot = synced;
+                }
+                if (activeRoom && getDisplayedIndex() === songIdx) {
+                  render();
+                  syncLightboxToSong(targetSong);
+                }
+                return true;
+              }
+            } catch (_) {}
+            await new Promise(function (r) { setTimeout(r, Math.min(4000, 1200 * attempt)); });
+          }
+          if (activeRoom && getDisplayedIndex() === songIdx) {
+            render();
+          }
+          return false;
+        })().finally(function () {
+          autoRecoveryInFlight.delete(key);
+        });
+
+        autoRecoveryInFlight.set(key, job);
+        return job;
+      }
+
       async function handleRefetchSongImage(btnEl) {
         var songs = getSnapshotSongs();
         var targetSong = songs[curIdx];
         if (!targetSong || !onRefetchSongImage) return;
+        var key = targetSong.id || targetSong.title || String(curIdx);
+        autoRecoveryAttempts.delete(key);
         if (btnEl) {
           btnEl.disabled = true;
           btnEl.textContent = '⏳ กำลังค้นหาภาพใหม่…';
         }
-        try {
-          var loaded = await onRefetchSongImage(targetSong);
-          if (loaded && Array.isArray(loaded.images) && loaded.images.length) {
-            targetSong.images = loaded.images.slice();
-            if (loaded._ctSongId) targetSong._ctSongId = loaded._ctSongId;
-            if (loaded.src) targetSong.src = loaded.src;
-            if (isHost && activeRoom && typeof service.broadcastRoomSetlist === 'function') {
-              var synced = await service.broadcastRoomSetlist(activeRoom, songs);
-              if (synced && synced.length) activeRoom.setlist_snapshot = synced;
-            }
-            onToast('ดึงภาพคอร์ด “' + targetSong.title + '” ใหม่สำเร็จ ✔');
-            render();
-            return;
-          }
-          onToast('ไม่พบภาพคอร์ดใหม่สำหรับเพลงนี้', true);
-        } catch (err) {
-          onToast('ค้นหาภาพใหม่ไม่สำเร็จ: ' + ((err && err.message) || err), true);
+        var ok = await autoRecoverSongImage(curIdx, null);
+        if (ok) {
+          onToast('ดึงภาพคอร์ด “' + targetSong.title + '” ใหม่สำเร็จ ✔');
+          return;
         }
+        onToast('ยังไม่พบภาพคอร์ดสำหรับเพลงนี้', true);
         if (btnEl && btnEl.isConnected) {
           btnEl.disabled = false;
-          btnEl.textContent = '🔍 ค้นหาและดึงภาพใหม่';
+          btnEl.textContent = '🔄 ดึงภาพใหม่อีกครั้ง';
         }
       }
 
@@ -1181,6 +1224,12 @@
         };
       }
 
+      var autoRecoverBox = rootEl.querySelector('#lrAutoRecoverBox[data-lr-autorecover="1"]');
+      if (autoRecoverBox && onRefetchSongImage) {
+        var msgEl = rootEl.querySelector('#lrAutoRecoverMsg');
+        autoRecoverSongImage(curIdx, msgEl);
+      }
+
       function showBrokenImgBox(imgEl) {
         if (!imgEl || !imgEl.isConnected || imgEl.dataset.errShown) return;
         imgEl.dataset.errShown = '1';
@@ -1188,7 +1237,11 @@
         var box = document.createElement('div');
         box.className = 'sheetImgError';
         box.style.margin = '10px auto';
-        box.innerHTML = '<div>ไม่สามารถโหลดภาพคอร์ดได้</div>';
+        var msgDiv = document.createElement('div');
+        msgDiv.textContent = onRefetchSongImage
+          ? '⏳ ภาพไม่ขึ้น — กำลังค้นหาและดาวน์โหลดภาพใหม่ให้อัตโนมัติ…'
+          : 'ไม่สามารถโหลดภาพคอร์ดได้';
+        box.appendChild(msgDiv);
         var row = document.createElement('div');
         row.style.cssText = 'display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px';
         var retryBtn = document.createElement('button');
@@ -1199,16 +1252,16 @@
           box.remove();
           imgEl.hidden = false;
           delete imgEl.dataset.errShown;
-          delete imgEl.dataset.fallbackTried;
+          imgEl.dataset.fallbackStep = '0';
           var orig = imgEl.dataset.origSrc || imgEl.src;
-          if (orig) imgEl.src = orig;
+          if (orig) imgEl.src = orig + (orig.includes('?') ? '&' : '?') + '_t=' + Date.now();
         };
         row.appendChild(retryBtn);
         if (onRefetchSongImage) {
           var searchBtn = document.createElement('button');
           searchBtn.type = 'button';
           searchBtn.className = 'small';
-          searchBtn.textContent = '🔍 ค้นหาและดึงภาพใหม่';
+          searchBtn.textContent = '🔍 ดึงภาพใหม่เดี๋ยวนี้';
           searchBtn.onclick = function () {
             handleRefetchSongImage(searchBtn);
           };
@@ -1216,6 +1269,14 @@
         }
         box.appendChild(row);
         imgEl.parentNode.insertBefore(box, imgEl.nextSibling);
+
+        if (onRefetchSongImage) {
+          autoRecoverSongImage(curIdx, msgDiv).then(function (ok) {
+            if (!ok && msgDiv.isConnected) {
+              msgDiv.textContent = 'ยังไม่สามารถดึงภาพคอร์ดอัตโนมัติได้ — กดปุ่มด้านล่างเพื่อลองใหม่';
+            }
+          });
+        }
       }
 
       rootEl.querySelectorAll('img[data-lr-img-key]').forEach(function (imgEl) {
@@ -1266,11 +1327,31 @@
 
       rootEl.querySelectorAll('.lr-chord-img').forEach(function (img) {
         if (img.src && !img.dataset.origSrc) img.dataset.origSrc = img.src;
+        img.onload = function () {
+          if (img.naturalWidth === 0) {
+            img.onerror();
+          }
+        };
         img.onerror = function () {
-          if (!img.dataset.fallbackTried) {
-            img.dataset.fallbackTried = '1';
-            if (/^https?:\/\//i.test(img.src) && !img.src.includes('wsrv.nl')) {
-              img.src = 'https://wsrv.nl/?url=' + encodeURIComponent(img.src) + '&output=webp&q=85&w=1400&we';
+          var step = Number(img.dataset.fallbackStep || '0');
+          var rawOrig = img.dataset.origSrc || img.src || '';
+          if (/^https?:\/\//i.test(rawOrig)) {
+            var baseOrig = rawOrig.replace(/^https:\/\/(?:wsrv\.nl|images\.weserv\.nl)\/\?url=([^&]+).*$/i, function (_m, enc) {
+              try { return decodeURIComponent(enc); } catch (_) { return rawOrig; }
+            });
+            if (step === 0) {
+              img.dataset.fallbackStep = '1';
+              img.src = 'https://wsrv.nl/?url=' + encodeURIComponent(baseOrig) + '&output=webp&q=85&w=1400&we';
+              return;
+            }
+            if (step === 1) {
+              img.dataset.fallbackStep = '2';
+              img.src = 'https://images.weserv.nl/?url=' + encodeURIComponent(baseOrig) + '&output=png&we';
+              return;
+            }
+            if (step === 2) {
+              img.dataset.fallbackStep = '3';
+              img.src = baseOrig + (baseOrig.includes('?') ? '&' : '?') + '_retry=' + Date.now();
               return;
             }
           }

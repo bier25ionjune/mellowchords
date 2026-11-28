@@ -979,44 +979,60 @@ async function searchChordtabsDatabaseFirst(q) {
   return out;
 }
 
-async function searchRealWebChords(query, externalSignal = null) {
+async function searchRealWebChords(query, optionsOrSignal = null) {
   const q = query.trim();
   if (!q) return { results: [], webTrueKey: '' };
+
+  const isOptsObj = optionsOrSignal && typeof optionsOrSignal === 'object' && !(typeof AbortSignal !== 'undefined' && optionsOrSignal instanceof AbortSignal) && typeof optionsOrSignal.aborted !== 'boolean';
+  const externalSignal = isOptsObj ? (optionsOrSignal.signal || null) : optionsOrSignal;
+  const forceWeb = Boolean(isOptsObj && optionsOrSignal.forceWeb);
 
   const results = [];
   const qLower = q.toLowerCase();
   const t = qLower.split(/\s+/).filter(Boolean);
   const seenKeys = new Set();
 
-  // 1. คลังเพลงในเครื่องของผู้ใช้
-  for (const s of loadBook()) {
-    const h = (s.title + ' ' + (s.artist || '')).toLowerCase();
-    if (t.every(x => h.includes(x))) {
-      seenKeys.add((s.src || s.id || s.title).toLowerCase());
-      results.push({
-        ...s,
-        source: 'builtin',
-        domain: '💾 ในคลังเครื่อง',
-        realChords: extractUniqueChordsFromSheet(s.text)
-      });
+  if (!forceWeb) {
+    // 1. คลังเพลงในเครื่องของผู้ใช้
+    for (const s of loadBook()) {
+      const h = (s.title + ' ' + (s.artist || '')).toLowerCase();
+      if (t.every(x => h.includes(x))) {
+        seenKeys.add((s.src || s.id || s.title).toLowerCase());
+        results.push({
+          ...s,
+          source: 'builtin',
+          domain: '💾 ในคลังเครื่อง',
+          realChords: extractUniqueChordsFromSheet(s.text)
+        });
+      }
     }
-  }
 
-  // 2. แอบค้นหาจาก Database (public.songs + public.chordtabs_cache) ก่อนเสมอ
-  const dbHits = await searchChordtabsDatabaseFirst(q);
-  for (const hit of dbHits) {
-    const k = (hit.src || hit.id || hit.title).toLowerCase();
-    if (seenKeys.has(k)) continue;
-    seenKeys.add(k);
-    results.push(hit);
-  }
+    // 2. แอบค้นหาจาก Database (public.songs + public.chordtabs_cache) ก่อนเสมอ
+    const dbHits = await searchChordtabsDatabaseFirst(q);
+    for (const hit of dbHits) {
+      const k = (hit.src || hit.id || hit.title).toLowerCase();
+      if (seenKeys.has(k)) continue;
+      seenKeys.add(k);
+      results.push(hit);
+    }
 
-  // หากพบเพลงที่ตรงชื่อเพลงในคลังหรือฐานข้อมูลแล้ว >= 2 รายการ (หรือตรงเป๊ะ 1 รายการ) ไม่ต้องยิงเว็บให้เปลือง
-  const hasStrongDbMatch = results.some(r => String(r.title || '').toLowerCase() === qLower) || results.length >= 2;
-  if (hasStrongDbMatch) {
-    const finalResults = results.slice(0, 8);
-    const bestKey = finalResults.find(r => r.key)?.key || '';
-    return { results: finalResults, webTrueKey: bestKey };
+    // หากพบเพลงที่ตรงชื่อเพลงในคลังหรือฐานข้อมูลแล้ว >= 2 รายการ (หรือตรงเป๊ะ 1 รายการ) ไม่ต้องยิงเว็บให้เปลือง
+    const hasStrongDbMatch = results.some(r => String(r.title || '').toLowerCase() === qLower) || results.length >= 2;
+    if (hasStrongDbMatch) {
+      const finalResults = results.slice(0, 8);
+      const bestKey = finalResults.find(r => r.key)?.key || '';
+      return { results: finalResults, webTrueKey: bestKey };
+    }
+  } else {
+    // Even in forceWeb mode, check shared chordtabs_cache first for verified Chordtabs URLs
+    const dbHits = await searchChordtabsDatabaseFirst(q);
+    for (const hit of dbHits) {
+      if (!hit || !hit.isChordtabs || (!hit.url && !hit.src && !hit._ctSongId)) continue;
+      const k = (hit.src || hit.url || hit.id || hit.title).toLowerCase();
+      if (seenKeys.has(k)) continue;
+      seenKeys.add(k);
+      results.push({ ...hit, url: hit.url || hit.src });
+    }
   }
 
   // 3. ตรวจแคช (in-memory + sessionStorage) และรวม in-flight promise (เฉพาะ chordtabs.in.th)
@@ -7996,22 +8012,46 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
 
   async function refetchSongImageByTitleAndArtist(song) {
     if (!song || !song.title) throw new Error('ไม่พบชื่อเพลงสำหรับค้นหา');
+
+    // Fast path 0: If song already has a Chordtabs page URL or _ctSongId, try resolving its true image URL directly via Jina first
+    const directCtUrl = (song.src && song.src.includes('chordtabs.in.th'))
+      ? song.src
+      : (song._ctSongId ? `https://chordtabs.in.th/${song._ctSongId}/` : '');
+    if (directCtUrl) {
+      try {
+        const meta = await resolveChordtabsMetaViaJina(directCtUrl, 5000);
+        if (meta && meta.chordImgUrl) {
+          const ok = await verifyImageUrlLoads(meta.chordImgUrl, 5000);
+          if (ok) {
+            song.images = [meta.chordImgUrl];
+            song.src = directCtUrl;
+            autoSaveSearchedSongToLibrary(song);
+            return { ...song, images: [meta.chordImgUrl] };
+          }
+        }
+      } catch (_) {}
+    }
+
     const queries = [];
+    const cleanTitle = String(song.title || '').replace(/\s*\(.*?\)\s*/g, ' ').trim() || song.title.trim();
     const fullQ = `${song.title} ${song.artist || ''}`.trim();
     if (fullQ) queries.push(fullQ);
     if (song.artist && song.title.trim() && song.title.trim() !== fullQ) {
       queries.push(song.title.trim());
     }
+    if (cleanTitle && !queries.includes(cleanTitle)) {
+      queries.push(cleanTitle);
+    }
 
     let webResults = [];
     for (const q of queries) {
       try {
-        const resp = await searchRealWebChords(q);
+        const resp = await searchRealWebChords(q, { forceWeb: true });
         const list = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.results) ? resp.results : []);
-        const webOnly = list.filter(it => it && it.source !== 'builtin' && it.url);
+        const webOnly = list.filter(it => it && it.source !== 'builtin' && (it.url || it.src));
         if (webOnly.length) {
-          webResults = webOnly;
-          const hasCt = webOnly.some(it => it.isChordtabs || (it.domain && it.domain.includes('chordtabs')) || (it.url && it.url.includes('chordtabs.in.th')));
+          webResults = webOnly.map(it => ({ ...it, url: it.url || it.src }));
+          const hasCt = webResults.some(it => it.isChordtabs || (it.domain && it.domain.includes('chordtabs')) || (it.url && it.url.includes('chordtabs.in.th')));
           if (hasCt) break;
         }
       } catch (_) {}
@@ -8024,14 +8064,14 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
     const ctCandidates = webResults.filter(it => it.isChordtabs || (it.domain && it.domain.includes('chordtabs')) || (it.url && it.url.includes('chordtabs.in.th')));
     const ordered = [...ctCandidates, ...webResults.filter(it => !ctCandidates.includes(it))];
     let loaded = null;
-    for (const candidate of ordered.slice(0, 3)) {
+    for (const candidate of ordered.slice(0, 4)) {
       try {
         const res = await loadRealWebChordResult(candidate, webResults);
         if (res && res._metaPromise) {
           try {
             const meta = await Promise.race([
               res._metaPromise,
-              new Promise(resolve => setTimeout(() => resolve(null), 3500))
+              new Promise(resolve => setTimeout(() => resolve(null), 4500))
             ]);
             if (meta && meta.chordImgUrl) {
               res.images = [meta.chordImgUrl];
@@ -8039,43 +8079,32 @@ if (window.MellowLiveRoomService && window.MellowLiveRoomUI) {
           } catch (_) {}
         }
         if (res && Array.isArray(res.images) && res.images.length) {
-          loaded = res;
-          break;
+          // Verify that at least one image genuinely loads (or resolve via Jina if direct /img/nm/<id>.png 404s)
+          let verified = await verifySongImagesReady(res);
+          if (!verified && res.src && res.src.includes('chordtabs.in.th')) {
+            try {
+              const meta2 = await resolveChordtabsMetaViaJina(res.src, 4500);
+              if (meta2 && meta2.chordImgUrl && await verifyImageUrlLoads(meta2.chordImgUrl, 4500)) {
+                res.images = [meta2.chordImgUrl];
+                verified = true;
+              }
+            } catch (_) {}
+          }
+          if (verified) {
+            loaded = res;
+            break;
+          }
         }
       } catch (_) {}
     }
     if (!loaded || !Array.isArray(loaded.images) || !loaded.images.length) {
-      throw new Error('ไม่พบไฟล์ภาพคอร์ดจาก Chordtabs');
+      throw new Error('ไม่พบไฟล์ภาพคอร์ดที่โหลดได้จาก Chordtabs');
     }
 
     song.images = loaded.images.slice();
     if (loaded._ctSongId) song._ctSongId = loaded._ctSongId;
     if (loaded.src) song.src = loaded.src;
-
-    const book = loadBook();
-    const idx = book.findIndex(b => b.id === song.id || (b.title === song.title && (b.artist || '') === (song.artist || '')));
-    if (idx >= 0) {
-      book[idx] = {
-        ...book[idx],
-        images: loaded.images.slice(),
-        _ctSongId: loaded._ctSongId || book[idx]._ctSongId || null,
-        src: loaded.src || book[idx].src || ''
-      };
-    } else {
-      book.unshift({
-        id: song.id || loaded.id || ('ct-' + Date.now().toString(36)),
-        title: song.title,
-        artist: song.artist || loaded.artist || '',
-        key: song.key || loaded.key || 'C',
-        text: song.text || '',
-        images: loaded.images.slice(),
-        sections: song.sections || [],
-        src: loaded.src || '',
-        _ctSongId: loaded._ctSongId || null,
-        shift: song.shift || 0
-      });
-    }
-    saveBook(book);
+    autoSaveSearchedSongToLibrary(song);
     if (current && current.song && (current.song.id === song.id || current.song === song)) {
       current.song.images = loaded.images.slice();
       if (loaded._ctSongId) current.song._ctSongId = loaded._ctSongId;

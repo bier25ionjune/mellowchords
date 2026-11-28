@@ -246,8 +246,9 @@ mellowchords/
     - เจ้าของห้องสามารถเลือกได้ตั้งแต่ตอนสร้างห้องและสลับได้แบบเรียลไทม์ระหว่างเล่นสดว่าจะให้ห้องแสดง **🖼️ รูปภาพทั้งหมด (`image`)** หรือ **📝 รูปแบบ Text (`text`)** โดยไม่บังคับเรียก AI/OCR ระหว่างเล่นสด
     - `sanitizeSongSnapshot` แปลงคีย์ภาพ `ct-img-<songId>` เป็น URL จริง (`https://chordtabs.in.th/img/nm/<id>.png`) อัตโนมัติ พร้อม `wsrv.nl` fallback และรองรับสูงสุด 12 หน้า/เพลง
     - สมาชิกที่เปิดโหมด **"ดูอิสระเฉพาะเครื่องนี้" (`localOverride`)** สามารถสลับดูภาพ/Text หรือทดคีย์เฉพาะเครื่องตัวเองได้โดยไม่กระทบทั้งวง
-  - **Pre-flight Image Check & Sync (`prepareSetlistImagesForLiveRoom` & `verifySongImagesReady`):**
-    - ก่อนสร้างห้อง Live ระบบจะรีเช็คความสมบูรณ์ของภาพทุกเพลงจริง (ตรวจ `Blob` ใน `IndexedDB`/`Supabase Storage` และทดสอบโหลดภาพจริงผ่าน `verifyImageUrlLoads` + `wsrv.nl` fallback) หากพบลิงก์เสีย/404 หรือภาพหาย จะ Resolve ลิงก์เก่าผ่าน Jina หรือค้นหาและดึงภาพจาก `chordtabs.in.th` ตามชื่อเพลง/ศิลปินมาบันทึกไว้ก่อนเปิดห้องเสมอ
+  - **Pre-flight & Live Auto-Recovery Image Pipeline (`prepareSetlistImagesForLiveRoom`, `verifySongImagesReady`, `autoRecoverSongImage`):**
+    - ก่อนสร้างห้อง Live ระบบจะรีเช็คความสมบูรณ์ของภาพทุกเพลงจริง (ตรวจ `Blob` ใน `IndexedDB`/`Supabase Storage` และทดสอบโหลดภาพจริงผ่าน `verifyImageUrlLoads`)
+    - **ระหว่างเล่นสดในห้อง Live:** หากเพลงใดยังไม่มีรูปภาพหรือโหลดภาพไม่ขึ้น ระบบจะวนสลับ Image Proxy อัตโนมัติ (`wsrv.nl` → `images.weserv.nl` → cache-busted retry) และหากยังไม่ขึ้นจะเรียก `autoRecoverSongImage()` ดาวน์โหลด/ค้นหาภาพจริงจาก `chordtabs.in.th` (`forceWeb: true` + Jina Legacy Resolver) ซ้ำอัตโนมัติสูงสุด 5 รอบพร้อม Backoff จนกว่าภาพจะขึ้น แล้วบันทึกเข้าคลังและซิงก์ให้ทั้งห้องทันที
   - **Full-Screen Stage, Image Lightbox & Translucent Floating Setlist (`.lr-floating-setlist`):**
     - เมื่อกด `🖥️ ขยายเต็มจอ` (`stageWide`) หรือแตะที่รูปคอร์ดเพื่อเปิดเต็มจอ (`openLightbox` / `#lightbox`) จะแสดงลิสต์คิวเพลงแบบโปร่งแสง (`opacity: 0.30` ไม่ใช้ `backdrop-filter: blur` เพื่อไม่ให้บัง/เบลอตัวหนังสือด้านหลัง และชัดขึ้นเป็น `0.96` เมื่อชี้/แตะ พร้อมปุ่มย่อ/ซ่อน) ที่มุมขวาล่าง
     - เมื่อกดเลือกข้ามเพลงจากลิสต์ลอยด้านขวามือ จะเรียก `hostSelectSong` เพื่อเปลี่ยนเพลง ซิงก์ทั้งห้อง และอัปเดตภาพคอร์ด (`#lrChordGallery` และ `#lbImg` ใน `#lightbox`) ทันที
